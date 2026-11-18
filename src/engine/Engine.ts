@@ -86,6 +86,7 @@ export class Engine {
   walk: import('./WalkMode').WalkMode | null = null;
   xr: import('./XRMode').XRMode | null = null;
   disposed = false;
+  private resizeObs?: ResizeObserver;
   /** debugging/screenshots: freeze ambient wandering */
   ambientOff = false;
 
@@ -137,6 +138,8 @@ export class Engine {
     this.weather.onThunder = () => this.emit({ type: 'thunder' });
 
     window.addEventListener('resize', this.resize);
+    // panels opening/closing change the viewport without a window resize
+    if (typeof ResizeObserver !== 'undefined') { this.resizeObs = new ResizeObserver(() => this.resize()); this.resizeObs.observe(container); }
     this.resize();
     this.renderer.setAnimationLoop(this.tick);
   }
@@ -840,6 +843,7 @@ export class Engine {
     this.disposed = true;
     this.renderer.setAnimationLoop(null);
     window.removeEventListener('resize', this.resize);
+    this.resizeObs?.disconnect();
     this.clearWorld();
     this.frame.dispose();
     this.controls.dispose();

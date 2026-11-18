@@ -39,10 +39,11 @@ Deep links: `#new=savanna` opens a fresh diorama of a biome (`forest`, `taiga`, 
 ### 🧭 Explore
 - Orbit, pinch-zoom and pan around a diorama that sits in a cardboard **shoebox** (or a **museum case** with a brass name plate, or a **floating island**). Walls fade away from any angle so nothing blocks the view.
 - **Tap any organism** for an info card: common & scientific name, Kingdom › Phylum › Class › Order › Family, producer/consumer/decomposer role, diet, IUCN status, a fact, real size and how much it is magnified, what it eats here and what eats it — plus the student's own research notes. *Read* speaks it aloud.
-- **Labels** puts paper flags on toothpicks next to every species.
+- **Labels** puts paper flags on toothpicks next to every species (on by default, one flag per species; students can rewrite the text).
 - **Food web** draws the energy flow between the organisms actually in the diorama, by trophic level.
 - **Guide** gives the habitat's climate, location, adaptations, threats, vocabulary and discussion questions, plus a live **diorama checklist** (producers, consumers, a decomposer, a 3-link food chain, water, abiotic features, labels, notes, code) — a ready-made rubric.
 - **Walk in** drops you inside the diorama at the eye level of a person, fox, frog or ant (WASD / joystick on touch). Underwater habitats let you swim.
+- **AR table** (phones/tablets with WebXR AR) places the diorama on a real table through the camera; **VR** (WebXR headsets) shows it at table height in front of you. These buttons only appear on devices that support them.
 - **Time of day**, a day–night cycle, **weather** (clear, cloudy, rain, storm with lightning, snow, fog), **seasons** (trees and grass change colour; winter brings snow cover) and **wind**.
 - Animals live on their own: they wander, graze, peck, circle overhead or swim in loops; fireflies and glowing fungi light up at night.
 
@@ -69,6 +70,8 @@ A Blockly workspace with the Scratch-like *Zelos* renderer. Every object has its
 | **Operators / Variables / My Blocks** | maths, comparisons, logic, text, variables, and custom blocks (functions) |
 
 Food relations come from a species database, so *nearest food* for a lion finds a zebra, and *nearest predator* for a zebra finds the lion.
+
+Teachers will find ready-made **coding challenges** in *More → How to use* (predator–prey chase, nocturnal owl, chameleon camouflage, water-cycle story, quiz, population model).
 
 ### 🎤 Present
 **Tour** visits each species (the ones with research notes first) in food-chain order — producers, plant-eaters, predators, decomposers — flying the camera to each and optionally narrating the student's notes.
@@ -108,7 +111,8 @@ src/
                  landscape painting), Sky (time-of-day palette & dome), Groundcover (instanced grass,
                  flowers, pebbles, leaf litter), Weather, wind (shared sway patch), Actor (placed object:
                  animation clips, procedural rig idle/gait, ambient behaviour, labels, speech bubbles),
-                 HeightProbe (GPU top-down height maps for habitat tiles), WalkMode (first person)
+                 HeightProbe (GPU top-down height maps for habitat tiles), WalkMode (first person),
+                 XRMode (WebXR table-top AR/VR)
   assets/        catalog (250+ entries), data-* (taxonomy, diet, status, facts, food tags), modules
                  (lazy loaders for References/*), builder (quality tiers, prototype cache & cloning,
                  orientation, exhibit scale, mesh consolidation, rig discovery), foodweb, builtin/ (fungi,

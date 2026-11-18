@@ -142,7 +142,7 @@ function hexOf(c: string) { // rgb(...) or #hex -> #hex
  * drawn live by the backdrop shader so it can follow the time of day.
  */
 export function paintLand(canvas: HTMLCanvasElement, style: BackdropStyle, horizon: number, seed = 1) {
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
   const N = new Noise2D(seed);

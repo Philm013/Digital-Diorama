@@ -144,7 +144,17 @@ export function CodePanel({ compact }: { compact?: boolean }) {
       try { Blockly.serialization.workspaces.load(json as Blockly.serialization.blocks.State, w); } catch (e) { console.error(e); }
     }
     setEmpty(w.getTopBlocks(false).length === 0);
-    w.scrollCenter();
+    // frame the scripts in the visible area (beside the toolbox), never zooming in past the default
+    requestAnimationFrame(() => {
+      try {
+        Blockly.svgResize(w);
+        if (w.getTopBlocks(false).length) {
+          w.zoomToFit();
+          const max = compact ? 0.62 : 0.75;
+          if (w.scale > max) { w.setScale(max); w.scrollCenter(); }
+        } else w.scrollCenter();
+      } catch { /* workspace disposed */ }
+    });
     setTimeout(() => { loadingRef.current = false; }, 0);
   }
   const choose = (t: Target) => {

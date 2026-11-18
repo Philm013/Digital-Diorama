@@ -355,6 +355,15 @@ function HelpContent() {
     ['🎤', 'Present', 'Add notes to your organisms (Build → Edit → My notes). The Tour visits each labelled thing in order and can read your notes aloud.'],
     ['⌨️', 'Shortcuts', 'Ctrl+Z undo · Ctrl+Shift+Z redo · Delete remove · D duplicate · F focus · L labels · O overview · Esc stop/deselect · WASD walk'],
   ];
+  const challenges = [
+    '🐝 Make a bee visit three different flowers, then fly home.',
+    '🦁 Code a predator–prey chase: the hunter uses “eat (nearest food)”, the prey uses “predator within 5 m?” and “run away”.',
+    '🌙 When it becomes night, make the owl hoot and fly; when it becomes day, make it sleep.',
+    '🦎 Use “set colour” to make a chameleon or octopus camouflage itself when tapped.',
+    '🌧️ Write a World script that tells the story of the water cycle with captions, rain and a rainbow.',
+    '❓ Add a quiz: tap an animal, ask “What do I eat?”, and check the answer.',
+    '👶 Population model: each time you tap a rabbit it “has a baby” — what happens to the grass?',
+  ];
   return (
     <div className="space-y-3">
       {rows.map(([e, h, t]) => (
@@ -363,6 +372,10 @@ function HelpContent() {
           <div><div className="font-display font-semibold">{h}</div><div className="text-sm text-ink/75">{t}</div></div>
         </div>
       ))}
+      <div className="rounded-2xl bg-amber-50 p-3 ring-1 ring-amber-200">
+        <div className="font-display font-semibold">🧩 Coding challenges</div>
+        <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-ink/80">{challenges.map((c) => <li key={c}>{c}</li>)}</ul>
+      </div>
     </div>
   );
 }

@@ -42,8 +42,8 @@ function flowerGeometry() {
     return g;
   };
   // stem stays green via colour < 0: we encode stem as 0.0 and petals as 1.0, then tint per instance
-  const stem = cols(g1.toNonIndexed(), 0.0);
-  const petals = cols(head.toNonIndexed(), 1.0);
+  const stem = cols(g1.index ? g1.toNonIndexed() : g1, 0.0);
+  const petals = cols(head.index ? head.toNonIndexed() : head, 1.0);
   const merged = new THREE.BufferGeometry();
   const p = new Float32Array([...stem.attributes.position.array, ...petals.attributes.position.array]);
   const c = new Float32Array([...stem.attributes.color.array, ...petals.attributes.color.array]);
