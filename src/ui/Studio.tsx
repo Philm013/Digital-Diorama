@@ -270,6 +270,28 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         ))}
       </div>
 
+      {settings.tips && !loading && (
+        <div className="fixed bottom-24 left-1/2 z-40 w-[min(94vw,560px)] -translate-x-1/2 sm:bottom-24">
+          <div className="dd-panel rounded-3xl p-4">
+            <div className="flex items-start gap-3">
+              <div className="text-3xl">👋</div>
+              <div className="min-w-0 flex-1 text-sm">
+                <div className="font-display text-lg font-semibold">Welcome to your diorama!</div>
+                <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-ink/80">
+                  <li><b>Explore</b>: drag to look around, tap any animal or plant to learn about it.</li>
+                  <li><b>Build</b>: add species from the library and sculpt the land.</li>
+                  <li><b>Code</b>: snap blocks together, then press <b className="text-[#2f9a3c]">▶ Play</b> to bring it to life.</li>
+                  <li>Show it off with the <b>Tour</b>, or <b>Walk in</b> at an ant’s eye level.</li>
+                </ol>
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <Btn size="sm" variant="ghost" onClick={() => setHelp(true)}>More help</Btn>
+              <Btn size="sm" variant="solid" onClick={() => { const s = { ...settings, tips: false }; setSettings(s); saveSettings(s); }}>Got it!</Btn>
+            </div>
+          </div>
+        </div>
+      )}
       <Modal open={help} onClose={() => setHelp(false)} title="How to use Digital Diorama" wide>
         <HelpContent />
       </Modal>

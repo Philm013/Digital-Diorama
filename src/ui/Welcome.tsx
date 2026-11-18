@@ -61,7 +61,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
           </div>
           <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {BIOMES.map((b) => (
-              <button key={b.id} onClick={() => { setPick(b); setTitle(''); }} className="dd-card group text-left">
+              <button key={b.id} onClick={() => { setPick(b); setTitle(''); }} className="dd-card group flex flex-col justify-start text-left">
                 <div className="relative aspect-[16/9] overflow-hidden rounded-t-2xl">
                   <img src={biomeThumb(b.env.backdrop ?? 'meadow')} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
                   <div className="absolute bottom-0 left-0 right-0 h-3" style={{ background: 'repeating-linear-gradient(90deg,#6b4a2c 0 18px,#7d5734 18px 30px,#5a3d24 30px 44px)' }} />

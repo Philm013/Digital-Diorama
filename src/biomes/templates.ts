@@ -206,6 +206,7 @@ export const BIOMES: BiomeTemplate[] = [
       { asset: 'tree/shrub', count: 3, where: 'dry', spacing: 4, name: 'Creosote bush' },
       { asset: 'rock/bluff', at: [13, -7], params: { radius: 2.2, height: 1.4 } },
       { asset: 'rock/shard', at: [-15, -8] },
+      { asset: 'feature/termite-mound', at: [-15, 7], params: { height: 1.4, width: 1 } },
       { asset: 'mammal/camel', count: 2, area: [6, -3, 4], where: 'dry', spacing: 3, scripts: scriptsFor(['hello'], 'dromedary camel') },
       { asset: 'wild/fennec-fox', at: [-3, 6] },
       { asset: 'wild/coyote', at: [14, 5] },
@@ -247,6 +248,7 @@ export const BIOMES: BiomeTemplate[] = [
       { asset: 'bird/seagull', at: [6, -2], lift: 5 },
       { asset: 'water/fish-school', at: [10, 2], params: { species: 'trout', count: 25, radius: 2.5, depth: 1 }, name: 'Arctic char' },
       { asset: 'wild/bumblebee', at: [-6, -2], lift: 0.6, name: 'Arctic bumblebee' },
+      { asset: 'wild/roundworm', at: [-4, 6], name: 'Soil nematode', note: 'Tiny roundworms in the thawed soil break down dead plants and recycle nutrients.' },
     ],
     guide: {
       summary: 'The Arctic tundra is a cold, treeless plain. Only the top layer of soil thaws in summer; below it lies permafrost. Short summers bring 24-hour daylight and a burst of life.',
@@ -273,6 +275,7 @@ export const BIOMES: BiomeTemplate[] = [
       { asset: 'plant/venus-flytrap', at: [-14, 6], scale: 2 },
       { asset: 'plant/sundew', at: [-12.5, 7.5], scale: 2.2 },
       { asset: 'plant/pampas-grass', at: [15, 9] },
+      { asset: 'feature/log', at: [-12, 8], rotY: 0.6, params: { length: 3, moss: 0.8 } },
       { asset: 'wild/american-alligator', at: [-2, 1], name: 'Alligator', scripts: scriptsFor(['hello'], 'alligator') },
       { asset: 'bird/heron', at: [5, 1] },
       { asset: 'bird/crane', at: [-14, 0] },
@@ -308,6 +311,8 @@ export const BIOMES: BiomeTemplate[] = [
       { asset: 'tree/small-fir', count: 4, where: 'dry', spacing: 3 },
       { asset: 'rock/shard', count: 2, area: [10, -7, 5], spacing: 3 },
       { asset: 'rock/columns', at: [-14, 7] },
+      { asset: 'feature/log', at: [-9, 1], rotY: -0.3, params: { length: 2.6 } },
+      { asset: 'fungi/porcini', at: [-8, 2.6] },
       { asset: 'rock/boulder', count: 2, area: [0, 4, 6], spacing: 3, params: { radius: 0.9 } },
       { asset: 'wild/snow-leopard', at: [9, -4], scripts: scriptsFor(['hello'], 'snow leopard') },
       { asset: 'mammal/goat', count: 2, area: [-8, -8, 3], where: 'dry', spacing: 2, name: 'Mountain goat' },
@@ -331,7 +336,7 @@ export const BIOMES: BiomeTemplate[] = [
   {
     id: 'reef', name: 'Coral Reef', emoji: '🐠', accent: '#1f8fb5',
     tagline: 'An underwater city of corals, clownfish, a sea turtle, rays and sharks.',
-    base: { asset: 'habitat/coral-reef', params: { size: 28, depth: 7, fish: 40 } },
+    base: { asset: 'habitat/coral-reef', params: { size: 28, depth: 7, fish: 40, clarity: 0.2 } },
     worldRecipes: ['intro'],
     env: { backdrop: 'underwater', time: 12, underwater: true, frame: 'shoebox', wind: 0.2 },
     placements: [
@@ -366,7 +371,7 @@ export const BIOMES: BiomeTemplate[] = [
   {
     id: 'kelp', name: 'Kelp Forest', emoji: '🦦', accent: '#2c7a6a',
     tagline: 'Towering kelp, sea otters, urchins, sea stars and an octopus.',
-    base: { asset: 'habitat/kelp-forest', params: { size: 28, depth: 12 } },
+    base: { asset: 'habitat/kelp-forest', params: { size: 28, depth: 10, clarity: 0.25 } },
     worldRecipes: ['intro'],
     env: { backdrop: 'kelp', time: 11, underwater: true, wind: 0.2 },
     placements: [
@@ -379,6 +384,7 @@ export const BIOMES: BiomeTemplate[] = [
       { asset: 'wild/sea-hare', at: [-10, 2] },
       { asset: 'wild/moon-jellyfish', count: 2, area: [0, -8, 3], lift: 8 },
       { asset: 'wild/glass-sponge', at: [10, -3] },
+      { asset: 'wild/sea-cucumber', at: [-2, 7] },
       { asset: 'wild/seahorse', at: [2, -2], lift: 1.5 },
       { asset: 'water/fish-school', at: [0, 0], params: { species: 'sardine', count: 40, radius: 3, depth: 4 } },
     ],
@@ -403,6 +409,7 @@ export const BIOMES: BiomeTemplate[] = [
       { asset: 'wild/ochre-sea-star', count: 2, area: [2, -1, 6], spacing: 2 },
       { asset: 'wild/purple-sea-urchin', count: 2, area: [-6, -2, 4], spacing: 1.5 },
       { asset: 'wild/rose-anemone', count: 2, area: [5, 3, 4], spacing: 1.5 },
+      { asset: 'wild/acorn-worm', at: [-6, 6.5] },
       { asset: 'wild/horseshoe-crab', at: [-9, 6], scripts: scriptsFor(['hello'], 'horseshoe crab') },
       { asset: 'bird/puffin', count: 2, area: [9, -6, 2], spacing: 1 },
       { asset: 'bird/seagull', at: [0, 0], lift: 6 },

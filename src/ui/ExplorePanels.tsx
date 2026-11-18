@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import { X, Crosshair, Volume2, Footprints, Tag, Network, BookOpen, Presentation, Clock, CloudSun, ChevronLeft, ChevronRight, Pause, Play, Video, Maximize2, CheckCircle2, Circle } from 'lucide-react';
+import { X, Crosshair, Volume2, Footprints, Tag, Network, BookOpen, Presentation, Clock, CloudSun, ChevronLeft, ChevronRight, Pause, Play, Video, Maximize2, CheckCircle2, Circle, Glasses, Smartphone, Move } from 'lucide-react';
+import { XRMode } from '../engine/XRMode';
 import { useEngine, useEngineEvent, useEngineVersion } from './store';
 import { Btn, Chip, IconBtn, Modal, Segmented, Slider, statusColor } from './common';
 import { buildFoodWeb, roleOf, ROLE_META, type Role } from '../assets/foodweb';
@@ -11,7 +12,7 @@ import type { Actor } from '../engine/Actor';
 import type { Engine } from '../engine/Engine';
 import type { Weather } from '../engine/types';
 
-export function ExploreLayer({ wide, playing }: { wide: boolean; playing: boolean }) {
+export function ExploreLayer({ wide }: { wide: boolean; playing?: boolean }) {
   const engine = useEngine();
   useEngineVersion();
   const [card, setCard] = useState<string | null>(null);
@@ -24,6 +25,33 @@ export function ExploreLayer({ wide, playing }: { wide: boolean; playing: boolea
     if (e.type === 'select' && e.id === null) setCard(null);
   });
   const walking = !!engine.walk?.active;
+  const [xrSupport, setXrSupport] = useState({ ar: false, vr: false });
+  const [xrOn, setXrOn] = useState(false);
+  const [, bumpXr] = useState(0);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!engine.xr) engine.xr = new XRMode(engine);
+    engine.xr.onChange = () => { setXrOn(!!engine.xr?.active); bumpXr((x) => x + 1); };
+    void XRMode.support().then(setXrSupport);
+  }, [engine]);
+  const startXr = (kind: 'ar' | 'vr') => {
+    setXrOn(true); // the AR overlay must be visible before the session starts
+    engine.select(null);
+    requestAnimationFrame(() => {
+      engine.xr!.start(kind, overlayRef.current).catch((err: Error) => { setXrOn(false); engine.toast(`Couldn’t start ${kind.toUpperCase()}: ${err.message}`, 'error'); });
+    });
+  };
+  const xrOverlay = (
+    <div ref={overlayRef} className={xrOn ? 'pointer-events-none fixed inset-0 z-[60] flex flex-col items-center justify-between p-4' : 'hidden'}>
+      <div className="pointer-events-auto rounded-2xl bg-black/60 px-4 py-2 text-center font-display text-sm font-semibold text-white">
+        {engine.xr?.kind === 'ar' && !engine.xr.placed ? 'Point your camera at a table or the floor, then tap to place the diorama' : 'Walk around your diorama to look at it from every side'}
+      </div>
+      <div className="pointer-events-auto flex gap-2">
+        {engine.xr?.kind === 'ar' && engine.xr.placed && <Btn onClick={() => engine.xr?.replace()}><Move size={16} /> Move it</Btn>}
+        <Btn variant="stop" onClick={() => engine.xr?.stop()}><X size={16} /> Exit</Btn>
+      </div>
+    </div>
+  );
   if (tour) return <Tour onExit={() => setTour(false)} />;
   const actor = engine.getActor(card);
   return (
@@ -40,6 +68,8 @@ export function ExploreLayer({ wide, playing }: { wide: boolean; playing: boolea
             <DockBtn icon={<BookOpen size={18} />} label="Guide" onClick={() => setGuide(true)} />
             <DockBtn icon={<Presentation size={18} />} label="Tour" onClick={() => { audio(); engine.select(null); setTour(true); }} />
             <DockBtn icon={<Footprints size={18} />} label="Walk in" onClick={() => { engine.walk?.enter(1.6); }} />
+            {xrSupport.ar && <DockBtn icon={<Smartphone size={18} />} label="AR table" onClick={() => startXr('ar')} />}
+            {xrSupport.vr && <DockBtn icon={<Glasses size={18} />} label="VR" onClick={() => startXr('vr')} />}
             <DockBtn icon={<Maximize2 size={18} />} label="Overview" onClick={() => { engine.follow(null); engine.frameCamera(); }} />
           </div>
           {pop && (
@@ -50,7 +80,7 @@ export function ExploreLayer({ wide, playing }: { wide: boolean; playing: boolea
           )}
         </div>
       )}
-      {playing ? null : null}
+      {xrOverlay}
       <Modal open={web} onClose={() => setWeb(false)} title="🕸️ Food web" wide><FoodWeb onPick={(id) => { setWeb(false); engine.select(id); engine.focusActor(id); setCard(id); }} /></Modal>
       <Modal open={guide} onClose={() => setGuide(false)} title={`${BIOME_BY_ID[engine.doc.biome]?.emoji ?? '📦'} Habitat guide`} wide><Guide /></Modal>
     </>
@@ -248,7 +278,7 @@ function useChecklist(engine: Engine) {
     { ok: maxLevel >= 3, text: 'A food chain with 3+ links', hint: 'Open the food web to check.' },
     { ok: water, text: 'A water source', hint: 'Every habitat needs water — add a pond or stream.' },
     { ok: abiotic, text: 'Non-living (abiotic) features', hint: 'Rocks, water, soil, sunlight.' },
-    { ok: engine.env.labels, text: 'Labels turned on', hint: 'Toothpick flags name your organisms.' },
+    { ok: actors.filter((a) => (a.doc.label?.text ?? '').trim()).length >= 3, text: `Write your own label on 3 things (${actors.filter((a) => (a.doc.label?.text ?? '').trim()).length})`, hint: 'Build → select → label text, e.g. “Producer: makes food from sunlight”.' },
     { ok: notes >= 3, text: `Research notes on 3 organisms (${notes})`, hint: 'Build → select → My notes.' },
     { ok: coded, text: 'Bring something to life with code', hint: 'Code → “when ▶ clicked”.' },
   ];

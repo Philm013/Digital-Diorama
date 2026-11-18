@@ -99,7 +99,21 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
         }
       }
     };
+    let hoverT = 0;
+    const hover = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse' || e.buttons || engine.walk?.active) return;
+      const now = performance.now();
+      if (now - hoverT < 120) return;
+      hoverT = now;
+      const r = el.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+      if (modeRef.current === 'build' && engine.brush.tool) { el.style.cursor = 'crosshair'; return; }
+      const hit = engine.pickActor(e.clientX, e.clientY);
+      el.style.cursor = hit ? (modeRef.current === 'build' && !playingRef.current ? 'grab' : 'pointer') : '';
+    };
     const onMove = (e: PointerEvent) => {
+      hover(e);
+      if (down?.dragging) el.style.cursor = 'grabbing';
       const r = ring.current;
       if (modeRef.current === 'build' && engine.brush.tool && engine.terrain && !engine.walk?.active) {
         const g = engine.pickGround(e.clientX, e.clientY);

@@ -165,6 +165,14 @@ export async function buildModel(def: AssetDef, userParams: Record<string, unkno
     raw = skinned ? skeletonClone(proto.raw) : proto.raw.clone(true);
     raw.userData = { ...proto.raw.userData };
   }
+  if (def.stripWater) {
+    const drop: THREE.Object3D[] = [];
+    raw.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && !Array.isArray(m.material) && /^(water|foam)$/i.test((m.material as THREE.Material).name ?? '')) drop.push(m);
+    });
+    for (const m of drop) m.parent?.remove(m);
+  }
   const object = new THREE.Group();
   object.name = 'model';
   const yawWrap = new THREE.Group();

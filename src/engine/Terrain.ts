@@ -129,7 +129,8 @@ export class Terrain {
     this.sides.name = 'terrain-sides';
     this.sides.receiveShadow = true;
     this.group.add(this.sides);
-    this.waterSides = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: '#2f7fa8', transparent: true, opacity: 0.55, roughness: 0.15, metalness: 0, depthWrite: false, side: THREE.DoubleSide }));
+    // water cross-section: light at the surface, deepening blue toward the bed (an aquarium-style cut-away)
+    this.waterSides = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.72, emissive: new THREE.Color('#0b3a52'), emissiveIntensity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
     this.waterSides.name = 'terrain-water-sides';
     this.waterSides.renderOrder = 2;
     this.group.add(this.waterSides);
@@ -270,7 +271,8 @@ export class Terrain {
     const bottom = this.bottomY;
     const ROWS = 22;
     const pos: number[] = [], col: number[] = [], nor: number[] = [], idx: number[] = [];
-    const wpos: number[] = [], widx: number[] = [];
+    const wpos: number[] = [], widx: number[] = [], wcol: number[] = [];
+    const surfaceCol = new THREE.Color('#6cc4d6'), deepCol = new THREE.Color('#164c6e'), wc = new THREE.Color();
     const wl = this.waterLevel;
     const c = new THREE.Color();
     const edges: { pts: [number, number][]; n: [number, number, number] }[] = [];
@@ -301,7 +303,10 @@ export class Terrain {
         if (wl !== null) {
           const wb = wpos.length / 3;
           const off = 0.004;
-          wpos.push(x + e.n[0] * off, Math.min(top, wl), z + e.n[2] * off, x + e.n[0] * off, wl, z + e.n[2] * off);
+          const bed = Math.min(top, wl);
+          wpos.push(x + e.n[0] * off, bed, z + e.n[2] * off, x + e.n[0] * off, wl, z + e.n[2] * off);
+          wc.copy(surfaceCol).lerp(deepCol, Math.min(1, (wl - bed) / 3));
+          wcol.push(wc.r, wc.g, wc.b, surfaceCol.r, surfaceCol.g, surfaceCol.b);
           if (si > 0) { const a = wb - 2; widx.push(a, a + 1, wb, wb, a + 1, wb + 1); }
         }
       });
@@ -314,6 +319,7 @@ export class Terrain {
     g.computeBoundingSphere();
     const wg = this.waterSides.geometry;
     wg.setAttribute('position', new THREE.Float32BufferAttribute(wpos, 3));
+    wg.setAttribute('color', new THREE.Float32BufferAttribute(wcol, 3));
     wg.setIndex(widx);
     wg.computeVertexNormals();
     wg.computeBoundingSphere();

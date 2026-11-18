@@ -84,7 +84,7 @@ export const DEFAULT_ENV: EnvDoc = {
   backdrop: 'meadow',
   grass: 1,
   trueScale: false,
-  labels: false,
+  labels: true,
   underwater: false,
 };
 

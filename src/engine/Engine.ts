@@ -84,6 +84,7 @@ export class Engine {
   private flight: { from: THREE.Vector3; to: THREE.Vector3; tFrom: THREE.Vector3; tTo: THREE.Vector3; t: number; dur: number; done?: () => void } | null = null;
   private followId: string | null = null;
   walk: import('./WalkMode').WalkMode | null = null;
+  xr: import('./XRMode').XRMode | null = null;
   disposed = false;
   /** debugging/screenshots: freeze ambient wandering */
   ambientOff = false;
@@ -403,7 +404,7 @@ export class Engine {
     this.hemi.color.copy(s.hemiSky);
     if (under) this.hemi.color.lerp(new THREE.Color('#5fb2c8'), 0.6);
     this.hemi.groundColor.copy(s.hemiGround);
-    this.hemi.intensity = s.hemiIntensity * (1 + overcast * 0.3) + this.weather.flash * 2;
+    this.hemi.intensity = s.hemiIntensity * (1 + overcast * 0.3) * (under ? 1.55 : 1) + this.weather.flash * 2;
     this.fill.intensity = 0.35 * (1 - night * 0.8);
     this.renderer.toneMappingExposure = 1.05 + night * 0.25;
     this.frame.applySky(s, overcast, this.time, under ? { top: '#0d3a5a', horizon: '#2f8fb0' } : undefined);
@@ -773,8 +774,9 @@ export class Engine {
   }
 
   /* ================= loop ================= */
-  private tick = () => {
+  private tick = (_t?: number, frame?: XRFrame) => {
     if (this.disposed) return;
+    if (this.xr?.active) this.xr.update(frame);
     this.clock.update();
     const dt = Math.min(0.1, this.clock.getDelta());
     this.time += dt;
@@ -812,10 +814,9 @@ export class Engine {
       }
     }
     if (this.walk?.active) this.walk.update(dt);
-    else this.controls.update();
+    else if (!this.xr?.active) this.controls.update();
     this.renderer.render(this.scene, this.camera);
-    this.labels.render(this.scene, this.camera);
-    this.adaptResolution(dt);
+    if (!this.xr?.active) { this.labels.render(this.scene, this.camera); this.adaptResolution(dt); }
   };
 
   private adaptResolution(dt: number) {

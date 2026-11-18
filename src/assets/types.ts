@@ -48,6 +48,8 @@ export interface AssetDef {
   /** habitat tile usable as the diorama base */
   base?: boolean;
   heavy?: boolean;
+  /** remove the asset's own water meshes (it floats in the diorama's water instead) */
+  stripWater?: boolean;
   /** natural cruising speed in m/s */
   speed?: number;
   living?: boolean;
