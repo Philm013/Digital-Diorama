@@ -365,7 +365,7 @@ export const BIOMES: BiomeTemplate[] = [
       adaptations: ['Clownfish are protected from anemone stings by a mucus coat.', 'Corals get food from algae living in their tissue.', 'Parrotfish and tangs graze algae, keeping corals clear.'],
       threats: ['Coral bleaching from warming seas', 'Ocean acidification', 'Overfishing and pollution'],
       vocab: [['Polyp', 'A tiny soft-bodied coral animal'], ['Symbiosis', 'Two species living closely together'], ['Bleaching', 'When stressed corals lose their algae and turn white']],
-      questions: ['How do the clownfish and anemone help each other?', 'Select the coral reef tile and raise “Bleaching” — what changes?'],
+      questions: ['How do the clownfish and anemone help each other?', 'In Build (nothing selected) open “Habitat tile” and raise Bleaching — what changes, and why do warm seas cause it?'],
     },
   },
   {

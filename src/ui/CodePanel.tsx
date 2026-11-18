@@ -48,9 +48,10 @@ export function CodePanel({ compact }: { compact?: boolean }) {
   useEffect(() => {
     let live = true;
     codeContext.params = () => [];
-    if (current) void getSchema(current.def).then((s) => {
+    const def = current ? current.def : engine.base?.def;
+    if (def) void getSchema(def).then((s) => {
       if (!live) return;
-      const hide = new Set([...(current.def.hidden ?? []), 'mergeForProduction', 'seed', 'diorama']);
+      const hide = new Set([...(def.hidden ?? []), 'mergeForProduction', 'seed', 'diorama']);
       const list = Object.entries(s).filter(([k, p]) => !hide.has(k) && p && (p.type === 'range' || p.type === 'toggle' || p.type === 'choice')).map(([k, p]) => ({ key: k, label: p.label ?? k }));
       codeContext.params = () => list;
     });

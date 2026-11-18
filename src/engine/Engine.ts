@@ -348,6 +348,25 @@ export class Engine {
     return JSON.parse(JSON.stringify(d));
   }
 
+  /** rebuild a habitat-tile base with new parameters (keeps every placed object) */
+  async rebuildBase(patch: Record<string, unknown>, persist = true) {
+    if (this.doc.base.kind !== 'asset' || !this.base) return;
+    const params = { ...this.doc.base.params, ...patch };
+    for (const [k, v] of Object.entries(patch)) if (v === undefined) delete params[k];
+    if (persist) { this.pushUndo(); this.doc.base.params = params; }
+    try {
+      const model = await buildModel(this.base.def, params, this.quality, true);
+      this.base.setModel(model);
+      this.base.root.updateMatrixWorld(true);
+      const isWater = (m: THREE.Mesh) => /water|sea|surface/i.test(((m.material as THREE.Material)?.name ?? '') + ' ' + m.name);
+      this.groundGrid = probeHeights(this.renderer, this.base.root, (m) => !isWater(m) && !(m.material as THREE.Material).transparent && !/sway|glass|foam|glow/i.test((m.material as THREE.Material).name ?? ''), 256);
+      this.waterGrid = probeHeights(this.renderer, this.base.root, isWater, 128);
+      model.setNight?.(this.skyState.night);
+      for (const a of this.actors.values()) a.followGround(this.worldQuery);
+    } catch (e) { console.error(e); this.toast('Could not rebuild the habitat tile', 'error'); }
+    if (persist) this.changed();
+  }
+
   /* ================= frame / env ================= */
   buildFrame() {
     const env = this.env;

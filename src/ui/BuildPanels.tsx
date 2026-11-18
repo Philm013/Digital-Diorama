@@ -317,6 +317,7 @@ function DioramaPanel() {
             <Slider label="Grass" value={env.grass} min={0} max={1.5} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => engine.setEnv({ grass: v }, false)} onCommit={(v) => engine.setEnv({ grass: v })} />
           </Section>
         )}
+        {engine.base && <BaseTileSection />}
         <Section title="Sky & weather"><EnvironmentControls /></Section>
         <Section title="Display">
           <div><div className="mb-1 text-[13px] font-semibold text-ink/80">Frame</div><Segmented size="sm" value={env.frame === 'open' ? 'island' : env.frame} onChange={(f) => engine.setEnv({ frame: f })} options={FRAMES} /></div>
@@ -340,6 +341,20 @@ function DioramaPanel() {
         </Section>
       </div>
     </div>
+  );
+}
+
+function BaseTileSection() {
+  const engine = useEngine();
+  const base = engine.base!;
+  const [schema, setSchema] = useState<Record<string, ParamSpec> | null>(null);
+  useEffect(() => { let live = true; void getSchema(base.def).then((x) => { if (live) setSchema(x); }); return () => { live = false; }; }, [base.def]);
+  const params = engine.doc.base.kind === 'asset' ? engine.doc.base.params : {};
+  return (
+    <Section title={<span>{base.def.emoji} Habitat tile</span>}>
+      <p className="text-[12px] text-ink/60">{base.def.info.blurb}</p>
+      {!schema ? <div className="text-sm text-ink/50">Loading…</div> : <ParamControls def={base.def} schema={schema} values={params} onCommit={(patch) => void engine.rebuildBase(patch)} />}
+    </Section>
   );
 }
 

@@ -33,6 +33,8 @@ export class ScriptRuntime {
   /** duration of the last frame, used to move things at real-time speed */
   dt = 1 / 60;
   private lastNow = 0;
+  /** true when only clicked stacks are running (no automatic hats) */
+  partial = false;
   timerStart = 0;
   private threads = new Set<Thread>();
   private waiters: (() => void)[] = [];
@@ -93,6 +95,7 @@ export class ScriptRuntime {
       env: JSON.parse(JSON.stringify(e.env)),
     };
     this.running = true;
+    this.partial = !fireStart;
     this.time = 0;
     this.lastNow = 0;
     this.timerStart = 0;
@@ -226,6 +229,7 @@ export class ScriptRuntime {
     for (const t of this.threads) { t.sliceStart = performance.now(); t.redraw = false; }
     // ambient life pauses while scripts steer an object
     for (const a of this.engine.actorList) a.scripted = (this.hold.get(a.id) ?? -1) > this.time;
+    if (this.partial) return; // a single clicked stack: no timers, touches or sunsets
     // timer hats
     for (const [inst, hats] of this.hats) for (const h of hats) {
       if (h.type === 'dd_when_every') {
@@ -587,7 +591,9 @@ class ThreadApi {
   setJoint(name: string, deg: number | null) { const a = this.me; if (a && name) a.setRig(name, deg === null ? null : Number(deg) || 0); }
   setLabel(t: unknown) { const a = this.me; if (a) { a.doc.label = { show: true, text: String(t ?? '') }; this.e.syncActorLabel(a); } }
   async setParam(key: string, value: unknown) {
-    const a = this.me; if (!a || !key) return;
+    if (!key) return;
+    if (!this.me) { await this.e.rebuildBase({ [key]: value }, false); this.check(); return; } // World: change the habitat tile
+    const a = this.me;
     a.doc.params = { ...a.doc.params, [key]: value };
     await this.e.rebuildActor(a);
     this.check();

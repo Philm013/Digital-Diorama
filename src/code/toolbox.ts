@@ -65,6 +65,7 @@ export function buildToolbox(isWorld: boolean) {
   const contents = isWorld
     ? [events, looks, sound, control, sensing, world, operators, variables, myblocks]
     : [events, motion, looks, sound, control, sensing, eco, world, operators, variables, myblocks];
-  if (isWorld) looks.contents = [b('dd_set_label', { TEXT: txt('My label') })].slice(0, 0);
+  // the World can still change its habitat tile's settings (e.g. coral bleaching)
+  if (isWorld) looks.contents = [b('dd_set_param', { V: num(0.8) })];
   return { kind: 'categoryToolbox', contents: contents.filter((c) => !('contents' in c) || (c.contents as unknown[]).length) };
 }
