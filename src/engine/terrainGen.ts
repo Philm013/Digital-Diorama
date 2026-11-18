@@ -134,11 +134,38 @@ export function generateTerrain(r: TerrainRecipe): Terrain {
   return t;
 }
 
+/** metres from every grid vertex to the nearest underwater vertex (chamfer distance transform) */
+function waterDistance(t: Terrain): Float32Array {
+  const { nx, nz } = t;
+  const INF = 1e9;
+  const d = new Float32Array(nx * nz).fill(INF);
+  const wl = t.waterLevel;
+  if (wl === null) return d;
+  for (let k = 0; k < d.length; k++) if (t.heights[k] < wl) d[k] = 0;
+  const a = t.dx, b = Math.hypot(t.dx, t.dz);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i;
+    if (i > 0) d[k] = Math.min(d[k], d[k - 1] + a);
+    if (j > 0) d[k] = Math.min(d[k], d[k - nx] + a);
+    if (i > 0 && j > 0) d[k] = Math.min(d[k], d[k - nx - 1] + b);
+    if (i < nx - 1 && j > 0) d[k] = Math.min(d[k], d[k - nx + 1] + b);
+  }
+  for (let j = nz - 1; j >= 0; j--) for (let i = nx - 1; i >= 0; i--) {
+    const k = j * nx + i;
+    if (i < nx - 1) d[k] = Math.min(d[k], d[k + 1] + a);
+    if (j < nz - 1) d[k] = Math.min(d[k], d[k + nx] + a);
+    if (i < nx - 1 && j < nz - 1) d[k] = Math.min(d[k], d[k + nx + 1] + b);
+    if (i > 0 && j < nz - 1) d[k] = Math.min(d[k], d[k + nx - 1] + b);
+  }
+  return d;
+}
+
 export function applyPaint(t: Terrain, preset: PaintPreset, seed = 1) {
   const N = new Noise2D(seed * 13 + 1);
   const R = rng(seed);
   const G = GROUND_INDEX;
   const wl = t.waterLevel;
+  const dist = waterDistance(t);
   for (let j = 0; j < t.nz; j++) {
     for (let i = 0; i < t.nx; i++) {
       const k = j * t.nx + i;
@@ -146,7 +173,8 @@ export function applyPaint(t: Terrain, preset: PaintPreset, seed = 1) {
       const hx = t.h(i + 1, j) - t.h(i - 1, j), hz = t.h(i, j + 1) - t.h(i, j - 1);
       const slope = Math.hypot(hx, hz) / (2 * t.dx);
       const n1 = N.fbm(x * 0.08, z * 0.08, 3), n2 = N.noise(x * 0.3, z * 0.3);
-      const nearWater = wl !== null ? h - wl : 99;
+      // < 0 under water; otherwise roughly 'metres to the shore' scaled so 0.2 ≈ 1 m
+      const nearWater = wl === null ? 99 : h < wl ? h - wl : dist[k] * 0.2;
       let g = G.grass;
       switch (preset) {
         case 'forest':
@@ -161,7 +189,7 @@ export function applyPaint(t: Terrain, preset: PaintPreset, seed = 1) {
           if (slope > 0.8) g = G.rock;
           break;
         case 'savanna':
-          g = n1 > 0.48 ? G.soil : G.dry;
+          g = n1 > 0.62 ? G.soil : G.dry;
           if (n2 > 0.75) g = G.grass;
           if (nearWater < 0.3) g = nearWater < -0.1 ? G.mud : G.soil;
           if (slope > 0.9) g = G.rock;

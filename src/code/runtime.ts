@@ -32,6 +32,7 @@ export class ScriptRuntime {
   time = 0;
   /** duration of the last frame, used to move things at real-time speed */
   dt = 1 / 60;
+  private lastNow = 0;
   timerStart = 0;
   private threads = new Set<Thread>();
   private waiters: (() => void)[] = [];
@@ -93,6 +94,7 @@ export class ScriptRuntime {
     };
     this.running = true;
     this.time = 0;
+    this.lastNow = 0;
     this.timerStart = 0;
     this.shared.clear();
     this.energy.clear();
@@ -212,8 +214,12 @@ export class ScriptRuntime {
 
   tick(dt: number) {
     if (!this.running) return;
+    // waits and timers follow the wall clock (like Scratch); motion integrates the clamped frame step
+    const now = performance.now();
+    const real = this.lastNow ? Math.min(1, (now - this.lastNow) / 1000) : dt;
+    this.lastNow = now;
     this.dt = Math.min(0.1, Math.max(0.001, dt));
-    this.time += dt;
+    this.time += real;
     const w = this.waiters;
     this.waiters = [];
     for (const fn of w) fn();
@@ -711,7 +717,25 @@ class ThreadApi {
     const a = this.me; if (!a) return;
     const o = this.rt.resolve(a, ref);
     if (!o || o === 'camera' || o instanceof THREE.Vector3 || o === a || !o.root.visible) return;
-    await this.walkTo(o.id, this.rt.eatsRel(o, a) ? 'run' : 'walk');
+    const hunting = o.def.category === 'animals';
+    // chase the (possibly moving) food; give up after a while
+    const start = this.rt.time;
+    let caught = false;
+    while (this.rt.time - start < (hunting ? 12 : 30)) {
+      this.holdAmbient();
+      if (!o.root.visible) break;
+      const p = o.root.position, me = a.root.position;
+      const d = Math.hypot(p.x - me.x, p.z - me.z);
+      if (d <= (a.radius + o.radius) * 0.75 + 0.1) { caught = true; break; }
+      this.faceTowards(p.x, p.z, 0.25);
+      const step = Math.min(d, this.speed(hunting ? 'run' : 'walk') * this.rt.dt);
+      me.x += ((p.x - me.x) / d) * step;
+      me.z += ((p.z - me.z) / d) * step;
+      this.clampToBounds(me);
+      await this.frame();
+    }
+    a.setHome();
+    if (!caught) { a.say('It got away!', 0, true); await this.wait(1.2); a.say(''); return; }
     this.faceTowards(o.root.position.x, o.root.position.z);
     this.playAnim(a.actions.has('graze') ? 'graze' : 'roar');
     playSound('munch');

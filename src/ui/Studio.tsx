@@ -94,6 +94,8 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
     engine.setMode(m);
     setModeState(m);
     setMenu(false);
+    // panels change the viewport shape: re-frame once the layout has settled
+    setTimeout(() => { engine.resize(); if (!engine.selectedId) engine.frameCamera(); }, 60);
   }, [engine]);
 
   const togglePlay = useCallback(() => {

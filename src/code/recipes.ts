@@ -35,3 +35,12 @@ export const RECIPES: Recipe[] = [
 export function recipeBlock(r: Recipe, name: string, x: number, y: number) {
   return { ...r.build(name), x, y };
 }
+
+/** Workspace JSON for one or more recipes stacked vertically (used by biome templates). */
+export function scriptsFor(ids: string[], name: string) {
+  const blocks = ids.map((id, i) => {
+    const r = RECIPES.find((x) => x.id === id);
+    return r ? recipeBlock(r, name, 40, 40 + i * 260) : null;
+  }).filter(Boolean);
+  return { blocks: { languageVersion: 0, blocks } };
+}

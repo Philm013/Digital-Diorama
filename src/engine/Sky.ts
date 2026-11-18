@@ -21,8 +21,8 @@ export interface SkyState {
 type Key = [number, string, string, string, number];
 // hour, sky top, horizon, light colour, light intensity
 const KEYS: Key[] = [
-  [0, '#070b1c', '#18223d', '#7d93c9', 0.32],
-  [4.5, '#0b1330', '#27304f', '#8095c7', 0.3],
+  [0, '#070b1c', '#18223d', '#8ea4d8', 0.55],
+  [4.5, '#0b1330', '#27304f', '#8fa3d4', 0.5],
   [5.6, '#283a6b', '#e8946a', '#ff9f73', 0.55],
   [6.6, '#5b8fd0', '#f6c99a', '#ffd2a1', 1.6],
   [8, '#4f8ed6', '#cfe4f2', '#fff0d8', 2.6],
@@ -31,8 +31,8 @@ const KEYS: Key[] = [
   [17.8, '#5a7fc0', '#f8c48f', '#ffcf94', 1.9],
   [18.9, '#3b4b84', '#ff8a5a', '#ff9a66', 0.85],
   [19.9, '#1b2450', '#7a4f78', '#a58ac6', 0.4],
-  [21, '#0a1027', '#1f2747', '#7d93c9', 0.32],
-  [24, '#070b1c', '#18223d', '#7d93c9', 0.32],
+  [21, '#0a1027', '#1f2747', '#8ea4d8', 0.55],
+  [24, '#070b1c', '#18223d', '#8ea4d8', 0.55],
 ];
 
 const cA = new THREE.Color(), cB = new THREE.Color();
@@ -63,7 +63,7 @@ export function skyAt(hour: number, out?: SkyState): SkyState {
   s.sunColor.set('#fff1cf').lerp(cA.set('#ff8a50'), s.dusk);
   s.hemiSky.copy(s.top).lerp(s.horizon, 0.45);
   s.hemiGround.set('#5a4a36').lerp(cA.set('#141820'), s.night);
-  s.hemiIntensity = 0.95 - 0.7 * s.night;
+  s.hemiIntensity = 0.95 - 0.6 * s.night;
   return s;
 }
 
@@ -130,7 +130,7 @@ export class SkyDome {
     this.uniforms = {
       uTop: { value: new THREE.Color() },
       uHorizon: { value: new THREE.Color() },
-      uGround: { value: new THREE.Color('#3b4a3a') },
+      uGround: { value: new THREE.Color('#9db4c8') },
       uSunDir: { value: new THREE.Vector3(0, 1, 0) },
       uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
       uSunColor: { value: new THREE.Color() },

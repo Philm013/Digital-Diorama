@@ -194,7 +194,7 @@ export class Engine {
     return null;
   };
   get worldQuery(): WorldQuery {
-    return { groundAt: this.groundAt, waterAt: this.waterAt, bounds: this.bounds, time: this.time };
+    return { groundAt: this.groundAt, waterAt: this.waterAt, bounds: this.bounds, time: this.time, night: this.skyState.night };
   }
   get env(): EnvDoc { return this.doc?.env ?? DEFAULT_ENV; }
 
@@ -272,12 +272,23 @@ export class Engine {
     this.changed(false);
   }
 
+  /** seasonal colour overrides for trees — applied at build time, never saved into the document */
+  seasonParams(def: AssetDef, season = this.env.season): Record<string, unknown> {
+    if (def.family === 'deciduous') return { leafHueAndSeason: { spring: 'freshSpring', summer: 'deepSummer', autumn: 'peakAutumn', winter: 'moonlit' }[season] };
+    if (def.family === 'terraTree' && ['broadleaf', 'shrub', 'acacia'].includes(String(def.params.species))) return season === 'autumn' ? { colorway: 'autumn' } : season === 'winter' ? { colorway: 'dusk' } : {};
+    if (def.family === 'water' && def.id.startsWith('grove/') && season === 'autumn') return { colorway: 'autumn' };
+    return {};
+  }
+  private paramsFor(a: ActorDoc, def: AssetDef) {
+    return { ...this.seasonParams(def), ...a.params };
+  }
+
   private async spawn(a: ActorDoc, def: AssetDef) {
     const actor = new Actor(a, def);
     this.actors.set(a.id, actor);
     this.world.add(actor.root);
     try {
-      const model = await buildModel(def, a.params, this.quality, this.env.trueScale);
+      const model = await buildModel(def, this.paramsFor(a, def), this.quality, this.env.trueScale);
       if (!this.actors.has(a.id)) return actor; // removed while building
       actor.setModel(model);
       this.decorate(actor);
@@ -366,6 +377,8 @@ export class Engine {
     if ((patch.grass !== undefined && patch.grass !== prev.grass) || (patch.season !== undefined && patch.season !== prev.season)) this.rebuildGroundcover(true);
     if (patch.labels !== undefined) for (const a of this.actors.values()) this.syncActorLabel(a);
     if (patch.trueScale !== undefined && patch.trueScale !== prev.trueScale) void this.rebuildAll();
+    else if (patch.season !== undefined && patch.season !== prev.season) void this.rebuildWhere((a) => JSON.stringify(this.seasonParams(a.def, prev.season)) !== JSON.stringify(this.seasonParams(a.def, patch.season)));
+    if (patch.weather !== undefined && (patch.weather === 'snow') !== (prev.weather === 'snow')) this.rebuildGroundcover(true);
     this.applyEnv();
     void env;
     this.changed();
@@ -394,10 +407,11 @@ export class Engine {
     this.fill.intensity = 0.35 * (1 - night * 0.8);
     this.renderer.toneMappingExposure = 1.05 + night * 0.25;
     this.frame.applySky(s, overcast, this.time, under ? { top: '#0d3a5a', horizon: '#2f8fb0' } : undefined);
-    this.sky.apply(s, overcast, this.time);
+    this.sky.apply(s, overcast, this.time, s.horizon.clone().lerp(new THREE.Color('#a9bccb'), 0.4).multiplyScalar(1 - night * 0.7));
     // fog: subtle depth haze, thick for fog weather or underwater
     const size = Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
-    const fogAmt = clamp(env.fog + (env.weather === 'fog' ? 0.6 : 0) + (under ? 0.35 : 0), 0, 1);
+    const walkingNow = !!this.walk?.active;
+    const fogAmt = clamp(env.fog + (env.weather === 'fog' ? 0.6 : 0) + (under ? (walkingNow ? 0.45 : 0.12) : 0), 0, 1);
     const walking = !!this.walk?.active;
     if (fogAmt > 0.01 || walking) {
       const col = under ? new THREE.Color('#2a7f9e').multiplyScalar(1 - night * 0.7) : s.horizon.clone().lerp(new THREE.Color('#c8ccd0'), overcast * 0.6);
@@ -436,7 +450,8 @@ export class Engine {
     const run = () => {
       if (!this.terrain) return;
       const blockers = [...this.actors.values()].filter((a) => a.def.category !== 'animals' && a.def.family !== 'terraTree' && (a.def.family === 'water' || a.def.family === 'rock' || a.def.family === 'builtin'));
-      this.groundcover.build(this.terrain, this.env.grass, this.quality, this.env.season, this.terrain.seed, (x, z) => blockers.some((a) => Math.hypot(a.root.position.x - x, a.root.position.z - z) < a.radius * 0.8));
+      const snowy = this.env.season === 'winter' || this.env.weather === 'snow';
+      this.groundcover.build(this.terrain, this.env.grass * (snowy ? 0.3 : 1), this.quality, snowy ? 'winter' : this.env.season, this.terrain.seed, (x, z) => blockers.some((a) => Math.hypot(a.root.position.x - x, a.root.position.z - z) < a.radius * 0.8));
     };
     clearTimeout(this.groundcoverTimer);
     if (now) run(); else this.groundcoverTimer = window.setTimeout(run, 350);
@@ -526,7 +541,7 @@ export class Engine {
 
   async rebuildActor(a: Actor) {
     try {
-      const model = await buildModel(a.def, a.doc.params, this.quality, this.env.trueScale);
+      const model = await buildModel(a.def, this.paramsFor(a.doc, a.def), this.quality, this.env.trueScale);
       a.setModel(model);
       this.decorate(a);
       a.followGround(this.worldQuery);
@@ -537,6 +552,10 @@ export class Engine {
       console.error(e);
       this.toast(`Couldn’t rebuild ${a.def.name}`, 'error');
     }
+  }
+
+  async rebuildWhere(fn: (a: Actor) => boolean) {
+    for (const a of [...this.actors.values()]) if (fn(a)) { await this.rebuildActor(a); await nextFrame(); }
   }
 
   async rebuildAll() {
@@ -715,7 +734,8 @@ export class Engine {
     const w = b.maxX - b.minX, d = b.maxZ - b.minZ;
     const target = new THREE.Vector3((b.minX + b.maxX) / 2, Math.max(0, (this.terrain?.maxHeight() ?? 2) * 0.25), (b.minZ + b.maxZ) / 2 + d * 0.05);
     const fov = this.camera.fov * Math.PI / 180;
-    const aspect = Math.max(0.5, this.camera.aspect);
+    // in portrait we let the sides crop a little so the diorama fills the screen
+    const aspect = Math.max(0.72, this.camera.aspect);
     const dist = Math.max(w / aspect, d * 1.15) / (2 * Math.tan(fov / 2)) * 0.98 + d * 0.12;
     const pos = target.clone().add(new THREE.Vector3(0, Math.sin(0.5) * dist, Math.cos(0.5) * dist));
     this.controls.maxDistance = dist * 3;

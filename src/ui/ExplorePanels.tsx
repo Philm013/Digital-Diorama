@@ -118,7 +118,7 @@ function InfoCard({ actor, wide, onClose }: { actor: Actor; wide: boolean; onClo
           {info.scientific && <div className="text-sm italic text-ink/60">{info.scientific}</div>}
           <div className="mt-1.5 flex flex-wrap gap-1">
             <Chip color={rm.color}>{rm.emoji} {rm.label}</Chip>
-            {info.diet && info.diet !== 'none' && info.diet !== 'producer' && <Chip color="#5a6b7d">🍽️ {info.diet}</Chip>}
+            {info.diet && info.diet !== 'none' && info.diet !== 'producer' && <Chip color="#5a6b7d">diet: {info.diet}</Chip>}
             {info.status && <Chip color={statusColor(info.status)}>{info.status}</Chip>}
           </div>
         </div>

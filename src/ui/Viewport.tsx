@@ -13,6 +13,7 @@ const EYES = [
   { value: '0.15', label: '🐸 Frog' },
   { value: '0.03', label: '🐜 Ant' },
 ];
+const nearestEye = (v: string) => EYES.reduce((best, o) => (Math.abs(Math.log(Number(o.value) / Number(v))) < Math.abs(Math.log(Number(best.value) / Number(v))) ? o : best), EYES[0]).value;
 
 export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolean; toast: (t: string, k?: 'info' | 'error' | 'success') => void }) {
   const { engine, runtime } = useStudio();
@@ -35,7 +36,7 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       if (text) capTimer.current = window.setTimeout(() => setCaption(null), secs * 1000);
     };
     runtime.onAsk = (q, who) => new Promise<string>((resolve) => { setAnswer(''); setAsk({ q, who, resolve }); });
-    if (engine.walk) engine.walk.onChange = () => setWalking(!!engine.walk?.active);
+    if (engine.walk) engine.walk.onChange = () => { setWalking(!!engine.walk?.active); if (engine.walk?.active) setEye(String(engine.walk.eye)); };
     return () => { runtime.onCaption = undefined; runtime.onAsk = undefined; };
   }, [engine, runtime]);
   useEffect(() => { if (!playing) { setCaption(null); if (ask) { ask.resolve(''); setAsk(null); } } }, [playing]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -252,7 +253,7 @@ function WalkOverlay({ touch, eye, setEye, onExit }: { touch: boolean; eye: stri
   return (
     <>
       <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 flex-wrap items-center justify-center gap-2">
-        <div className="rounded-2xl bg-white/90 p-1 shadow"><Segmented size="sm" value={eye} onChange={setEye} options={EYES} /></div>
+        <div className="rounded-2xl bg-white/90 p-1 shadow"><Segmented size="sm" value={nearestEye(eye)} onChange={setEye} options={EYES} /></div>
         <Btn size="sm" onClick={onExit}><LogOut size={14} /> Leave</Btn>
       </div>
       {!touch && (

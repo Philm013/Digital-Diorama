@@ -10,10 +10,26 @@ export interface WorldQuery {
   waterAt(x: number, z: number): number | null;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   time: number;
+  night?: number;
 }
 
 const DEG = Math.PI / 180;
 const _v = new THREE.Vector3();
+let haloTex: THREE.Texture | null = null;
+function haloTexture() {
+  if (haloTex) return haloTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  haloTex = new THREE.CanvasTexture(c);
+  return haloTex;
+}
 
 export type AmbientState = 'idle' | 'move' | 'circle' | 'swim';
 
@@ -62,6 +78,23 @@ export class Actor {
   cloneOf?: string;
   baseScale = 1;
   dying = 0;
+  /** fireflies (and glowing fungi) light up after dark */
+  get glowAtNight() { return this.def.id === 'wild/firefly' || this.def.id === 'fungi/ghost-mycena'; }
+  private lastBlink = -1;
+  private halo?: THREE.Sprite;
+  private setHalo(color: string, size: number, alpha: number) {
+    if (!this.halo) {
+      this.halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      this.halo.name = 'halo';
+      this.halo.renderOrder = 5;
+      this.root.add(this.halo);
+    }
+    const s = this.root.scale.x || 1;
+    this.halo.position.set(0, (this.model?.height ?? 0.3) * 0.6 / s, 0);
+    this.halo.scale.setScalar(size / s);
+    (this.halo.material as THREE.SpriteMaterial).opacity = alpha;
+    this.halo.visible = alpha > 0.01;
+  }
 
   constructor(doc: ActorDoc, def: AssetDef) {
     this.doc = doc;
@@ -313,6 +346,16 @@ export class Actor {
     }
     if (m.rig.length) this.animateRig(dt, t, rel);
     m.update?.(t);
+    if (this.glowAtNight && world.night !== undefined) {
+      const fungus = this.def.category === 'fungi';
+      const dark = THREE.MathUtils.smoothstep(world.night, 0.3, 0.8);
+      const blink = fungus ? dark * (0.75 + 0.25 * Math.sin(t * 1.3 + this.circlePhase)) : dark * (Math.sin(t * 3.1 + this.circlePhase * 7) > 0.15 ? 1 : 0.08);
+      if (Math.abs(blink - this.lastBlink) > 0.02) {
+        if (!fungus) this.setGlow(blink > 0.1 ? '#d8ff6a' : null, 2.2 * blink);
+        this.setHalo(fungus ? '#7dff5a' : '#e6ff7a', fungus ? 1.1 : 0.7, blink * (fungus ? 0.7 : 0.95));
+        this.lastBlink = blink;
+      }
+    }
     if (this.bubble && this.bubbleTimer !== Infinity) {
       this.bubbleTimer -= dt;
       if (this.bubbleTimer <= 0) this.clearBubble();

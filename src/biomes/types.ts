@@ -45,4 +45,6 @@ export interface BiomeTemplate {
   env: Partial<EnvDoc>;
   placements: Placement[];
   guide: BiomeGuide;
+  /** recipe ids for the World's starter script */
+  worldRecipes?: string[];
 }

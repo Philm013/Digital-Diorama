@@ -27,7 +27,8 @@ export function CodePanel({ compact }: { compact?: boolean }) {
   const [empty, setEmpty] = useState(true);
   const [showRecipes, setShowRecipes] = useState(false);
 
-  const actors = engine.actorList.filter((a) => !a.isClone);
+  const rank = (a: { doc: { scripts?: unknown }; def: { category: string } }) => (a.doc.scripts ? 0 : a.def.category === 'animals' ? 1 : a.def.category === 'plants' || a.def.category === 'fungi' ? 2 : 3);
+  const actors = engine.actorList.filter((a) => !a.isClone).sort((a, b) => rank(a) - rank(b));
   const current = target ? engine.getActor(target) : undefined;
   const isWorld = !current;
 
@@ -180,9 +181,9 @@ export function CodePanel({ compact }: { compact?: boolean }) {
       <div className="relative min-h-0 flex-1">
         <div ref={host} className="absolute inset-0" />
         {(empty || showRecipes) && (
-          <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-3" style={{ paddingLeft: compact ? 70 : 150 }}>
-            <div className="pointer-events-auto max-w-md rounded-2xl bg-white/95 p-3 shadow-lg ring-1 ring-black/10">
-              <div className="flex items-center gap-2 font-display text-sm font-semibold"><Lightbulb size={16} className="text-amber-500" /> {empty ? <>Code <b>{current ? current.name : 'the World'}</b>: drag in a yellow “when ▶ clicked” block, or start from an idea:</> : 'Add an idea:'}</div>
+          <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center pr-3" style={{ paddingLeft: compact ? 100 : 160 }}>
+            <div className="pointer-events-auto max-h-[70%] max-w-md overflow-y-auto rounded-2xl bg-white/95 p-3 shadow-lg ring-1 ring-black/10">
+              <div className="flex items-start gap-2 text-[13px] font-semibold leading-snug"><Lightbulb size={16} className="mt-0.5 shrink-0 text-amber-500" /><span>{empty ? <>Coding <b>{current ? current.name : 'the World'}</b>. Drag in a yellow <i>when ▶ clicked</i> block from Events — or start from an idea:</> : 'Add an idea:'}</span></div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {recipes.map((r) => <button key={r.id} onClick={() => addRecipe(r.id)} className="rounded-full bg-amber-50 px-2.5 py-1 text-[12px] font-bold text-ink/80 ring-1 ring-amber-200 hover:bg-amber-100">{r.emoji} {r.label}</button>)}
               </div>
@@ -200,8 +201,10 @@ export function CodePanel({ compact }: { compact?: boolean }) {
 }
 
 function TargetChip({ active, onClick, emoji, label, coded }: { active: boolean; onClick: () => void; emoji: React.ReactNode; label: string; coded: boolean }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (active) ref.current?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }); }, [active]);
   return (
-    <button onClick={onClick} className={clsx('relative flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 font-display text-[13px] font-semibold ring-1 transition-all', active ? 'bg-[#4C97FF] text-white ring-[#3d7fe0]' : 'bg-white text-ink/80 ring-black/10 hover:bg-black/5')}>
+    <button ref={ref} onClick={onClick} className={clsx('relative flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 font-display text-[13px] font-semibold ring-1 transition-all', active ? 'bg-[#4C97FF] text-white ring-[#3d7fe0]' : 'bg-white text-ink/80 ring-black/10 hover:bg-black/5')}>
       <span className="text-lg leading-none">{emoji}</span><span className="max-w-[110px] truncate">{label}</span>
       {coded && <span className={clsx('absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ring-2', active ? 'bg-amber-300 ring-[#4C97FF]' : 'bg-[#FFAB19] ring-white')} />}
     </button>

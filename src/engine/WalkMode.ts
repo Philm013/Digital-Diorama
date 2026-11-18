@@ -47,6 +47,7 @@ export class WalkMode {
     window.addEventListener('keyup', this.onKey);
     document.addEventListener('mousemove', this.onMouse);
     this.onChange?.();
+    e.changed(false);
   }
 
   exit() {
@@ -70,6 +71,7 @@ export class WalkMode {
     this.keys.clear();
     this.joy.x = this.joy.y = 0;
     this.onChange?.();
+    e.changed(false);
   }
 
   lockPointer() { this.engine.renderer.domElement.requestPointerLock?.(); }

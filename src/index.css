@@ -60,6 +60,7 @@ body {
 .dd-bubble.think { border-style: dashed; border-radius: 24px; }
 @keyframes dd-pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
+@layer components {
 /* ---------- app chrome ---------- */
 .dd-welcome {
   background:
@@ -120,6 +121,8 @@ textarea.dd-input { resize: vertical; line-height: 1.4; }
 .dd-toast { animation: dd-slide 0.25s ease-out; }
 @keyframes dd-slide { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
 .dd-caption { animation: dd-pop 0.25s ease-out; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); }
+
+}
 
 /* ---------- Blockly ---------- */
 .dd-code .blocklyToolboxDiv, .dd-code .blocklyToolbox { background: #fff; border-right: 1px solid rgba(0, 0, 0, 0.08); padding-top: 6px; }

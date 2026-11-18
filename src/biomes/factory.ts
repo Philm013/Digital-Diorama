@@ -4,6 +4,7 @@ import { rng, uid, clamp } from '../engine/util';
 import { getDef } from '../assets/catalog';
 import type { BiomeTemplate } from './types';
 import { BIOME_BY_ID } from './templates';
+import { scriptsFor } from '../code/recipes';
 
 export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: string; author?: string } = {}): DioramaDoc {
   const now = Date.now();
@@ -30,6 +31,7 @@ export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: s
   const placed: { x: number; z: number; r: number }[] = [];
   const actors: ActorDoc[] = [];
   const names = new Map<string, number>();
+  const labelled = new Set<string>();
   const nameFor = (n: string) => {
     const c = (names.get(n) ?? 0) + 1;
     names.set(n, c);
@@ -74,7 +76,8 @@ export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: s
         id: uid('a'), asset: def.id, name: nameFor(pl.name ?? def.name), params: { ...(pl.params ?? {}) },
         pos: [x, groundAt(x, z) + (isFlyer ? lift : 0), z],
         rotY: pl.rotY ?? (R() - 0.5) * 2.4, scale: s, lift, grounded: pl.grounded ?? true,
-        label: pl.label ? { show: true, text: pl.label } : { show: true },
+        // one toothpick flag per species keeps the scene readable; more can be switched on in Build
+        label: pl.label ? { show: true, text: pl.label } : { show: !labelled.has(def.id) && (labelled.add(def.id), true) },
         note: pl.note, scripts: pl.scripts,
       });
     }
@@ -85,6 +88,7 @@ export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: s
     biome: biome.id, created: now, updated: now, base,
     env: { ...DEFAULT_ENV, ...biome.env, frame: biome.env.frame ?? 'shoebox' },
     actors,
+    worldScripts: biome.worldRecipes?.length ? scriptsFor(biome.worldRecipes, opts.title ?? biome.name) : undefined,
   };
 }
 
