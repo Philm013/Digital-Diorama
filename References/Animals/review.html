@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wildform Asset Review</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.45 -apple-system, system-ui, sans-serif; background: #fff; color: #2c352b; }
+  header { padding: 14px 18px; border-bottom: 2px solid #dde3d4; background: #fcfdf8; }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: -0.3px; }
+  header p { margin: 4px 0 0; color: #7c8873; font-size: 12px; }
+  #status { font-weight: 600; color: #b07a3a; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 12px; }
+  .card { border: 1px solid #d8ded0; border-radius: 8px; overflow: hidden; background: #f7f8f2; }
+  .card.error { border-color: #c66; background: #fdf0ef; }
+  .card-head { padding: 7px 10px 6px; border-bottom: 1px solid #e2e7d9; }
+  .card-head strong { font-size: 13px; }
+  .card-head .idx { display: inline-block; min-width: 30px; font-size: 10px; color: #fff; background: #7a8f66; border-radius: 3px; padding: 1px 5px; margin-right: 7px; text-align: center; }
+  .card-head small { display: block; color: #8a937f; font-size: 10px; margin-top: 1px; }
+  .imgs { display: flex; }
+  .imgs figure { margin: 0; width: 50%; position: relative; }
+  .imgs figure + figure { border-left: 1px solid #e2e7d9; }
+  .imgs img { width: 100%; display: block; background: #f0f0e9; aspect-ratio: 320/260; }
+  .imgs figcaption { position: absolute; left: 6px; bottom: 5px; font-size: 9px; letter-spacing: 1px; color: #79866c; background: #fcfdf8d9; border: 1px solid #dde3d4; border-radius: 3px; padding: 1px 5px; }
+  .err { padding: 18px; color: #a33; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Wildform asset review <span id="page"></span></h1>
+  <p id="status">Rendering…</p>
+</header>
+<div class="grid" id="grid"></div>
+<script type="module">
+import * as THREE from 'three';
+import { createAsset } from '/src/engine/animal.mjs';
+import { ANIMALS } from '/src/data/catalog.ts';
+
+const HEADLESS = new Set(['jellyfish', 'combJelly', 'anemone', 'starfish', 'urchin', 'sponge', 'colony', 'coral', 'placozoan']);
+const OVERHEAD = new Set(['butterfly', 'starfish', 'placozoan', 'frog', 'crab']);
+const W = 320, H = 260, DPR = 2;
+
+const params = new URLSearchParams(location.search);
+const per = parseInt(params.get('per') || '11', 10);
+const page = parseInt(params.get('page') || '0', 10);
+const onlyIds = (params.get('ids') || '').split(',').filter(Boolean);
+const list = onlyIds.length ? ANIMALS.filter(a => onlyIds.includes(a.id)) : ANIMALS.slice(page * per, page * per + per);
+
+document.getElementById('page').textContent = onlyIds.length ? `— ${list.length} animals` : `— page ${page + 1} of ${Math.ceil(ANIMALS.length / per)}`;
+window.__REVIEW_ERRORS__ = [];
+window.__REVIEW_DONE__ = false;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(DPR);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.3;
+renderer.setClearColor(0xf0f0e9, 1);
+renderer.domElement.style.display = 'none';
+document.body.appendChild(renderer.domElement);
+
+function dispose(root) {
+  const gs = new Set(), ms = new Set();
+  root.traverse(o => {
+    if (o.isMesh) { gs.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => ms.add(m)); }
+  });
+  gs.forEach(g => g.dispose()); ms.forEach(m => m.dispose());
+}
+
+function shoot(model, bounds, center, maxDim, dir) {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf0f0e9);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x858776, 2.6));
+  const key = new THREE.DirectionalLight(0xfff8e8, 3.2); key.position.set(3, 5, 4); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xdce9ef, 1.0); fill.position.set(-4, 2, -3); scene.add(fill);
+  const wrap = new THREE.Group();
+  wrap.add(model);
+  model.position.set(0, 0, 0);
+  model.position.sub(center);
+  wrap.scale.setScalar(1.85 / maxDim);
+  scene.add(wrap);
+  const aspect = W / H;
+  const cam = new THREE.OrthographicCamera(-1.22 * aspect, 1.22 * aspect, 1.22, -1.22, 0.01, 60);
+  cam.position.copy(dir).normalize().multiplyScalar(12);
+  cam.lookAt(0, 0, 0);
+  renderer.render(scene, cam);
+  const url = renderer.domElement.toDataURL('image/png');
+  scene.remove(wrap);
+  return url;
+}
+
+const grid = document.getElementById('grid');
+const status = document.getElementById('status');
+let done = 0;
+
+for (const [i, animal] of list.entries()) {
+  const globalIdx = ANIMALS.indexOf(animal);
+  const card = document.createElement('div');
+  card.className = 'card';
+  try {
+    const model = createAsset({ __animal: animal, mergeForProduction: true });
+    const bounds = new THREE.Box3().setFromObject(model);
+    const size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const heroDir = OVERHEAD.has(animal.bodyPlan)
+      ? new THREE.Vector3(0.8, 5.2, 5.8)
+      : new THREE.Vector3(2.6, 2.2, 5.8);
+    const hero = shoot(model, bounds, center.clone(), maxDim, heroDir);
+    // second view: head close-up (front-top quarter) or top-side for headless plans
+    let face, faceLabel;
+    if (HEADLESS.has(animal.bodyPlan)) {
+      face = shoot(model, bounds, center.clone(), maxDim, new THREE.Vector3(0.6, 3.4, 5.6));
+      faceLabel = 'ANGLE';
+    } else {
+      const q = new THREE.Box3(
+        new THREE.Vector3(center.x, center.y, bounds.min.z),
+        new THREE.Vector3(bounds.max.x, bounds.max.y, bounds.max.z)
+      );
+      const qs = q.getSize(new THREE.Vector3());
+      const qc = q.getCenter(new THREE.Vector3());
+      const qm = Math.max(qs.x, qs.y, qs.z, maxDim * 0.32);
+      face = shoot(model, bounds, qc, qm, new THREE.Vector3(5.4, 1.9, 3.1));
+      faceLabel = 'FACE';
+    }
+    const tris = Math.round(model.userData.triangles).toLocaleString();
+    const dims = model.userData.dimensions.map(v => v >= 1 ? v.toFixed(2) + 'm' : v >= 0.01 ? (v * 100).toFixed(1) + 'cm' : (v * 1000).toFixed(1) + 'mm').join('×');
+    card.innerHTML = `<div class="card-head"><span class="idx">#${globalIdx + 1}</span><strong></strong><small></small></div>
+      <div class="imgs"><figure><img alt=""><figcaption>HERO</figcaption></figure><figure><img alt=""><figcaption>${faceLabel}</figcaption></figure></div>`;
+    card.querySelector('strong').textContent = animal.name;
+    card.querySelector('small').textContent = `${animal.id} · ${animal.category} · ${animal.bodyPlan}/${animal.variant} · ${tris} tris · ${dims}`;
+    const imgs = card.querySelectorAll('img');
+    imgs[0].src = hero; imgs[1].src = face;
+    dispose(model);
+  } catch (err) {
+    console.error(animal.id, err);
+    card.classList.add('error');
+    card.innerHTML = `<div class="card-head"><span class="idx">#${globalIdx + 1}</span><strong></strong></div><div class="err"></div>`;
+    card.querySelector('strong').textContent = animal.name;
+    card.querySelector('.err').textContent = String(err && err.stack || err);
+    window.__REVIEW_ERRORS__.push(animal.id + ': ' + (err && err.message));
+  }
+  grid.appendChild(card);
+  done++;
+  status.textContent = `Rendering… ${done}/${list.length}`;
+  if (done % 2 === 0) await new Promise(r => requestAnimationFrame(r));
+}
+
+status.textContent = `Done — ${list.length} animals, ${window.__REVIEW_ERRORS__.length} errors.`;
+status.style.color = window.__REVIEW_ERRORS__.length ? '#a33' : '#5d7a48';
+window.__REVIEW_DONE__ = true;
+</script>
+</body>
+</html>

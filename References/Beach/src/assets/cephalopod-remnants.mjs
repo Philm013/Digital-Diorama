@@ -1,0 +1,40 @@
+/**
+ * CUTTLEBONE / CHAMBERED NAUTILUS (High Detail). License: MIT.
+ * QUICK START: import { createAsset } from './cephalopod-remnants.mjs';
+ * scene.add(createAsset({ remnantType: 'cuttlebone', mergeForProduction: true }));
+ * SPECS: cuttlebone 0.095 x 0.025 x 0.29 m; nautilus 0.21 x 0.20 x 0.10 m.
+ * BUDGET: approximately 6,000 triangles. No textures or loaders.
+ * OPTIONS: remnantType, chalkiness, chamberExposure. Static sculptural fossil.
+ * DETACH: remnant, chambers. Empty rig is intentional for a non-living fossil.
+ */
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+const BASE = { shell: '#ede6cf', ridge: '#fff8e7', interior: '#e0ceb1', accent: '#c4ab8e' };
+export const COLORWAYS = { default: { ...BASE }, gothic: { shell: '#e5e3dc', ridge: '#fcf8ed', interior: '#c9c4be', accent: '#9e959c' }, pacific: { shell: '#d3cabb', ridge: '#eeeadc', interior: '#bcb0a4', accent: '#988974' }, bioluminescent: { shell: '#c9c0de', ridge: '#e1f9f0', interior: '#b699d2', accent: '#8d79b6' } };
+export const presets = COLORWAYS;
+export const params = { mergeForProduction: { type: 'toggle', default: false, label: 'Merge for production', affects: 'geometry', describe: 'Single-material merged mesh or separate fossil layers.' }, colorway: { type: 'choice', default: 'default', options: Object.keys(COLORWAYS), label: 'Colorway', affects: 'colors', describe: 'Curated coastal palette.' }, remnantType: { type: 'choice', default: 'cuttlebone', options: ['cuttlebone', 'nautilus'], label: 'Remnant type', affects: 'geometry', describe: 'Surfboard-shaped internal shell or chambered logarithmic spiral.' }, chalkiness: { type: 'range', default: 0.86, min: 0, max: 1, step: 0.01, label: 'Chalkiness', affects: 'colors', describe: 'Physical roughness from glossy pearl to dry chalk.' }, chamberExposure: { type: 'range', default: 0.5, min: 0, max: 0.9, step: 0.01, label: 'Chamber exposure', affects: 'geometry', describe: 'Remove a continuous outer sector to reveal internal septa.' }, shell: { type: 'color', default: BASE.shell, label: 'Chalk', affects: 'colors', describe: 'Main calcium color.' }, ridge: { type: 'color', default: BASE.ridge, label: 'Ridges', affects: 'colors', describe: 'Fine striations.' }, interior: { type: 'color', default: BASE.interior, label: 'Septa', affects: 'colors', describe: 'Inner chamber walls.' }, accent: { type: 'color', default: BASE.accent, label: 'Bands', affects: 'colors', describe: 'Spiral growth bands.' } };
+export const rig = {};
+export const detach = ['remnant', 'chambers'];
+export const night = { chambers: { color: '#b5e8dd', intensity: 0.2, distance: 0.1, describe: 'Faint chamber fluorescence.' } };
+const hexOf = v => typeof v === 'number' && Number.isFinite(v) ? v & 0xffffff : typeof v === 'string' && /^#?[0-9a-f]{6}$/i.test(v) ? parseInt(v.replace('#', ''), 16) : null;
+function zonesFor(name, o = {}) { const cw = COLORWAYS[name] || COLORWAYS.default, used = new Set(), out = {}; for (const k of Object.keys(BASE)) { let h = hexOf(o[k]) ?? hexOf(cw[k]); while (used.has(h)) h = (h + 1) & 0xffffff; used.add(h); out[k] = h; } return out; }
+function prep(g, hex) { if (g.index) { const old = g; g = g.toNonIndexed(); old.dispose(); } g.deleteAttribute('uv'); g.deleteAttribute('normal'); const c = new THREE.Color(hex), a = new Float32Array(g.attributes.position.count * 3); for (let i = 0; i < a.length; i += 3) { a[i] = c.r; a[i + 1] = c.g; a[i + 2] = c.b; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; }
+const MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, flatShading: true, roughness: 0.9, iridescence: 0.15, side: THREE.DoubleSide });
+function finish(list, material = MAT, name = 'solid', merge = true) { if (!list.length) return null; if (merge) { const src = list.map(p => prep(p.g, p.c)), geo = mergeGeometries(src); src.forEach(g => g.dispose()); if (!geo) return null; geo.computeVertexNormals(); const m = new THREE.Mesh(geo, material); m.name = name; m.castShadow = m.receiveShadow = true; return m; } const root = new THREE.Group(); root.name = name; const groups = {}; list.forEach((p, i) => { const geo = prep(p.g, p.c); geo.computeVertexNormals(); const m = new THREE.Mesh(geo, material); m.name = `${p.n || name}_part_${i + 1}`; m.castShadow = m.receiveShadow = true; if (p.n) { if (!groups[p.n]) { groups[p.n] = new THREE.Group(); groups[p.n].name = p.n; root.add(groups[p.n]); } groups[p.n].add(m); } else root.add(m); }); return root; }
+function box(w, h, d, x = 0, y = 0, z = 0) { return new THREE.BoxGeometry(w, h, d).translate(x, y, z); }
+function addCylinder(parts, rt, rb, h, seg, x, y, z, rx = 0, ry = 0, rz = 0, c = BASE.shell, n = 'remnant') { const g = new THREE.CylinderGeometry(rt, rb, h, seg); g.rotateX(rx); g.rotateY(ry); g.rotateZ(rz); g.translate(x, y, z); parts.push({ g, c, n }); }
+function addWire(parts, a, b, c, r = 0.001, radial = 6, n = 'remnant') { const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), len = A.distanceTo(B); if (len < 1e-6) return; const g = new THREE.CylinderGeometry(r, r, len, radial); g.applyMatrix4(new THREE.Matrix4().compose(A.clone().lerp(B, 0.5), new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.sub(A).normalize()), new THREE.Vector3(1, 1, 1))); parts.push({ g, c, n }); }
+function addExtrusion(parts, shape, depth, c, n = 'remnant') { parts.push({ g: new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false }), c, n }); }
+export function createAsset(userParams = {}) {
+  const p = Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v.default])); Object.assign(p, userParams); const C = zonesFor(p.colorway, userParams), root = new THREE.Group(), parts = []; root.name = 'cephalopod-remnants';
+  if (p.remnantType === 'cuttlebone') {
+    const point = (t, a) => { const breadth = 0.047 * Math.pow(Math.sin(Math.PI * t), 0.75) * (0.85 + t * 0.15), height = 0.011 * Math.sin(Math.PI * t); return [Math.cos(a) * breadth, 0.012 + Math.sin(a) * height + Math.sin(t * 200) * 0.0003, (t - 0.5) * 0.29]; };
+    for (let i = 0; i < 100; i++) { const v = []; for (let j = 0; j < 20; j++) { const t = i / 100, u = (i + 1) / 100, a = j / 20 * Math.PI * 2, b = (j + 1) / 20 * Math.PI * 2; v.push(...point(t, a), ...point(u, a), ...point(u, b), ...point(t, a), ...point(u, b), ...point(t, b)); } const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); parts.push({ g, c: i % 3 ? C.shell : C.ridge, n: 'remnant' }); }
+  } else {
+    const point = (t, a) => { const theta = t * Math.PI * 4.3, radius = 0.006 * Math.pow(13, t), tube = radius * 0.58; return [(radius + tube * Math.cos(a)) * Math.cos(theta), 0.1 + (radius + tube * Math.cos(a)) * Math.sin(theta), tube * Math.sin(a)]; };
+    for (let i = 0; i < 120; i++) { const v = []; for (let j = 0; j < 24; j++) { const a = j / 24 * Math.PI * (2 - p.chamberExposure), b = (j + 1) / 24 * Math.PI * (2 - p.chamberExposure), t = i / 120, u = (i + 1) / 120; v.push(...point(t, a), ...point(u, a), ...point(u, b), ...point(t, a), ...point(u, b), ...point(t, b)); } const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); parts.push({ g, c: i % 10 < 2 ? C.accent : C.shell, n: 'remnant' }); }
+    for (let i = 4; i <= 28; i++) { const t = i / 29, theta = t * Math.PI * 4.3, r = 0.006 * Math.pow(13, t), center = [r * Math.cos(theta), 0.1 + r * Math.sin(theta), 0], v = []; for (let j = 0; j < 28; j++) v.push(...center, ...point(t, j / 28 * Math.PI * 2), ...point(t, (j + 1) / 28 * Math.PI * 2)); const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); parts.push({ g, c: i % 2 ? C.interior : C.ridge, n: 'chambers' }); }
+  }
+  const material = MAT.clone(); material.roughness = 0.16 + p.chalkiness * 0.8; material.iridescence = (1 - p.chalkiness) * 0.7; const solid = finish(parts, material, 'solid', p.mergeForProduction); if (solid) root.add(solid); root.userData = { params: p, zones: C, rig, detach, night, units: 'meters' }; return root;
+}
+export default createAsset;
