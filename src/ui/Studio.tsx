@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowLeft, Play, Square, Undo2, Redo2, Compass, Hammer, Blocks, MoreHorizontal, Save, Download, Camera, Maximize, Volume2, VolumeX, HelpCircle, Settings2, FileImage } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Engine } from '../engine/Engine';
@@ -185,12 +185,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
           </nav>
         )}
         <div className="flex-1" />
-        {engine && mode === 'build' && wide && (
-          <>
-            <IconBtn label="Undo (Ctrl+Z)" disabled={!engine.canUndo} onClick={() => void engine.undo()} className="text-white hover:bg-white/10"><Undo2 size={18} /></IconBtn>
-            <IconBtn label="Redo (Ctrl+Shift+Z)" disabled={!engine.canRedo} onClick={() => void engine.redo()} className="text-white hover:bg-white/10"><Redo2 size={18} /></IconBtn>
-          </>
-        )}
+        {engine && mode === 'build' && wide && <UndoRedo engine={engine} />}
         <Btn variant={playing ? 'stop' : 'go'} onClick={togglePlay} className="min-w-[44px] px-3" title={playing ? 'Stop and reset (Esc)' : 'Run all code'}>
           {playing ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
           <span className="hidden sm:inline">{playing ? 'Stop' : 'Play'}</span>
@@ -317,6 +312,17 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         )}
       </Modal>
     </div>
+  );
+}
+
+/** subscribes to the engine so the buttons enable as soon as there is something to undo */
+function UndoRedo({ engine }: { engine: Engine }) {
+  useSyncExternalStore(engine.subscribe, engine.getVersion);
+  return (
+    <>
+      <IconBtn label="Undo (Ctrl+Z)" disabled={!engine.canUndo} onClick={() => void engine.undo()} className="text-white hover:bg-white/10"><Undo2 size={18} /></IconBtn>
+      <IconBtn label="Redo (Ctrl+Shift+Z)" disabled={!engine.canRedo} onClick={() => void engine.redo()} className="text-white hover:bg-white/10"><Redo2 size={18} /></IconBtn>
+    </>
   );
 }
 
