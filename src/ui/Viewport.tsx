@@ -1,21 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { clsx } from 'clsx';
-import { LogOut, Footprints } from 'lucide-react';
+import { LogOut, Footprints, Map as MapIcon, Box, Home, Maximize } from 'lucide-react';
 import type { Mode } from '../engine/types';
 import type { Actor } from '../engine/Actor';
-import { useStudio } from './store';
+import { useStudio, useEngineVersion } from './store';
+import { STAMP_BY_ID } from '../engine/landforms';
 import { Btn, Segmented } from './common';
 import { haptic, uiSound } from './feedback';
 import { confetti } from './game/Celebrate';
 import { notePlaced } from '../game/progress';
 
-const EYES = [
-  { value: '1.6', label: '🧍 Person' },
-  { value: '0.6', label: '🦊 Fox' },
-  { value: '0.15', label: '🐸 Frog' },
-  { value: '0.03', label: '🐜 Ant' },
-];
+const EYE_LIST: [string, string, string][] = [['1.6', '🧍', 'Person'], ['0.6', '🦊', 'Fox'], ['0.15', '🐸', 'Frog'], ['0.03', '🐜', 'Ant'], ['12', '🦅', 'Bird']];
+// phones show just the animal; wider screens add its name
+const EYES = EYE_LIST.map(([value, emoji, name]) => ({ value, title: name, label: <span className="text-[15px] sm:text-[13px]">{emoji}<span className="hidden sm:inline"> {name}</span></span> }));
 const nearestEye = (v: string) => EYES.reduce((best, o) => (Math.abs(Math.log(Number(o.value) / Number(v))) < Math.abs(Math.log(Number(best.value) / Number(v))) ? o : best), EYES[0]).value;
 
 export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolean; toast: (t: string, k?: 'info' | 'error' | 'success') => void }) {
@@ -44,24 +42,19 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
   }, [engine, runtime]);
   useEffect(() => { if (!playing) { setCaption(null); if (ask) { ask.resolve(''); setAsk(null); } } }, [playing]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* brush cursor */
-  const ring = useRef<THREE.Mesh | null>(null);
-  useEffect(() => {
-    const m = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthTest: false }));
-    m.renderOrder = 20;
-    m.visible = false;
-    engine.scene.add(m);
-    ring.current = m;
-    return () => { engine.scene.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose(); };
-  }, [engine]);
-
   /* pointer interactions on the canvas (capture phase so we can pre-empt orbiting).
      Touch: tap selects; a selected object drags with one finger; long-press picks up
      anything; while holding an object a second finger twists (turn) and pinches (size). */
   useEffect(() => {
     const el = engine.renderer.domElement;
     const host = el.parentElement!;
-    type Down = { x: number; y: number; t: number; id: number; touch: boolean; actor?: Actor; armed?: boolean; offset?: THREE.Vector3; dragging?: boolean; stroke?: boolean; sx?: number; sy?: number };
+    type Down = {
+      x: number; y: number; t: number; id: number; touch: boolean; actor?: Actor; armed?: boolean; offset?: THREE.Vector3; dragging?: boolean; stroke?: boolean; sx?: number; sy?: number;
+      /** placing a landform: where, and the size/direction dragged out so far */
+      stamp?: { p: THREE.Vector3; radius: number; angle: number; sized: boolean };
+      /** selecting an area: the corner it started from */
+      area?: { a: THREE.Vector3 };
+    };
     let down: Down | null = null;
     const pts = new Map<number, { x: number; y: number }>();
     let longTimer = 0;
@@ -69,15 +62,27 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
     let lastTap = { t: 0, id: '' };
     let lastStroke = 0;
     const dragEvent = (on: boolean) => document.dispatchEvent(new CustomEvent('dd-drag', { detail: on }));
-    const ringUp = new THREE.Vector3(0, 0.08, 0);
+    const RING: Record<string, string> = { raise: '#ffffff', lower: '#ffb4a8', smooth: '#c6ecff', flatten: '#e4dcff', roughen: '#d6ffc4', paint: '#ffe28a' };
+    /** the brush outline, drawn on the ground by the terrain shader */
     const placeRing = (point: THREE.Vector3 | null) => {
-      const r = ring.current;
-      if (!r) return;
-      r.visible = !!point;
-      if (!point) return;
-      r.position.copy(point).add(ringUp);
-      r.scale.setScalar(engine.brush.radius);
-      (r.material as THREE.MeshBasicMaterial).color.set(engine.brush.tool === 'lower' ? '#ffb4a8' : engine.brush.tool === 'paint' ? '#ffe28a' : '#ffffff');
+      const tool = engine.brush.tool;
+      if (!point || !tool || tool === 'stamp' || tool === 'area') { engine.land.setCursor(null); return; }
+      engine.land.setCursor({ x: point.x, z: point.z, rx: engine.brush.radius, color: RING[tool] ?? '#ffffff' });
+    };
+    const areaFrom = (a: THREE.Vector3, b: THREE.Vector3) => {
+      const t = engine.terrain!;
+      const cl = (v: number, h: number) => THREE.MathUtils.clamp(v, -h, h);
+      return { minX: cl(Math.min(a.x, b.x), t.width / 2), maxX: cl(Math.max(a.x, b.x), t.width / 2), minZ: cl(Math.min(a.z, b.z), t.depth / 2), maxZ: cl(Math.max(a.z, b.z), t.depth / 2) };
+    };
+    /** a ground point under the pointer; off the land, the flat plane at a reference height */
+    const groundOrPlane = (x: number, y: number, h: number) => {
+      const g = engine.pickGround(x, y);
+      if (g) return g.point;
+      const ray = new THREE.Raycaster();
+      const r = engine.renderer.domElement.getBoundingClientRect();
+      ray.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), engine.camera);
+      const p = new THREE.Vector3();
+      return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -h), p) ? p : null;
     };
     const pair = () => { const [a, b] = [...pts.values()]; return { ang: Math.atan2(b.y - a.y, b.x - a.x), dist: Math.hypot(b.x - a.x, b.y - a.y) }; };
     const arm = (d: Down, actor: Actor, e: { clientX: number; clientY: number }) => {
@@ -108,6 +113,8 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
         // a second finger without a held object: hand control back to orbit/zoom
         clearTimeout(longTimer);
         if (down?.stroke) { engine.endStroke(); placeRing(null); }
+        if (down?.stamp) engine.land.hidePreview();
+        if (down?.area) engine.land.setAreaRect(null);
         if (down?.dragging) { engine.commitTransform(down.actor!); engine.changed(); dragEvent(false); }
         down = null;
         engine.controls.enabled = true;
@@ -120,6 +127,18 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       if (m === 'build' && !playingRef.current) {
         if (engine.brush.tool && engine.terrain) {
           const g = engine.pickGround(e.clientX, e.clientY);
+          const tool = engine.brush.tool;
+          if (g && tool === 'stamp') {
+            engine.controls.enabled = false;
+            d.stamp = { p: g.point.clone(), radius: engine.land.stamp.radius, angle: engine.land.stamp.angle, sized: false };
+            engine.land.showPreview(d.stamp.p, d.stamp.radius, d.stamp.angle);
+            return;
+          }
+          if (g && tool === 'area') {
+            engine.controls.enabled = false;
+            d.area = { a: g.point.clone() };
+            return;
+          }
           if (g) {
             engine.controls.enabled = false;
             d.stroke = true;
@@ -165,7 +184,7 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       hoverT = now;
       const r = el.getBoundingClientRect();
       if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
-      if (modeRef.current === 'build' && engine.brush.tool) { el.style.cursor = 'crosshair'; return; }
+      if (modeRef.current === 'build' && engine.brush.tool) { el.style.cursor = engine.pickGround(e.clientX, e.clientY) ? 'crosshair' : 'grab'; return; }
       const hit = engine.pickActor(e.clientX, e.clientY);
       el.style.cursor = hit ? (modeRef.current === 'build' && !playingRef.current ? 'grab' : 'pointer') : '';
     };
@@ -183,11 +202,34 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       }
       if (down?.dragging) el.style.cursor = 'grabbing';
       if (modeRef.current === 'build' && engine.brush.tool && engine.terrain && !engine.walk?.active) {
+        const tool = engine.brush.tool;
+        if (down?.stamp && e.pointerId === down.id) {
+          // dragging out a landform: the distance sets its size, the direction points it
+          const st = down.stamp;
+          const q = groundOrPlane(e.clientX, e.clientY, st.p.y);
+          if (q && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 14) {
+            const asp = engine.land.aspect;
+            st.sized = true;
+            st.radius = THREE.MathUtils.clamp(Math.hypot(q.x - st.p.x, q.z - st.p.z) / asp, 0.8, Math.max(12, Math.min(engine.terrain.width, engine.terrain.depth) * 0.55));
+            if (asp > 1) st.angle = Math.atan2(q.z - st.p.z, q.x - st.p.x);
+            engine.land.showPreview(st.p, st.radius, st.angle);
+          }
+          return;
+        }
+        if (down?.area && e.pointerId === down.id) {
+          const q = groundOrPlane(e.clientX, e.clientY, down.area.a.y);
+          if (q) { engine.land.area.rect = areaFrom(down.area.a, q); engine.land.syncArea(); }
+          return;
+        }
         // while sculpting the frame loop applies the brush; moves only steer it
         if (down?.stroke && e.pointerId === down.id) { down.sx = e.clientX; down.sy = e.clientY; return; }
-        if (e.pointerType === 'mouse') placeRing(engine.pickGround(e.clientX, e.clientY)?.point ?? null);
+        if (e.pointerType === 'mouse' && !e.buttons) {
+          const g = engine.pickGround(e.clientX, e.clientY)?.point ?? null;
+          if (tool === 'stamp') engine.land.showPreview(g);
+          else placeRing(g);
+        }
         return;
-      } else if (ring.current) ring.current.visible = false;
+      }
       if (!down || e.pointerId !== down.id || !down.actor) return;
       const dist = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       if (!down.armed) { if (dist > 10) clearTimeout(longTimer); return; }
@@ -226,6 +268,20 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       down = null;
       engine.controls.enabled = true;
       if (d.stroke) { engine.endStroke(); if (d.touch) placeRing(null); return; }
+      if (d.stamp) {
+        const st = d.stamp;
+        if (st.sized) { engine.land.stamp.radius = +st.radius.toFixed(1); engine.land.stamp.angle = st.angle; }
+        if (engine.land.applyStampAt(st.p, st.radius, st.angle)) { haptic(16); uiSound('place'); }
+        if (d.touch) engine.land.hidePreview(); else engine.land.showPreview(engine.pickGround(e.clientX, e.clientY)?.point ?? null);
+        return;
+      }
+      if (d.area) {
+        const r = engine.land.area.rect;
+        // a tap (or a sliver) clears the selection
+        engine.land.setAreaRect(r && r.maxX - r.minX > 0.8 && r.maxZ - r.minZ > 0.8 && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8 ? r : null);
+        if (engine.land.area.rect) { haptic(10); uiSound('tick'); }
+        return;
+      }
       if (d.dragging && d.actor) { engine.commitTransform(d.actor); engine.changed(); dragEvent(false); haptic(10); uiSound('tick'); return; }
       const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y);
       if (moved > 8 || performance.now() - d.t > 600) return;
@@ -251,12 +307,14 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       if (twist) { engine.commitTransform(twist.actor); engine.changed(); twist = null; }
       if (down && e.pointerId === down.id) {
         if (down.stroke) { engine.endStroke(); placeRing(null); }
+        if (down.stamp) engine.land.hidePreview();
+        if (down.area) engine.land.setAreaRect(null);
         if (down.dragging && down.actor) { engine.commitTransform(down.actor); engine.changed(); dragEvent(false); }
         down = null;
       }
       engine.controls.enabled = true;
     };
-    const onLeave = () => { if (ring.current) ring.current.visible = false; };
+    const onLeave = () => { if (!down?.stroke && !down?.stamp) { engine.land.setCursor(null); engine.land.hidePreview(); } };
     const onDragOver = (e: DragEvent) => { if (e.dataTransfer?.types.includes('text/x-dd-asset')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } };
     const onDrop = async (e: DragEvent) => {
       const id = e.dataTransfer?.getData('text/x-dd-asset');
@@ -307,13 +365,14 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
           <div className="dd-caption max-w-3xl rounded-2xl bg-black/70 px-5 py-3 text-center font-display text-lg font-semibold text-white shadow-xl sm:text-2xl">{caption}</div>
         </div>
       )}
+      {mode === 'build' && !playing && !walking && engine.terrain && <BuildViewTools />}
       {playing && !walking && (
         <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[#3bb34a] px-3.5 py-1.5 font-display text-xs font-semibold text-white shadow-[0_3px_0_#23802f,0_10px_20px_-8px_rgba(0,0,0,.5)]">
           <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> Playing — tap things, press keys, Stop to reset
         </div>
       )}
       {walking && (
-        <WalkOverlay touch={touch} eye={eye} setEye={(v) => { setEye(v); engine.walk?.exit(); engine.walk?.enter(Number(v)); document.dispatchEvent(new CustomEvent('dd-walk', { detail: Number(v) })); }} onExit={() => engine.walk?.exit()} />
+        <WalkOverlay touch={touch} eye={eye} setEye={(v) => { setEye(v); engine.walk?.setEye(Number(v)); document.dispatchEvent(new CustomEvent('dd-walk', { detail: Number(v) })); }} onExit={() => engine.walk?.exit()} />
       )}
       {ask && (
         <div className="absolute inset-0 z-40 grid place-items-center bg-black/35 p-4">
@@ -329,8 +388,61 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
   );
 }
 
+/** Build mode, over the 3D view: the top-view switch and what the armed land tool does */
+function BuildViewTools() {
+  const { engine } = useStudio();
+  useEngineVersion();
+  const tool = engine.brush.tool;
+  const st = STAMP_BY_ID[engine.land.stamp.id];
+  const hint = !tool ? null
+    : tool === 'stamp' ? `${st.emoji} ${st.name}: tap the land to place it · drag to size${st.aspect ? ' & point' : ''} it`
+      : tool === 'area' ? (engine.land.area.rect ? '⬚ Area selected — choose what grows there in the panel' : '⬚ Drag across the land to select an area')
+        : tool === 'paint' ? '🎨 Drag on the land to paint'
+          : `✋ ${{ raise: 'Raise', lower: 'Dig', smooth: 'Smooth', flatten: 'Flatten', roughen: 'Rocky' }[tool]}: press and drag on the land`;
+  return (
+    <>
+      <div className="pointer-events-none absolute right-2 top-2 z-20 flex flex-col items-end gap-1.5">
+        <button onClick={() => { engine.setTopView(!engine.topView); uiSound('tick'); haptic(6); }} title="Top view (T)"
+          className={clsx('dd-3d pointer-events-auto flex h-10 items-center gap-1.5 rounded-2xl px-3 font-display text-[13px] font-bold', engine.topView ? 'bg-amber-300 text-ink [--edge:#c98a00]' : 'bg-white/90 text-ink [--edge:rgba(0,0,0,.2)]')}>
+          {engine.topView ? <Box size={16} /> : <MapIcon size={16} />}<span className="hidden min-[420px]:inline">{engine.topView ? '3D view' : 'Top view'}</span>
+        </button>
+      </div>
+      {hint && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-3">
+          <div className="dd-glass pointer-events-auto flex max-w-full items-center gap-2 rounded-2xl py-1 pl-3 pr-1 text-[12.5px] font-semibold text-white shadow-lg">
+            <span className="truncate">{hint}</span>
+            <button onClick={() => engine.setLandTool(null)} className="shrink-0 rounded-xl bg-white/15 px-2.5 py-1 text-[12px] font-bold hover:bg-white/25" title="Put the tool away (Esc)">Done</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function startWalk(engine: import('../engine/Engine').Engine, eye = 1.6) {
   engine.walk?.enter(eye);
+}
+
+/** while roaming: which way (and how far) your diorama is */
+function Compass() {
+  const { engine } = useStudio();
+  const [v, setV] = useState({ dist: 0, rel: 0 });
+  useEffect(() => {
+    const id = window.setInterval(() => { const h = engine.walk?.homeVector; if (h) setV(h); }, 200);
+    return () => clearInterval(id);
+  }, [engine]);
+  const far = v.dist > 30;
+  return (
+    <div className="dd-glass pointer-events-none absolute left-3 top-16 z-30 flex items-center gap-2 rounded-2xl py-1.5 pl-1.5 pr-3 text-white sm:top-3">
+      <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/10">
+        <div style={{ transform: `rotate(${-v.rel}rad)` }} className="text-xl leading-none transition-transform">⬆</div>
+      </div>
+      <div className="leading-tight">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-white/60">{far ? 'Your diorama' : 'Home'}</div>
+        <div className="font-display text-sm font-bold tabular-nums">{far ? (v.dist >= 1000 ? `${(v.dist / 1000).toFixed(1)} km` : `${Math.round(v.dist)} m`) : 'right here'}</div>
+      </div>
+    </div>
+  );
 }
 
 function WalkOverlay({ touch, eye, setEye, onExit }: { touch: boolean; eye: string; setEye: (v: string) => void; onExit: () => void }) {
@@ -362,15 +474,23 @@ function WalkOverlay({ touch, eye, setEye, onExit }: { touch: boolean; eye: stri
     onPointerUp: () => { if (engine.walk) engine.walk.rise = 0; },
     onPointerCancel: () => { if (engine.walk) engine.walk.rise = 0; },
   });
+  const endless = !!engine.walk?.endless;
+  const flying = Number(eye) >= 8;
+  // the touch tip shows for a few seconds, then gets out of the way
+  const [hint, setHint] = useState(true);
+  useEffect(() => { const id = window.setTimeout(() => setHint(false), 7000); return () => clearTimeout(id); }, []);
   return (
     <>
-      <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 flex-wrap items-center justify-center gap-2">
-        <div className="dd-glass rounded-2xl p-1"><Segmented size="sm" value={nearestEye(eye)} onChange={setEye} options={EYES} /></div>
-        <Btn size="sm" onClick={onExit}><LogOut size={14} /> Leave</Btn>
+      <div className="absolute left-1/2 top-3 z-30 flex w-[calc(100%-16px)] -translate-x-1/2 flex-wrap items-center justify-center gap-2">
+        <div className="dd-glass max-w-full overflow-x-auto rounded-2xl p-1"><Segmented size="sm" value={nearestEye(eye)} onChange={setEye} options={EYES} /></div>
+        {endless && <Btn size="sm" onClick={() => { engine.walk?.goHome(); haptic(8); }} title="Back to your diorama" aria-label="Home"><Home size={15} /><span className="hidden sm:inline">Home</span></Btn>}
+        {endless && document.fullscreenEnabled && <Btn size="sm" onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.().catch(() => {}); }} title="Full screen" aria-label="Full screen"><Maximize size={15} /></Btn>}
+        <Btn size="sm" onClick={onExit} title="Leave (Esc)" aria-label="Leave"><LogOut size={15} /><span className="hidden sm:inline">Leave</span></Btn>
       </div>
+      {endless && <Compass />}
       {!touch && (
         <div className="dd-glass pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-2xl px-4 py-2 text-center text-xs font-semibold text-white">
-          Click to look around · <b>W A S D</b> walk · <b>Shift</b> run · <b>Space</b> jump / swim up · <b>C</b> swim down · <b>Esc</b> leave
+          Click to look around · <b>W A S D</b> {flying ? 'fly' : 'walk'} · <b>Shift</b> {flying ? 'faster' : 'run'} · <b>Space</b> {flying ? 'climb' : 'jump / swim up'} · <b>C</b> {flying ? 'dive' : 'swim down'} · <b>Esc</b> leave
         </div>
       )}
       {touch && (
@@ -392,7 +512,7 @@ function WalkOverlay({ touch, eye, setEye, onExit }: { touch: boolean; eye: stri
             <button className="dd-3d grid h-16 w-16 place-items-center rounded-full bg-white/85 font-display text-2xl text-ink [--edge:rgba(0,0,0,.25)]" aria-label="Up / jump" {...hold(1)}>⬆</button>
             <button className="dd-3d grid h-16 w-16 place-items-center rounded-full bg-white/85 font-display text-2xl text-ink [--edge:rgba(0,0,0,.25)]" aria-label="Down" {...hold(-1)}>⬇</button>
           </div>
-          <div className="dd-glass pointer-events-none absolute right-5 top-20 z-30 rounded-xl px-2.5 py-1 text-[11px] font-semibold text-white">Drag the right side to look · push the stick to the rim to run</div>
+          {hint && <div className="dd-glass pointer-events-none absolute bottom-48 left-1/2 z-30 w-max max-w-[86%] -translate-x-1/2 rounded-xl px-2.5 py-1 text-center text-[11px] font-semibold text-white">Drag the right side to look · push the stick to the rim to {Number(eye) >= 8 ? 'fly faster' : 'run'}</div>}
         </>
       )}
     </>

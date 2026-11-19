@@ -1,13 +1,20 @@
 import * as THREE from 'three';
 import { Terrain } from './Terrain';
 
-const vert = /* glsl */ `
+export const WATER_VERT = /* glsl */ `
 uniform float uTime;
 varying vec3 vWorld;
 varying vec2 vUv;
+#ifdef DEPTH_ATTR
+attribute float aDepth;
+varying float vDepth;
+#endif
 #include <fog_pars_vertex>
 void main() {
   vUv = uv;
+  #ifdef DEPTH_ATTR
+  vDepth = aDepth;
+  #endif
   vec3 p = position;
   vec4 wp = modelMatrix * vec4(p, 1.0);
   wp.y += 0.025 * sin(wp.x * 0.9 + uTime * 1.3) + 0.018 * sin(wp.z * 1.3 - uTime * 1.1);
@@ -17,7 +24,7 @@ void main() {
   #include <fog_vertex>
 }`;
 
-const frag = /* glsl */ `
+export const WATER_FRAG = /* glsl */ `
 uniform float uTime;
 uniform sampler2D uDepth;
 uniform float uDepthRange;
@@ -33,6 +40,9 @@ uniform float uFoam;
 uniform float uNight;
 varying vec3 vWorld;
 varying vec2 vUv;
+#ifdef DEPTH_ATTR
+varying float vDepth;
+#endif
 #include <fog_pars_fragment>
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -66,7 +76,11 @@ void main() {
   }
   vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
   vec3 V = normalize(cameraPosition - vWorld);
+  #ifdef DEPTH_ATTR
+  float depth = clamp(vDepth, 0.0, uDepthRange);
+  #else
   float depth = texture2D(uDepth, vUv).r * uDepthRange;
+  #endif
   float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
   vec3 base = mix(uShallow, uDeep, smoothstep(0.0, 2.2, depth));
   vec3 R = reflect(-V, N);
@@ -99,8 +113,8 @@ export class Water {
     const uv = geo.attributes.uv as THREE.BufferAttribute;
     for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i));
     this.material = new THREE.ShaderMaterial({
-      vertexShader: vert,
-      fragmentShader: frag,
+      vertexShader: WATER_VERT,
+      fragmentShader: WATER_FRAG,
       transparent: true,
       depthWrite: false,
       fog: true,

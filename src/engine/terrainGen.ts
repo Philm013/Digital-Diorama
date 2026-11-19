@@ -1,5 +1,6 @@
-import { Noise2D, clamp, smoothstep, rng } from './util';
+import { Noise2D, clamp, lerp, smoothstep, rng } from './util';
 import { GROUND_INDEX, Terrain } from './Terrain';
+import { waterDistance } from './landforms';
 
 export interface TerrainRecipe {
   width?: number;
@@ -134,32 +135,6 @@ export function generateTerrain(r: TerrainRecipe): Terrain {
   return t;
 }
 
-/** metres from every grid vertex to the nearest underwater vertex (chamfer distance transform) */
-function waterDistance(t: Terrain): Float32Array {
-  const { nx, nz } = t;
-  const INF = 1e9;
-  const d = new Float32Array(nx * nz).fill(INF);
-  const wl = t.waterLevel;
-  if (wl === null) return d;
-  for (let k = 0; k < d.length; k++) if (t.heights[k] < wl) d[k] = 0;
-  const a = t.dx, b = Math.hypot(t.dx, t.dz);
-  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
-    const k = j * nx + i;
-    if (i > 0) d[k] = Math.min(d[k], d[k - 1] + a);
-    if (j > 0) d[k] = Math.min(d[k], d[k - nx] + a);
-    if (i > 0 && j > 0) d[k] = Math.min(d[k], d[k - nx - 1] + b);
-    if (i < nx - 1 && j > 0) d[k] = Math.min(d[k], d[k - nx + 1] + b);
-  }
-  for (let j = nz - 1; j >= 0; j--) for (let i = nx - 1; i >= 0; i--) {
-    const k = j * nx + i;
-    if (i < nx - 1) d[k] = Math.min(d[k], d[k + 1] + a);
-    if (j < nz - 1) d[k] = Math.min(d[k], d[k + nx] + a);
-    if (i < nx - 1 && j < nz - 1) d[k] = Math.min(d[k], d[k + nx + 1] + b);
-    if (i > 0 && j < nz - 1) d[k] = Math.min(d[k], d[k + nx - 1] + b);
-  }
-  return d;
-}
-
 export function applyPaint(t: Terrain, preset: PaintPreset, seed = 1) {
   const N = new Noise2D(seed * 13 + 1);
   const R = rng(seed);
@@ -241,4 +216,44 @@ export function applyPaint(t: Terrain, preset: PaintPreset, seed = 1) {
       t.paint[k] = g;
     }
   }
+}
+
+/**
+ * A terrain of a new size made from an old one, centred on the same spot. Inside the old box
+ * heights and ground are resampled; land added around it continues the old edge and settles
+ * into gently rolling ground of the same kind a few metres out, so the join is invisible.
+ */
+export function resampleTerrain(t: Terrain, width: number, depth: number, cell: number): Terrain {
+  const nx = Math.round(width / cell) + 1, nz = Math.round(depth / cell) + 1;
+  const heights = new Float32Array(nx * nz);
+  const paint = new Uint8Array(nx * nz);
+  const N = new Noise2D(t.seed * 3 + 11);
+  const ow = t.width / 2, od = t.depth / 2;
+  // the old edge's typical height: new land settles toward it
+  const edge: number[] = [];
+  for (let i = 0; i < t.nx; i += 2) edge.push(t.h(i, 0), t.h(i, t.nz - 1));
+  for (let j = 0; j < t.nz; j += 2) edge.push(t.h(0, j), t.h(t.nx - 1, j));
+  edge.sort((a, b) => a - b);
+  const settle = edge[Math.floor(edge.length / 2)] ?? 0;
+  const pg = t.paintGrid;
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const x = -width / 2 + (i * width) / (nx - 1), z = -depth / 2 + (j * depth) / (nz - 1);
+      const k = j * nx + i;
+      const cx = clamp(x, -ow, ow), cz = clamp(z, -od, od);
+      const out = Math.hypot(x - cx, z - cz);
+      const hEdge = t.heightAt(cx, cz);
+      if (out <= 1e-6) heights[k] = hEdge;
+      else {
+        const f = smoothstep(0, 9, out);
+        heights[k] = lerp(hEdge, settle + 0.35 * N.fbm(x * 0.06, z * 0.06, 3), f);
+      }
+      // ground: the nearest old ground, with a wandering edge
+      const jx = out > 0 ? N.noise(x * 0.4, z * 0.4) * 0.6 : 0;
+      const ii = Math.round((clamp(cx + jx, -ow, ow) + ow) / pg.dx), jj = Math.round((clamp(cz - jx, -od, od) + od) / pg.dz);
+      paint[k] = t.paint[clamp(jj, 0, t.nz - 1) * t.nx + clamp(ii, 0, t.nx - 1)];
+    }
+  }
+  const nt = new Terrain({ width, depth, nx, nz, heights, paint, waterLevel: t.waterLevel, strata: t.strata.id, seed: t.seed });
+  return nt;
 }

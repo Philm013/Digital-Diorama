@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
-import { Search, Copy, Trash2, Crosshair, Blocks, Mountain, ArrowDown, Waves, Paintbrush, Eraser, Sparkles, Wand2, Sun, Moon, RotateCcw, RotateCw, PanelLeftClose, PanelRightClose } from 'lucide-react';
+import { Search, Copy, Trash2, Crosshair, Blocks, Mountain, ArrowDown, Wand2, Sun, Moon, RotateCcw, RotateCw, PanelLeftClose, PanelRightClose } from 'lucide-react';
 import { CATALOG, CATEGORY_META, getDef } from '../assets/catalog';
 import type { AssetDef } from '../assets/types';
 import { getSchema } from '../assets/builder';
 import type { ParamSpec } from '../assets/modules';
 import { roleOf, ROLE_META } from '../assets/foodweb';
 import { BACKDROPS } from '../engine/backdropPainter';
-import { GROUND_TYPES, type SculptTool } from '../engine/Terrain';
+import { LandTools, SizeSection } from './LandPanel';
 import type { FrameStyle, Season, Weather } from '../engine/types';
 import { BIOME_BY_ID } from '../biomes/templates';
 import { useEngine, useEngineVersion, useEngineEvent } from './store';
@@ -340,11 +340,6 @@ export function ParamControls({ def, schema, values, onCommit }: { def: AssetDef
 const WEATHERS: { value: Weather; label: string }[] = [{ value: 'clear', label: '☀️' }, { value: 'cloudy', label: '⛅' }, { value: 'rain', label: '🌧️' }, { value: 'storm', label: '⛈️' }, { value: 'snow', label: '❄️' }, { value: 'fog', label: '🌫️' }];
 const SEASONS: { value: Season; label: string }[] = [{ value: 'spring', label: '🌱 Spring' }, { value: 'summer', label: '☀️ Summer' }, { value: 'autumn', label: '🍂 Autumn' }, { value: 'winter', label: '❄️ Winter' }];
 const FRAMES: { value: FrameStyle; label: string }[] = [{ value: 'shoebox', label: '📦 Shoebox' }, { value: 'museum', label: '🏛️ Museum' }, { value: 'island', label: '🏝️ Floating' }];
-const TOOLS: { tool: SculptTool | 'paint'; label: string; icon: React.ReactNode }[] = [
-  { tool: 'raise', label: 'Raise', icon: <Mountain size={15} /> }, { tool: 'lower', label: 'Dig', icon: <ArrowDown size={15} /> },
-  { tool: 'smooth', label: 'Smooth', icon: <Waves size={15} /> }, { tool: 'flatten', label: 'Flatten', icon: <Eraser size={15} /> },
-  { tool: 'roughen', label: 'Rocky', icon: <Sparkles size={15} /> }, { tool: 'paint', label: 'Paint', icon: <Paintbrush size={15} /> },
-];
 
 export function timeLabel(h: number) {
   const hh = Math.floor(h), mm = Math.round((h - hh) * 60) % 60;
@@ -372,9 +367,6 @@ function DioramaPanel({ onCollapse, compact }: { onCollapse?: () => void; compac
   useEngineVersion();
   const env = engine.env;
   const t = engine.terrain;
-  const [ground, setGround] = useState(engine.brush.ground);
-  const brush = engine.brush;
-  const setTool = (tool: SculptTool | 'paint' | null) => { brush.tool = brush.tool === tool ? null : tool; engine.changed(false); };
   return (
     <div className="flex h-full flex-col">
       {compact ? (
@@ -392,32 +384,8 @@ function DioramaPanel({ onCollapse, compact }: { onCollapse?: () => void; compac
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-3">
-        {t && (
-          <Section title="Land tools">
-            <div className="grid grid-cols-3 gap-1.5">
-              {TOOLS.map((x) => (
-                <Btn key={x.tool} size="sm" active={brush.tool === x.tool} onClick={() => setTool(x.tool)}>{x.icon}{x.label}</Btn>
-              ))}
-            </div>
-            {brush.tool && <p className="text-[11px] text-ink/55">{brush.tool === 'paint' ? 'Drag on the land to paint.' : 'Press and hold on the land to keep working one spot, or drag to shape it.'} Two fingers or right-drag still move the camera. Tap the tool again to stop.</p>}
-            {brush.tool === 'paint' && (
-              <div className="grid grid-cols-4 gap-1.5">
-                {GROUND_TYPES.map((g, i) => (
-                  <button key={g.id} onClick={() => { brush.ground = i; setGround(i); }} title={g.name}
-                    className={clsx('flex flex-col items-center gap-0.5 rounded-xl p-1.5 text-[10.5px] font-bold ring-1', ground === i ? 'bg-amber-100 ring-amber-400' : 'bg-white ring-black/10')}>
-                    <span className="h-6 w-6 rounded-lg" style={{ background: `linear-gradient(135deg, ${g.color}, ${g.color2})` }} />
-                    <span className="truncate">{g.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {brush.tool && <Slider label="Brush size" value={brush.radius} min={0.5} max={8} step={0.1} unit="m" onChange={(v) => { brush.radius = v; engine.changed(false); }} />}
-            {brush.tool && brush.tool !== 'paint' && <Slider label="Strength" value={brush.strength} min={0.01} max={0.2} step={0.005} format={(v) => `${Math.round(v * 500)}%`} onChange={(v) => { brush.strength = v; engine.changed(false); }} />}
-            <Toggle label="Water" checked={t.waterLevel !== null} onChange={(v) => engine.setWaterLevel(v ? -0.2 : null)} />
-            {t.waterLevel !== null && <Slider label="Water level" value={t.waterLevel} min={-3} max={3} step={0.05} unit="m" onChange={(v) => { t.setWaterLevel(v); engine.water?.sync(); engine.changed(false); }} onCommit={(v) => engine.setWaterLevel(v)} />}
-            <Slider label="Grass" value={env.grass} min={0} max={1.5} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => engine.setEnv({ grass: v }, false)} onCommit={(v) => engine.setEnv({ grass: v })} />
-          </Section>
-        )}
+        {t && <Section title="Land tools"><LandTools /></Section>}
+        {t && <SizeSection />}
         {engine.base && <BaseTileSection />}
         <Section title="Sky & weather"><EnvironmentControls /></Section>
         <Section title="Display">
