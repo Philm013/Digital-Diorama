@@ -433,7 +433,7 @@ function Compass() {
   }, [engine]);
   const far = v.dist > 30;
   return (
-    <div className="dd-glass pointer-events-none absolute left-3 top-16 z-30 flex items-center gap-2 rounded-2xl py-1.5 pl-1.5 pr-3 text-white sm:top-3">
+    <div className="dd-glass pointer-events-none absolute left-3 top-[calc(4rem+var(--dd-safe-top,0px))] z-30 flex items-center gap-2 rounded-2xl py-1.5 pl-1.5 pr-3 text-white sm:top-[calc(0.75rem+var(--dd-safe-top,0px))]">
       <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/10">
         <div style={{ transform: `rotate(${-v.rel}rad)` }} className="text-xl leading-none transition-transform">⬆</div>
       </div>
@@ -481,7 +481,7 @@ function WalkOverlay({ touch, eye, setEye, onExit }: { touch: boolean; eye: stri
   useEffect(() => { const id = window.setTimeout(() => setHint(false), 7000); return () => clearTimeout(id); }, []);
   return (
     <>
-      <div className="absolute left-1/2 top-3 z-30 flex w-[calc(100%-16px)] -translate-x-1/2 flex-wrap items-center justify-center gap-2">
+      <div className="absolute left-1/2 top-[calc(0.75rem+var(--dd-safe-top,0px))] z-30 flex w-[calc(100%-16px)] -translate-x-1/2 flex-wrap items-center justify-center gap-2">
         <div className="dd-glass max-w-full overflow-x-auto rounded-2xl p-1"><Segmented size="sm" value={nearestEye(eye)} onChange={setEye} options={EYES} /></div>
         {endless && <Btn size="sm" onClick={() => { engine.walk?.goHome(); haptic(8); }} title="Back to your diorama" aria-label="Home"><Home size={15} /><span className="hidden sm:inline">Home</span></Btn>}
         {endless && document.fullscreenEnabled && <Btn size="sm" onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.().catch(() => {}); }} title="Full screen" aria-label="Full screen"><Maximize size={15} /></Btn>}
@@ -496,7 +496,7 @@ function WalkOverlay({ touch, eye, setEye, onExit }: { touch: boolean; eye: stri
       {touch && (
         <>
           {/* left half: a joystick appears wherever your thumb lands */}
-          <div className="absolute bottom-0 left-0 top-16 z-20 w-1/2 touch-none"
+          <div className="absolute bottom-0 left-0 top-[calc(4rem+var(--dd-safe-top,0px))] z-20 w-1/2 touch-none"
             onPointerDown={(e) => { (e.target as HTMLElement).setPointerCapture(e.pointerId); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setStick(e.clientX - r.left, e.clientY - r.top, e.clientX - r.left, e.clientY - r.top, e.pointerId); haptic(6); }}
             onPointerMove={(e) => { if (joy && e.pointerId === joy.id) { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setStick(joy.cx, joy.cy, e.clientX - r.left, e.clientY - r.top, joy.id); } }}
             onPointerUp={endJoy} onPointerCancel={endJoy}>

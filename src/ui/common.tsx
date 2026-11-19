@@ -1,6 +1,9 @@
 import { clsx } from 'clsx';
 import { X } from 'lucide-react';
-import { useEffect, type ReactNode, type ButtonHTMLAttributes } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode, type ButtonHTMLAttributes } from 'react';
+import { useBackLayer } from './backStack';
+import { useMedia } from './hooks';
+import { useSheetDrag } from './sheetDrag';
 
 export function Btn({ className, variant = 'soft', size = 'md', active, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'soft' | 'solid' | 'ghost' | 'danger' | 'go' | 'stop'; size?: 'sm' | 'md' | 'lg'; active?: boolean }) {
   return (
@@ -95,21 +98,37 @@ export function Section({ title, children, right, defaultOpen = true }: { title:
   );
 }
 
+/**
+ * A dialog: centred on wide screens, a sheet from the bottom on phones that can be dragged down
+ * by its header to close. Escape (when it is on top) and the phone's Back button close it too.
+ */
 export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; wide?: boolean }) {
+  const isTop = useBackLayer(open, onClose);
+  const close = useRef(onClose);
+  close.current = onClose;
+  const titleId = useId();
+  const sheet = useMedia('(max-width: 639px)');
+  const [leaving, setLeaving] = useState(false);
+  const drag = useSheetDrag(() => { setLeaving(true); window.setTimeout(() => close.current(), 180); }, open && sheet);
+  useEffect(() => { if (!open) setLeaving(false); }, [open]);
   useEffect(() => {
     if (!open) return;
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && isTop()) close.current(); };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
-  }, [open, onClose]);
+  }, [open, isTop]);
   if (!open) return null;
   return (
-    <div className="dd-modal-bg fixed inset-0 z-[65] flex items-end justify-center bg-black/45 p-0 backdrop-blur-[3px] sm:items-center sm:p-6" onClick={onClose}>
-      <div className={clsx('dd-panel dd-modal flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px]', wide ? 'sm:max-w-4xl' : 'sm:max-w-lg')} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="flex justify-center pt-2 sm:hidden"><span className="h-1.5 w-11 rounded-full bg-black/15" /></div>
-        <div className="flex items-center justify-between gap-3 border-b border-black/5 px-5 py-3">
-          <h2 className="font-display text-xl font-bold">{title}</h2>
-          <IconBtn label="Close" onClick={onClose} className="bg-black/[0.05] hover:bg-black/10"><X size={20} /></IconBtn>
+    <div className={clsx('dd-modal-bg fixed inset-0 z-[65] flex items-end justify-center bg-black/45 p-0 backdrop-blur-[3px] transition-opacity duration-200 sm:items-center sm:p-6', leaving && 'opacity-0')} onClick={onClose}>
+      <div data-sheet role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => e.stopPropagation()}
+        className={clsx('dd-panel dd-modal flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px]', !drag.dragging && 'dd-sheet-snap', wide ? 'sm:max-w-4xl' : 'sm:max-w-lg')}
+        style={leaving ? { transform: 'translateY(105%)' } : drag.dy ? { transform: `translateY(${drag.dy}px)` } : undefined}>
+        <div className={clsx(sheet && 'touch-none select-none')} {...drag.handlers}>
+          <div className="flex justify-center pt-2 sm:hidden"><span className="h-1.5 w-11 rounded-full bg-black/15" /></div>
+          <div className="flex items-center justify-between gap-3 border-b border-black/5 px-5 py-3">
+            <h2 id={titleId} className="font-display text-xl font-bold">{title}</h2>
+            <IconBtn label="Close" onClick={onClose} className="bg-black/[0.05] hover:bg-black/10"><X size={20} /></IconBtn>
+          </div>
         </div>
         <div className="overflow-y-auto overscroll-contain px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-4 sm:px-5">{children}</div>
       </div>

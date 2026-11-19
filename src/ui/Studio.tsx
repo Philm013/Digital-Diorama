@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ArrowLeft, Play, Square, Undo2, Redo2, Compass, Hammer, Blocks, MoreHorizontal, Save, Download, Camera, Maximize, Volume2, VolumeX, HelpCircle, Settings2, FileImage, BookOpen, Plus, Trophy, Sparkles } from 'lucide-react';
+import { ArrowLeft, Play, Square, Undo2, Redo2, Compass, Hammer, Blocks, MoreHorizontal, Save, Download, Camera, Maximize, Volume2, VolumeX, HelpCircle, Settings2, FileImage, BookOpen, Plus, Trophy, Sparkles, type LucideIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Engine } from '../engine/Engine';
 import type { DioramaDoc, Mode } from '../engine/types';
@@ -8,7 +8,8 @@ import { Ambience, audio, playSound } from '../code/sound';
 import { exportProject, saveProject, makeThumb, downloadDataUrl, fileSafe, saveSettings, type Settings } from '../storage/projects';
 import { StudioContext, type StudioApi } from './store';
 import { Btn, IconBtn, Modal, Segmented, Toggle } from './common';
-import { useMedia, isTypingTarget } from './hooks';
+import { isTypingTarget } from './hooks';
+import { AppBar, TabBar, TopTabs, useLayout, type ShellTab } from './shell';
 import { Viewport } from './Viewport';
 import { LibraryPanel, InspectorPanel } from './BuildPanels';
 import { ExploreLayer } from './ExplorePanels';
@@ -26,8 +27,12 @@ import { flag } from '../game/ecology';
 import { haptic, uiSound, setUiSound } from './feedback';
 
 export interface Toast { id: number; text: string; kind: 'info' | 'error' | 'success' }
+interface MenuAction { icon: LucideIcon; label: string; hint?: string; run: () => void }
+type MenuEntry = MenuAction | 'sep';
 
 const MODES = [['explore', 'Explore', Compass], ['build', 'Build', Hammer], ['code', 'Code', Blocks]] as const;
+const MODE_TABS: ShellTab<Mode>[] = MODES.map(([id, label, icon], k) => ({ id, label, icon, title: `${label} (${k + 1})` }));
+const PHONE_TABS: ShellTab<Mode | 'journal'>[] = [...MODE_TABS, { id: 'journal', label: 'Journal', icon: BookOpen, title: 'Field journal (J)' }];
 
 export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc; settings: Settings; setSettings: (s: Settings) => void; onExit: () => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -45,9 +50,8 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   const [, force] = useState(0);
   const [libOpen, setLibOpen] = useState(true);
   const [inspOpen, setInspOpen] = useState(true);
-  const wide = useMedia('(min-width: 1024px)');
-  // phones on their side: the build/code panel moves beside the viewer and the mode tabs into the top bar
-  const landscape = useMedia('(orientation: landscape) and (max-height: 540px)') && !wide;
+  // phones on their side (landscape): the build/code panel moves beside the viewer and the mode tabs into the top bar
+  const { wide, landscape, phone } = useLayout();
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   useEffect(() => { setUiSound(settings.sound); }, [settings.sound]);
@@ -141,15 +145,26 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
     toast(ok ? 'Saved on this device ✓' : 'Could not save — try downloading a copy', ok ? 'success' : 'error');
   }, [engine, toast]);
 
+  const exiting = useRef(false);
   const exit = useCallback(async () => {
-    if (engine) {
+    if (exiting.current) return;
+    exiting.current = true;
+    if (engine?.doc) {
       runtime?.stop();
-      const d = engine.serialize();
-      const thumb = await makeThumb(engine.screenshot());
-      await saveProject(d, thumb);
+      try {
+        const d = engine.serialize();
+        const thumb = await makeThumb(engine.screenshot());
+        await saveProject(d, thumb);
+      } catch (err) { console.error(err); }
     }
     onExit();
   }, [engine, runtime, onExit]);
+  // the phone's Back button (see App) asks to leave
+  useEffect(() => {
+    const fn = () => void exit();
+    document.addEventListener('dd-exit', fn);
+    return () => document.removeEventListener('dd-exit', fn);
+  }, [exit]);
 
   // the inspector's "Code" button asks to switch modes
   useEffect(() => {
@@ -226,56 +241,60 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   // roaming the endless world: nothing but the view and its own controls
   const immersive = !!engine?.walk?.active && !!engine.walk.endless;
   const goCode = useCallback(() => { if (engine && selected) { engine.select(selected.id); setMode('code'); } }, [engine, selected, setMode]);
+  const menuItems: MenuEntry[] = !engine ? [] : [
+    { icon: BookOpen, label: 'Field journal', hint: 'J', run: () => setJournal(true) },
+    { icon: Trophy, label: 'Quests', hint: 'Q', run: () => setQuestLog(true) },
+    'sep',
+    { icon: Save, label: 'Save now', hint: 'Ctrl+S', run: () => void saveNow() },
+    { icon: Download, label: 'Download project file', run: () => exportProject(engine.serialize()) },
+    { icon: FileImage, label: 'Save a picture', run: () => downloadDataUrl(`${fileSafe(engine.doc.title)}.png`, engine.screenshot()) },
+    { icon: Camera, label: 'Reset camera', hint: 'O', run: () => engine.frameCamera() },
+    ...(document.fullscreenEnabled ? [{ icon: Maximize, label: document.fullscreenElement ? 'Exit full screen' : 'Full screen', run: () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.().catch(() => {}); } }] : []),
+    { icon: api?.ambience.enabled ? VolumeX : Volume2, label: api?.ambience.enabled ? 'Turn off nature sounds' : 'Play nature sounds', run: () => { audio(); if (api?.ambience.enabled) api.ambience.stop(); else api?.ambience.start(); force((x) => x + 1); } },
+    { icon: Settings2, label: 'Settings', run: () => setSettingsOpen(true) },
+    { icon: HelpCircle, label: 'How to play', run: () => setHelp(true) },
+  ];
 
   return (
-    <div className="dd-studio flex h-full flex-col" style={{ ['--accent' as string]: biome?.accent ?? '#3f7d3a' }}>
-      {/* ---------------- top HUD ---------------- */}
-      <header className={clsx('dd-topbar pt-safe z-40 flex shrink-0 items-center gap-1.5 px-2 sm:gap-2 sm:px-3', wide ? 'h-[60px]' : 'h-[52px]', immersive && 'hidden')}>
+    <div className="dd-studio flex h-full flex-col" style={{ ['--accent' as string]: biome?.accent ?? '#3f7d3a', ['--dd-safe-top' as string]: immersive ? 'env(safe-area-inset-top)' : '0px' }}>
+      {/* ---------------- top bar ---------------- */}
+      <AppBar tall={wide} hidden={immersive}>
         <IconBtn label="Back to all dioramas" onClick={() => void exit()} className="text-white hover:bg-white/10"><ArrowLeft size={21} /></IconBtn>
-        <div className="flex min-w-0 items-center gap-2">
+        <div className={clsx('flex min-w-0 items-center gap-2', phone && 'flex-1')}>
           <span className="hidden h-10 w-10 shrink-0 place-items-center rounded-2xl text-2xl sm:grid" style={{ background: 'color-mix(in srgb, var(--accent) 45%, transparent)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.15)' }}>{biome?.emoji ?? '📦'}</span>
-          <div className="min-w-0">
+          <div className={clsx('min-w-0', phone && 'flex-1')}>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={() => { if (engine && title.trim() && title !== engine.doc.title) { engine.doc.title = title.trim(); engine.frame.setTitle(engine.doc.title, engine.doc.author ? `by ${engine.doc.author}` : ''); engine.changed(); } }}
               onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className={clsx('block min-w-0 truncate rounded-lg bg-transparent px-1.5 font-display text-[15px] font-semibold leading-tight text-white outline-none hover:bg-white/10 focus:bg-white/15 sm:text-lg', landscape ? 'w-[19vw]' : 'w-[30vw] max-w-[240px]')}
+              className={clsx('block min-w-0 truncate rounded-lg bg-transparent px-1.5 font-display text-[15px] font-semibold leading-tight text-white outline-none hover:bg-white/10 focus:bg-white/15 sm:text-lg', phone ? 'w-full' : landscape ? 'w-[19vw]' : 'w-[30vw] max-w-[240px]')}
               aria-label="Diorama title"
             />
-            <button onClick={() => setQuestLog(true)} className="flex items-center gap-1 px-1.5 text-[11px] font-bold text-white/55 hover:text-white/85" title="Quests (Q)">
+            <button onClick={() => setQuestLog(true)} className="flex items-center gap-1 whitespace-nowrap px-1.5 text-[11px] font-bold text-white/55 hover:text-white/85" title="Quests (Q)">
               <Stars n={game.stars} size={10} /> <span className="tabular-nums">{game.done}/{game.quests.length || 16} quests</span>
             </button>
           </div>
         </div>
-        {(wide || landscape) && <ModeTabs mode={mode} onMode={setMode} compact={landscape} />}
-        <div className="flex-1" />
+        {!phone && <TopTabs tabs={MODE_TABS} active={mode} onSelect={setMode} compact={landscape} />}
+        {!phone && <div className="flex-1" />}
         {engine && mode === 'build' && wide && <UndoRedo engine={engine} />}
         {engine && !loading && <HealthChip game={game} compact={!wide} />}
-        <XpChip profile={profile} compact={!wide} onClick={() => setJournal(true)} />
-        <button onClick={togglePlay} className={clsx('dd-3d flex h-11 min-w-[48px] items-center justify-center gap-1.5 rounded-2xl px-3.5 font-display text-[15px] font-bold text-white', playing ? 'bg-[#e8453c] [--edge:#a5241e]' : 'bg-[#3bb34a] [--edge:#23802f]')} title={playing ? 'Stop and reset (Esc)' : 'Run all code'}>
+        {/* on phones the level is shown in the Journal instead, leaving room for the title */}
+        {!phone && <XpChip profile={profile} compact={!wide} onClick={() => setJournal(true)} />}
+        <button onClick={togglePlay} className={clsx('dd-3d flex h-11 min-w-[48px] shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3.5 font-display text-[15px] font-bold text-white', playing ? 'bg-[#e8453c] [--edge:#a5241e]' : 'bg-[#3bb34a] [--edge:#23802f]')} title={playing ? 'Stop and reset (Esc)' : 'Run all code'}>
           {playing ? <Square size={16} fill="currentColor" /> : <Play size={17} fill="currentColor" />}
           <span className="hidden sm:inline">{playing ? 'Stop' : 'Play'}</span>
         </button>
         <div className="relative">
-          <IconBtn label="More" onClick={() => setMenu((v) => !v)} className="text-white hover:bg-white/10"><MoreHorizontal size={21} /></IconBtn>
-          {menu && engine && (
+          <IconBtn label="More" onClick={() => setMenu((v) => !v)} className="text-white hover:bg-white/10" aria-expanded={menu}><MoreHorizontal size={21} /></IconBtn>
+          {menu && wide && engine && (
             <div className="dd-glass dd-pop absolute right-0 top-12 z-50 w-64 rounded-3xl p-2 text-sm text-white" onMouseLeave={() => setMenu(false)}>
-              <MenuItem icon={<BookOpen size={16} />} label="Field journal" hint="J" onClick={() => { setMenu(false); setJournal(true); }} />
-              <MenuItem icon={<Trophy size={16} />} label="Quests" hint="Q" onClick={() => { setMenu(false); setQuestLog(true); }} />
-              <div className="my-1 h-px bg-white/10" />
-              <MenuItem icon={<Save size={16} />} label="Save now" hint="Ctrl+S" onClick={() => { setMenu(false); void saveNow(); }} />
-              <MenuItem icon={<Download size={16} />} label="Download project file" onClick={() => { setMenu(false); exportProject(engine.serialize()); }} />
-              <MenuItem icon={<FileImage size={16} />} label="Save a picture" onClick={() => { setMenu(false); downloadDataUrl(`${fileSafe(engine.doc.title)}.png`, engine.screenshot()); }} />
-              <MenuItem icon={<Camera size={16} />} label="Reset camera" hint="O" onClick={() => { setMenu(false); engine.frameCamera(); }} />
-              <MenuItem icon={<Maximize size={16} />} label="Full screen" onClick={() => { setMenu(false); if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.(); }} />
-              <MenuItem icon={api?.ambience.enabled ? <VolumeX size={16} /> : <Volume2 size={16} />} label={api?.ambience.enabled ? 'Turn off nature sounds' : 'Play nature sounds'} onClick={() => { setMenu(false); audio(); if (api?.ambience.enabled) api.ambience.stop(); else api?.ambience.start(); force((x) => x + 1); }} />
-              <MenuItem icon={<Settings2 size={16} />} label="Settings" onClick={() => { setMenu(false); setSettingsOpen(true); }} />
-              <MenuItem icon={<HelpCircle size={16} />} label="How to play" onClick={() => { setMenu(false); setHelp(true); }} />
+              {menuItems.map((it, i) => it === 'sep' ? <div key={i} className="my-1 h-px bg-white/10" /> : <MenuItem key={it.label} icon={<it.icon size={16} />} label={it.label} hint={it.hint} onClick={() => { setMenu(false); it.run(); }} />)}
             </div>
           )}
         </div>
-      </header>
+      </AppBar>
 
       {/* ---------------- body ---------------- */}
       <div className={clsx('relative flex min-h-0 flex-1', phonePanel && !landscape && 'flex-col')}>
@@ -319,30 +338,37 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         )}
       </div>
 
-      {/* ---------------- mobile bottom nav ---------------- */}
-      {!wide && !landscape && !immersive && (
-        <nav className="dd-bottomnav pb-safe z-40 flex shrink-0 justify-around gap-1 px-2 pt-1">
-          {MODES.map(([m, label, Icon]) => (
-            <button key={m} onClick={() => { setMode(m); if (m !== 'explore') setSheetIdx(1); }} className={clsx('flex h-12 flex-1 flex-col items-center justify-center rounded-2xl font-display text-[11.5px] font-semibold transition', mode === m ? 'bg-white/[0.14] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.12)]' : 'text-white/60 active:bg-white/10')}>
-              <Icon size={20} strokeWidth={mode === m ? 2.4 : 2} />{label}
-            </button>
-          ))}
-          <button onClick={() => setJournal(true)} className="flex h-12 flex-1 flex-col items-center justify-center rounded-2xl font-display text-[11.5px] font-semibold text-white/60 active:bg-white/10">
-            <BookOpen size={20} />Journal
-          </button>
-        </nav>
+      {/* ---------------- phone tab bar ---------------- */}
+      {phone && !immersive && (
+        <TabBar label="Modes" tabs={PHONE_TABS} active={mode} onSelect={(id) => {
+          if (id === 'journal') { uiSound('open'); setJournal(true); return; }
+          setMode(id);
+          if (id !== 'explore') setSheetIdx(1);
+        }} />
       )}
 
       <Celebrations sound={settings.sound} />
 
       {/* ---------------- toasts ---------------- */}
-      <div className="pointer-events-none fixed left-1/2 top-[72px] z-50 flex w-[min(92vw,420px)] -translate-x-1/2 flex-col gap-2">
+      <div className="pointer-events-none fixed left-1/2 top-[calc(72px+env(safe-area-inset-top))] z-50 flex w-[min(92vw,420px)] -translate-x-1/2 flex-col gap-2">
         {toasts.map((t) => (
           <div key={t.id} className={clsx('dd-toast rounded-2xl px-4 py-2.5 text-sm font-semibold shadow-lg', t.kind === 'error' ? 'bg-red-600 text-white' : t.kind === 'success' ? 'bg-leaf text-white' : 'dd-glass text-white')}>{t.text}</div>
         ))}
       </div>
 
       {settings.tips && !loading && <Briefing biome={biome?.name ?? 'diorama'} onHelp={() => setHelp(true)} onDone={() => { const s = { ...settings, tips: false }; setSettings(s); saveSettings(s); uiSound('pop'); }} />}
+      {/* phones: the More menu is a sheet of big buttons from the bottom */}
+      <Modal open={menu && !wide && !!engine} onClose={() => setMenu(false)} title="More">
+        <div className="grid grid-cols-3 gap-2 pb-1 sm:grid-cols-5">
+          {menuItems.filter((it): it is MenuAction => it !== 'sep').map((it) => (
+            <button key={it.label} onClick={() => { uiSound('tick'); setMenu(false); it.run(); }}
+              className="flex min-h-[92px] flex-col items-center justify-center gap-1.5 rounded-2xl bg-black/[0.04] px-1.5 py-2.5 text-center font-display text-[12.5px] font-semibold leading-tight text-ink/80 transition active:scale-95 active:bg-black/10">
+              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-white text-ink/75 shadow-sm ring-1 ring-black/5"><it.icon size={20} /></span>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      </Modal>
       <Modal open={help} onClose={() => setHelp(false)} title="How to play" wide>
         <HelpContent />
       </Modal>
@@ -379,20 +405,6 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
 
 const noopSub = () => () => {};
 const zero = () => 0;
-
-function ModeTabs({ mode, onMode, compact }: { mode: Mode; onMode: (m: Mode) => void; compact?: boolean }) {
-  const i = MODES.findIndex(([m]) => m === mode);
-  return (
-    <nav className={clsx('dd-modes relative flex rounded-[18px] p-1', compact ? 'ml-1' : 'ml-2')} role="tablist">
-      <span className="dd-mode-ind absolute bottom-1 top-1 rounded-[14px]" style={{ width: 'calc((100% - 8px) / 3)', transform: `translateX(${i * 100}%)` }} />
-      {MODES.map(([m, label, Icon], k) => (
-        <button key={m} role="tab" aria-selected={mode === m} onClick={() => onMode(m)} title={`${label} (${k + 1})`} className={clsx('relative z-10 flex items-center justify-center gap-1.5 rounded-[14px] font-display font-semibold transition-colors', compact ? 'h-9 w-[76px] text-[13px]' : 'h-10 w-[112px] text-[15px]', mode === m ? 'text-ink' : 'text-white/75 hover:text-white')}>
-          <Icon size={compact ? 15 : 17} strokeWidth={2.3} />{label}
-        </button>
-      ))}
-    </nav>
-  );
-}
 
 /** subscribes to the engine so the buttons enable as soon as there is something to undo */
 function UndoRedo({ engine, light }: { engine: Engine; light?: boolean }) {

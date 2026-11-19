@@ -1,6 +1,52 @@
+import { useEffect, useState } from 'react';
 import { BACKDROPS, paintClouds, paintLand } from '../engine/backdropPainter';
 
 const cache = new Map<string, string>();
+
+/* Painting a postcard takes ~30 ms, so lists paint them one at a time while the page is idle, in
+   the order they were asked for (top of a grid first) instead of all at once. Urgent requests
+   (a picture the user just opened) jump the queue. */
+const queue: { key: string; run: () => void }[] = [];
+const waiters = new Map<string, ((url: string) => void)[]>();
+let pumping = false;
+type Idle = (cb: () => void, o?: { timeout: number }) => number;
+function pump() {
+  const job = queue.shift();
+  if (!job) { pumping = false; return; }
+  job.run();
+  const ric = (window as unknown as { requestIdleCallback?: Idle }).requestIdleCallback;
+  if (ric) ric(pump, { timeout: 80 }); else setTimeout(pump, 16);
+}
+/** paint a postcard soon, without blocking the page */
+export function biomeThumbLater(backdropId: string, w = 480, h = 270, urgent = false): Promise<string> {
+  const key = backdropId + w + 'x' + h;
+  const hit = cache.get(key);
+  if (hit) return Promise.resolve(hit);
+  return new Promise((resolve) => {
+    const list = waiters.get(key);
+    if (list) {
+      list.push(resolve);
+      if (urgent) { const i = queue.findIndex((j) => j.key === key); if (i > 0) queue.unshift(...queue.splice(i, 1)); }
+      return;
+    }
+    waiters.set(key, [resolve]);
+    const job = { key, run: () => { const url = biomeThumb(backdropId, w, h); for (const fn of waiters.get(key) ?? []) fn(url); waiters.delete(key); } };
+    if (urgent) queue.unshift(job); else queue.push(job);
+    if (!pumping) { pumping = true; setTimeout(pump, 0); }
+  });
+}
+/** a postcard URL once it has been painted (undefined until then) */
+export function useBiomeThumb(backdropId: string, w = 480, h = 270, urgent = false): string | undefined {
+  const key = backdropId + w + 'x' + h;
+  const [url, setUrl] = useState<{ key: string; url: string } | undefined>(() => (cache.has(key) ? { key, url: cache.get(key)! } : undefined));
+  useEffect(() => {
+    if (url?.key === key) return;
+    let live = true;
+    void biomeThumbLater(backdropId, w, h, urgent).then((u) => { if (live) setUrl({ key, url: u }); });
+    return () => { live = false; };
+  }, [backdropId, w, h, key, url, urgent]);
+  return url?.key === key ? url.url : undefined;
+}
 /** A little painted postcard of a biome's backdrop for the picker. */
 export function biomeThumb(backdropId: string, w = 480, h = 270): string {
   const key = backdropId + w + 'x' + h;
