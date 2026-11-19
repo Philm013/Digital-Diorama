@@ -1,0 +1,32 @@
+{
+  "name": "digital-diorama",
+  "private": true,
+  "version": "1.0.0",
+  "description": "An immersive, codeable 3D habitat diorama studio for classrooms — built on the procedural three.js assets in References/.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "blockly": "12.5.1",
+    "clsx": "2.1.1",
+    "lucide-react": "0.577.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
+    "@types/node": "22.19.17",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "0.186.0",
+    "@vitejs/plugin-react": "5.1.1",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3",
+    "vite": "7.3.8"
+  }
+}
