@@ -73,7 +73,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
               </button>
             </div>
             <div className="mx-auto mt-5 grid max-w-xl grid-cols-2 gap-2 text-left sm:grid-cols-4 lg:mx-0">
-              {[[<Hammer size={16} key="b" />, 'Build', `${CATALOG.length}+ species & things`], [<Compass size={16} key="e" />, 'Discover', 'Tap to collect species'], [<Blocks size={16} key="c" />, 'Code', 'Scratch-style blocks'], [<Trophy size={16} key="q" />, 'Quests', 'Stars, XP & badges']].map(([icon, h, t]) => (
+              {[[<Hammer size={16} key="b" />, 'Build', `${Math.floor(CATALOG.length / 10) * 10}+ species & things`], [<Compass size={16} key="e" />, 'Discover', 'Tap to collect species'], [<Blocks size={16} key="c" />, 'Code', 'Scratch-style blocks'], [<Trophy size={16} key="q" />, 'Quests', 'Stars, XP & badges']].map(([icon, h, t]) => (
                 <div key={h as string} className="rounded-2xl bg-white/75 p-2.5 ring-1 ring-black/5 backdrop-blur-sm">
                   <div className="flex items-center gap-1.5 font-display text-sm font-semibold text-leaf">{icon}{h}</div>
                   <div className="mt-0.5 text-[11.5px] leading-snug text-ink/70">{t}</div>
