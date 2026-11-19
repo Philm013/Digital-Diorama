@@ -13,6 +13,8 @@ export class WalkMode {
   keys = new Set<string>();
   /** virtual joystick input from the UI: x = strafe, y = forward (-1..1) */
   joy = { x: 0, y: 0 };
+  /** the on-screen joystick is pushed to its rim: run */
+  joyRun = false;
   /** vertical input (swim up / down) */
   rise = 0;
   private saved?: { pos: THREE.Vector3; target: THREE.Vector3; near: number; fov: number };
@@ -106,7 +108,7 @@ export class WalkMode {
     if (k.has('d')) side += 1;
     if (k.has('arrowleft') || k.has('q')) this.yaw += dt * 1.8;
     if (k.has('arrowright') || k.has('e')) this.yaw -= dt * 1.8;
-    const run = k.has('shift') ? 2.2 : 1;
+    const run = k.has('shift') || this.joyRun ? 2.2 : 1;
     const speed = (0.25 + this.eye * 0.85) * run;
     const len = Math.hypot(fwd, side);
     if (len > 1) { fwd /= len; side /= len; }

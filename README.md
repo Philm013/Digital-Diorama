@@ -2,9 +2,9 @@
 
 **The classroom shoebox diorama, reimagined as a living 3D habitat you can build, explore, code and present.**
 
-Students pick a biome, sculpt the land, fill it with real species from a library of 250+ procedural plants, animals, fungi and habitat features, label what they learned on toothpick flags, then bring it to life with Scratch-style block code — and finally present it with a narrated guided tour. Runs in any modern desktop or mobile browser; projects save on the device, with no accounts.
+Students pick a biome, sculpt the land, fill it with real species from a library of nearly 350 procedural plants, animals, fungi and habitat features, label what they learned on toothpick flags, then bring it to life with Scratch-style block code — and finally present it with a narrated guided tour. Along the way they earn XP and badges, fill a field journal with the species they discover, and complete habitat quests for up to three stars. Runs in any modern desktop or mobile browser; projects and progress save on the device, with no accounts.
 
-Everything 3D is built from the procedural three.js assets already in [`References/`](References) — they are imported in place, untouched, and code-split so each one only loads when used.
+Most 3D models come from the procedural three.js assets in [`References/`](References), imported in place and code-split so each one only loads when used. Trees, wildflowers, grasses and a few marine animals and fungi come from the app's own procedural generators in `src/assets/flora` and `src/assets/builtin`. The reference modules are unchanged except for a small `specOverride` hook in the mammal and bird rigs (marked *Digital Diorama extension*), which lets related species such as a Bactrian camel or a blue jay share one rig.
 
 ---
 
@@ -44,20 +44,28 @@ Every push to `main` builds the app and publishes it with GitHub Pages ([`.githu
 
 ## What students can do
 
+### 🏆 Play
+- **Ranger profile:** pick an avatar and name; XP raises your level through ranks from *Seedling* to *Planet Keeper*. XP comes from discovering species, placing things and finishing quests.
+- **Field Journal** (`J`): every species you tap in Explore is recorded with its card. Ones you haven't found yet show as silhouettes with a habitat hint, so there is always something left to find.
+- **Quests & stars** (`Q`): each diorama has 16 quests (discover 5 species, plant 3 producers, build a 3-link food chain, add a decomposer, provide water, write labels and research notes, see it at night, walk inside, code something, give a tour…). 5, 10 and all 16 quests earn one, two and three stars. A tracker in the corner shows the next steps.
+- **Ecosystem health** (0–100) scores variety, producer/consumer/decomposer balance, whether every animal has food here, the energy pyramid, food-chain length and water. Its popover explains each part and suggests what to add next.
+- **16 badges**, such as Food Chain Champ, Recycler, Night Owl, Storm Chaser, Four Seasons, Code Wrangler, Tour Guide, Ant's-Eye View and World Traveller, each celebrated with a banner, confetti and sound. Ecosystem badges come from the student's own changes: a goal that a ready-made habitat already meets counts only after it has been lost and reached again. Sounds and effects follow the Settings switches and *reduced motion*.
+
 ### 🧭 Explore
 - Orbit, pinch-zoom and pan around a diorama that sits in a cardboard **shoebox** (or a **museum case** with a brass name plate, or a **floating island**). Walls fade away from any angle so nothing blocks the view.
-- **Tap any organism** for an info card: common & scientific name, Kingdom › Phylum › Class › Order › Family, producer/consumer/decomposer role, diet, IUCN status, a fact, real size and how much it is magnified, what it eats here and what eats it — plus the student's own research notes. *Read* speaks it aloud.
-- **Labels** puts paper flags on toothpicks next to every species (on by default, one flag per species; students can rewrite the text).
+- **Tap any organism** for an info card (the first tap adds it to the Field Journal): common & scientific name, Kingdom › Phylum › Class › Order › Family, producer/consumer/decomposer role, diet, IUCN status, a fact, real size and how much it is magnified, what it eats here and what eats it — plus the student's own research notes. *Read* speaks it aloud.
+- **Labels** puts paper flags on toothpicks next to every species (on by default, one flag per species; students can rewrite the text). When flags would overlap, the nearer ones, the selected object's and the students' own labels stay; the rest fade out until you zoom in.
 - **Food web** draws the energy flow between the organisms actually in the diorama, by trophic level.
-- **Guide** gives the habitat's climate, location, adaptations, threats, vocabulary and discussion questions, plus a live **diorama checklist** (producers, consumers, a decomposer, a 3-link food chain, water, abiotic features, labels, notes, code) — a ready-made rubric.
-- **Walk in** drops you inside the diorama at the eye level of a person, fox, frog or ant (WASD / joystick on touch). Underwater habitats let you swim.
+- **Guide** gives the habitat's climate, location, adaptations, threats, vocabulary and discussion questions, plus the live quest checklist — a ready-made rubric.
+- **Walk in** drops you inside the diorama at the eye level of a person, fox, frog or ant (WASD, Shift to run). On touch, a joystick appears wherever your thumb lands; push it to the rim to run. ⬆ jumps; underwater, hold ⬆/⬇ to swim up and down.
 - **AR table** (phones/tablets with WebXR AR) places the diorama on a real table through the camera; **VR** (WebXR headsets) shows it at table height in front of you. These buttons only appear on devices that support them.
 - **Time of day**, a day–night cycle, **weather** (clear, cloudy, rain, storm with lightning, snow, fog), **seasons** (trees and grass change colour; winter brings snow cover) and **wind**.
 - Animals live on their own: they wander, graze, peck, circle overhead or swim in loops; fireflies and glowing fungi light up at night.
 
 ### 🔨 Build
-- **Library** of 250+ things, filtered to fit the current habitat, searchable by name, scientific name, class or phylum. Tap to add near the centre of the view, or drag onto the diorama (drop an animal onto a plant or rock to perch it there).
-- Drag objects to move them; the inspector sets direction, size, flying/swimming height, label text, research notes, animation, and every shape/colour parameter the original asset module exposes (generated from its `params` schema).
+- **Library** of nearly 350 things with 3D thumbnails, filtered to fit the current habitat (or *All*), searchable by name, scientific name, class or phylum, and colour-coded by food-web role, with marks for what is already in the diorama and what you have discovered. Tap to add near the centre of the view, or drag onto the diorama (drop an animal onto a plant or rock to perch it there).
+- Drag objects to move them. A **context bar** above the selection turns, resizes, duplicates, focuses, deletes or opens it in Code; on touch, **long-press** picks an object up and a second finger **twists** and **pinches** it. Keys: `R` / `Shift+R` turn, `+` / `−` resize, `1` `2` `3` switch Explore / Build / Code.
+- The inspector (Place · Label · Look · Info) sets direction, size, flying/swimming height, label text, research notes, animation, and every shape/colour parameter the asset module exposes (generated from its `params` schema).
 - **Land tools**: raise, dig, smooth, flatten, roughen, and paint 14 ground types (grass, meadow, forest floor, dry grass, jungle, soil, mud, sand, desert sand, rock, gravel, tundra moss, snow, ice); water level; grass density. The front of the base is a cut-away showing soil horizons and rock strata, with a water cross-section where ponds meet the edge.
 - Swap the whole base for a habitat tile (coral reef, kelp forest, tide pools, beach, marsh, mangroves, frozen lake, lake, cave, groundwater cut-away).
 - Undo/redo, duplicate, delete, autosave, download/open `.diorama.json` files, save a picture.
@@ -90,20 +98,22 @@ Teachers will find ready-made **coding challenges** in *More → How to use* (pr
 
 | Biome | Base | Highlights |
 |---|---|---|
-| 🍂 Temperate Forest | sculpted land with a creek | old oak, deer, red fox, black bear, raccoon, owl, woodpecker, fire salamander, mushrooms on a fallen log, earthworms |
-| 🌲 Boreal Taiga | snowy land with a beaver pond | spruce & fir, moose, wolf pack, lynx, reindeer, beaver, falling snow |
-| 🌾 Prairie Grassland | rolling plains, prairie pothole | bison herd, pronghorn, coyote, badger, hawk, monarchs, bumblebees |
-| 🦁 African Savanna | waterhole | acacias, elephants, giraffes, zebras, gazelles, lions, cheetah, hyena, rhino, hippo, crocodile, termite mounds |
-| 🦜 Tropical Rainforest | misty river valley | jungle trees, monstera, pitcher plant, jaguar, anteater, capybara, macaws, toucan, tree & dart frogs, chameleon, python, glowing fungi |
-| 🌵 Desert | dunes with an oasis | saguaros, barrel cactus, agave, camels, fennec fox, bighorn, sidewinder, gecko, scorpion |
-| 🐻‍❄️ Arctic Tundra | icy coast | iceberg, polar bears, arctic fox, reindeer, seals, puffins, arctic char |
-| 🦩 Wetland Marsh | ponds | reeds & cattails, water lilies, flytrap & sundew, alligator, heron, crane, spoonbills, ducks, beaver, otter, bullfrogs, dragonflies |
-| 🏔️ Mountain Peaks | crags and a brook | snow leopard, mountain goats, bighorn, golden eagle, falcon, alpine newt |
-| 🐠 Coral Reef | coral-reef tile | clownfish & anemone, tangs, lionfish, seahorse, manta ray, reef shark, sea turtle, giant clam, crown-of-thorns |
+| 🍂 Temperate Forest | sculpted land with a creek | old oak, birches, bluebells, foxgloves, bracken & moss, deer, red fox, black bear, raccoon, owl, woodpecker, fire salamander, mushrooms on a fallen log, earthworms |
+| 🌲 Boreal Taiga | snowy land with a beaver pond | spruce, fir & larch, a birch grove, blueberries, reindeer lichen, moose, wolf pack, lynx, reindeer, beaver, falling snow |
+| 🌾 Prairie Grassland | rolling plains, prairie pothole | big bluestem, goldenrod, milkweed, coneflowers, sunflowers, bison herd, pronghorn, coyote, badger, hawk, monarchs, bumblebees |
+| 🦁 African Savanna | waterhole | umbrella acacias, a baobab, red oat grass, elephants, giraffes, zebras, gazelles, lions, cheetah, hyena, rhino, hippo, crocodile, termite mounds |
+| 🦜 Tropical Rainforest | misty river valley | kapok giants with buttresses & lianas, palms, banana, tree ferns, bromeliads, heliconia, monstera, pitcher plant, jaguar, anteater, capybara, macaws, toucan, tree & dart frogs, chameleon, python, glowing fungi |
+| 🌵 Desert | dunes with an oasis | saguaros, Joshua tree, prickly pear, barrel cactus, agave, creosote, date palms, camels, fennec fox, bighorn, sidewinder, gecko, scorpion |
+| 🐻‍❄️ Arctic Tundra | icy coast | arctic willow, cotton grass, reindeer lichen, purple saxifrage, iceberg, polar bears, arctic fox, reindeer, seals, puffins, arctic char |
+| 🦩 Wetland Marsh | ponds | bald cypress with Spanish moss, willows, reeds & cattails, water lilies, flytrap & sundew, alligator, heron, crane, spoonbills, ducks, beaver, otter, bullfrogs, dragonflies |
+| 🏔️ Mountain Peaks | crags and a brook | cedar, larch, edelweiss, heather, lupines, snow leopard, mountain goats, bighorn, golden eagle, falcon, alpine newt |
+| 🐠 Coral Reef | coral-reef tile | seagrass, clownfish & anemone, tangs, lionfish, seahorse, manta ray, reef shark, sea turtle, giant clam, crown-of-thorns |
 | 🦦 Kelp Forest | kelp-forest tile | sea otters, urchins, sea stars, octopus, seal, shark, lobster |
 | 🦀 Rocky Shore | tide-pool tile | crabs, sea stars, urchins, anemones, puffins, pelicans, and beach finds (conch, sand dollar, crab molt, mermaid's purse, sea glass, driftwood & lost net) |
-| 🏡 Backyard Habitat | garden with a pond | songbirds, squirrel, chipmunk, cottontail, hedgehog, box turtle, toad, bees, monarch, ladybird, fireflies, snail, earthworm |
+| 🏡 Backyard Habitat | garden with a pond | apple & cherry trees, sunflowers, daisies, clover, dandelions, songbirds, squirrel, chipmunk, cottontail, hedgehog, box turtle, toad, bees, monarch, ladybird, fireflies, snail, earthworm |
 | 📦 Blank | flat meadow | build anything |
+
+The plant library covers conifers (Norway spruce, balsam fir, Scots pine, Atlas cedar, larch, coast redwood, bald cypress), broadleaf and flowering trees (oak, birch, cherry, apple, hawthorn, baobab, kapok, mangrove), palms, desert plants, tundra shrubs, bamboo, banana and tree fern, plus wildflowers, grasses, ferns, mosses, lichens, aquatic plants and giant kelp. Trees follow the seasons (blossom, autumn colour, bare winter branches) and are built at three detail levels.
 
 Small creatures are shown magnified so they can be seen (an ant-sized ladybird becomes ~35 cm; microscopic water bears are magnified ~600×). The info card says how much, and **Settings → True sizes** turns magnification off.
 
@@ -121,17 +131,25 @@ src/
                  animation clips, procedural rig idle/gait, ambient behaviour, labels, speech bubbles),
                  HeightProbe (GPU top-down height maps for habitat tiles), WalkMode (first person),
                  XRMode (WebXR table-top AR/VR)
-  assets/        catalog (250+ entries), data-* (taxonomy, diet, status, facts, food tags), modules
-                 (lazy loaders for References/*), builder (quality tiers, prototype cache & cloning,
-                 orientation, exhibit scale, mesh consolidation, rig discovery), foodweb, builtin/ (fungi,
-                 fallen log, termite mound, nest)
+  assets/        catalog (nearly 350 entries), data-* (taxonomy, diet, status, facts, food tags), data-remap
+                 (species rebuilt on better-matching rigs), modules (lazy loaders for References/* and
+                 flora), builder (quality tiers, prototype cache & cloning, orientation, exhibit scale,
+                 mesh consolidation, rig discovery), foodweb, proc/kit (vertex-coloured geometry toolkit:
+                 sweeps, lathes, leaves, petals, lofts), flora/ (trees & herbs: recursive branching, bark
+                 paint, crown shading, seasons, three detail tiers), builtin/ (fungi, fallen log, termite
+                 mound, nest, seal, dolphin/orca/humpback, man o' war, sea hare)
   biomes/        templates (14 dioramas + guides), factory (template → document with seeded scatter)
   code/          Blockly blocks & async JS generators, toolbox, theme, compile (workspace → async
                  functions), runtime (threads, events, clones, snapshot/restore, block API), recipes,
                  sound (WebAudio synth, speech, ambience)
   storage/       IndexedDB projects (localStorage fallback), export/import, settings
-  ui/            React UI: Welcome, Studio, Viewport (pointer/touch), BuildPanels, ExplorePanels,
-                 CodePanel
+  game/          progress (XP, levels, ranks, discoveries, badges, stars; stored in localStorage),
+                 ecology (ecosystem health score, quests, stars)
+  ui/            React UI: Welcome, Studio, Viewport (pointer/touch gestures), BuildPanels, ExplorePanels,
+                 CodePanel, BottomSheet (draggable phone sheet), ContextBar, AssetThumb + thumbs3d
+                 (background 3D thumbnails cached in IndexedDB), feedback (haptics, UI sounds), game/
+                 (HUD chips, quest tracker, journal, celebrations)
+  review/        asset review harness (review.html)
 ```
 
 **How the reference assets are used.** Every module in `References/` exports `createAsset(params)`, a `params` schema and usually `rig`, `COLORWAYS` and `userData.update/setNight`. `src/assets/modules.ts` registers them with `import.meta.glob`, so each becomes its own chunk. `builder.ts` adds per-quality parameters (e.g. draft rigs and lighter plant foliage on phones), turns Wildform animals to face +Z, consolidates their meshes per animated joint, caches a prototype per parameter set and clones it (skinned rigs via `SkeletonUtils`), and discovers animation clips (mammal & bird rigs), rig pivots (reptiles, Wildform) and update hooks (water-world, aquarium). The inspector UI is generated from each module's own `params` schema.
@@ -139,16 +157,24 @@ src/
 **Code execution.** Each object's workspace compiles to plain async JavaScript: hats become entries in a factory, loops yield every frame (`await api.tick()`), and every block calls a thread-local API. Calling the factory creates fresh closures, which gives each object — and each clone — its own variables. Threads are cancelled cooperatively on Stop and the scene snapshot is restored.
 
 ### Adding a species or a biome
-- **Species:** add a row to the matching `src/assets/data-*.ts` table (or an `add({...})` entry in `catalog.ts`) with its asset module, params, biomes, taxonomy, diet, food tags (`tags` it *is*, `eats` it eats) and a fact.
+- **Species:** add a row to the matching `src/assets/data-*.ts` table (or an `add({...})` entry in `catalog.ts`) with its asset module, params, biomes, taxonomy, diet, food tags (`tags` it *is*, `eats` it eats) and a fact. A new tree or herb is a species entry in `src/assets/flora/trees.ts` or `herbs.ts` plus an `FL(...)` / `HB(...)` line in `catalog.ts`.
 - **Biome:** add a template to `src/biomes/templates.ts` with a terrain recipe or a habitat tile, environment, placements (fixed `at` or scattered `count` + `area` with `where: 'dry' | 'wet'`) and a guide. Attach starter scripts with `scriptsFor(['wander', 'hello'], name)`.
+
+### Developer tools
+Run these with `npm run dev` stopped (the review and UI scripts start their own Vite server); they use the Playwright Chromium already on the machine.
+
+- **Asset review harness** — `review.html` renders catalog assets through the app's own builder from several views (front ¾, side, top, with a marker showing which way is forward). Query parameters pick what to show: `ids=`, `cat=`, `group=`, `family=`, `match=`, `views=`, `clip=`, `season=`, `q=` (quality), or variants of one asset with `base=<id>&v=[{…},…]`. `node tools/review-assets.mjs --query "cat=animals&cols=3" --per 15 --out shots/animals` saves contact sheets.
+- **Screenshots** — `node tools/shoot.mjs` captures app URLs (desktop or `--device phone`) and prints triangles, draw calls and actor counts.
+- **UI smoke test** — `node tools/ui-check.mjs --out shots/ui-check` taps an animal (field card + discovery), selects it in Build (context bar, resize), twists and pinches it with two fingers and drags the phone sheet, on desktop and phone, and reports any page errors.
 
 ---
 
 ## Devices & performance
 
-- Built on standard WebGL 2, WebAudio and Speech Synthesis, for current desktop and mobile browsers. Automated checks run in Chromium at desktop and phone sizes; the touch layout uses bottom sheets, one-finger orbit / two-finger pan-zoom and an on-screen joystick.
+- Built on standard WebGL 2, WebAudio and Speech Synthesis, for current desktop and mobile browsers. Automated checks run in Chromium at desktop and phone sizes.
+- Touch: a draggable bottom sheet with snap points and fling (the scene re-centres in the space left above it, so a focused or selected object stays in view), a bottom tab bar, one-finger orbit / two-finger pan-zoom, long-press to pick up, two-finger twist and pinch on a held object, forgiving taps on thin things like legs and branches, short haptic ticks where the device supports them, and safe-area padding for notched phones.
 - Three graphics tiers (Fast / Balanced / Detailed) pick model detail, shadow resolution and grass density; the renderer also adapts its resolution to keep the frame rate up. Phones default to Fast.
-- All geometry is procedural and texture-free; the only network requests are fonts (optional — system fonts are the fallback).
+- All geometry is procedural and texture-free; the only network requests are fonts (optional — system fonts are the fallback). Library thumbnails are rendered in the background on first view and cached in IndexedDB.
 
 ## Licences
 

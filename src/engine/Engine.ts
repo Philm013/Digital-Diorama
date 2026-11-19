@@ -167,8 +167,30 @@ export class Engine {
     this.labels.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.applyViewOffset();
     this.weather.setPixelRatio(h * this.pixelRatio);
   };
+
+  /**
+   * Screen pixels covered by UI along the bottom of the view (the phone's build/code sheet).
+   * The view's centre slides up into the part that is still visible, so whatever the camera
+   * looks at — a focused animal, the middle of the diorama — isn't hidden under the sheet.
+   */
+  setBottomInset(px: number) { this.insetTarget = Math.max(0, px); }
+  private insetTarget = 0;
+  private insetNow = 0;
+  private updateInset(dt: number) {
+    const want = this.walk?.active || this.xr?.active ? 0 : this.insetTarget;
+    if (want === this.insetNow) return;
+    const next = this.insetNow + (want - this.insetNow) * Math.min(1, dt * 12);
+    this.insetNow = Math.abs(want - next) < 0.5 || this.walk?.active ? want : next;
+    this.applyViewOffset();
+  }
+  private applyViewOffset() {
+    const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
+    if (this.insetNow < 0.5) { if (this.camera.view?.enabled) this.camera.clearViewOffset(); }
+    else this.camera.setViewOffset(w, h, 0, Math.min(h * 0.45, this.insetNow / 2), w, h);
+  }
 
   setQuality(q: Quality) {
     this.quality = q;
@@ -281,6 +303,7 @@ export class Engine {
     if (def.family === 'deciduous') return { leafHueAndSeason: { spring: 'freshSpring', summer: 'deepSummer', autumn: 'peakAutumn', winter: 'moonlit' }[season] };
     if (def.family === 'terraTree' && ['broadleaf', 'shrub', 'acacia'].includes(String(def.params.species))) return season === 'autumn' ? { colorway: 'autumn' } : season === 'winter' ? { colorway: 'dusk' } : {};
     if (def.family === 'water' && def.id.startsWith('grove/') && season === 'autumn') return { colorway: 'autumn' };
+    if (def.family === 'flora' && def.seasonal) return { season };
     return {};
   }
   private paramsFor(a: ActorDoc, def: AssetDef) {
@@ -625,16 +648,33 @@ export class Engine {
     const r = this.renderer.domElement.getBoundingClientRect();
     return new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
   }
-  pickActor(clientX: number, clientY: number): { actor: Actor; point: THREE.Vector3 } | null {
-    this.raycaster.setFromCamera(this.ndc(clientX, clientY), this.camera);
+  /**
+   * The actor under a screen point. `slop` (px) adds "fat-finger" tolerance: when the
+   * centre ray misses, rays on two small rings around the point are tried, nearest first,
+   * so thin legs, tails and tiny insects are still easy to tap.
+   */
+  pickActor(clientX: number, clientY: number, slop = 0): { actor: Actor; point: THREE.Vector3 } | null {
     const roots = [...this.actors.values()].filter((a) => a.root.visible && a.model).map((a) => a.root);
-    const hits = this.raycaster.intersectObjects(roots, true);
-    for (const h of hits) {
-      if ((h.object as THREE.Mesh).name === 'selection-ring' || h.object.name === 'toothpick') continue;
-      let o: THREE.Object3D | null = h.object;
-      while (o && !o.userData.actorId) o = o.parent;
-      const id = o?.userData.actorId;
-      if (id && this.actors.has(id)) return { actor: this.actors.get(id)!, point: h.point };
+    const cast = (x: number, y: number) => {
+      this.raycaster.setFromCamera(this.ndc(x, y), this.camera);
+      const hits = this.raycaster.intersectObjects(roots, true);
+      for (const h of hits) {
+        if ((h.object as THREE.Mesh).name === 'selection-ring' || h.object.name === 'toothpick') continue;
+        let o: THREE.Object3D | null = h.object;
+        while (o && !o.userData.actorId) o = o.parent;
+        const id = o?.userData.actorId;
+        if (id && this.actors.has(id)) return { actor: this.actors.get(id)!, point: h.point };
+      }
+      return null;
+    };
+    const hit = cast(clientX, clientY);
+    if (hit || slop <= 0) return hit;
+    for (const r of [slop * 0.5, slop]) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const h = cast(clientX + Math.cos(a) * r, clientY + Math.sin(a) * r);
+        if (h) return h;
+      }
     }
     return null;
   }
@@ -837,9 +877,43 @@ export class Engine {
     }
     if (this.walk?.active) this.walk.update(dt);
     else if (!this.xr?.active) this.controls.update();
+    this.updateInset(dt);
     this.renderer.render(this.scene, this.camera);
-    if (!this.xr?.active) { this.labels.render(this.scene, this.camera); this.adaptResolution(dt); }
+    if (!this.xr?.active) { this.labels.render(this.scene, this.camera); this.declutterLabels(); this.adaptResolution(dt); }
   };
+
+  /**
+   * Hide toothpick flags that would overlap a nearer one (crowded phone views, zoomed-out
+   * overviews). The selected object and student-written labels win; speech bubbles stay clear.
+   * Runs every few frames with a little hysteresis so flags don't flicker while the camera moves.
+   */
+  private declutterTick = 0;
+  private declutterLabels() {
+    if (++this.declutterTick % 6) return;
+    const cam = this.camera.position;
+    const items: { a: Actor; r: DOMRect; key: number; off: boolean }[] = [];
+    const taken: DOMRect[] = [];
+    for (const a of this.actors.values()) {
+      const b = a.bubble?.element;
+      if (b && b.style.display !== 'none') { const r = b.getBoundingClientRect(); if (r.width) taken.push(r); }
+      const el = a.label?.element;
+      if (!el || el.style.display === 'none') continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width) continue;
+      const off = el.classList.contains('dd-flag-off');
+      const custom = !!a.doc.label?.text?.trim();
+      const key = a.id === this.selectedId ? -1 : a.root.position.distanceTo(cam) * (off ? 1 : 0.8) * (custom ? 0.7 : 1);
+      items.push({ a, r, key, off });
+    }
+    items.sort((x, y) => x.key - y.key);
+    for (const it of items) {
+      const pad = it.off ? 6 : -3; // a hidden flag needs clear space to come back
+      const hit = it.key >= 0 && taken.some((t) => it.r.left < t.right + pad && it.r.right > t.left - pad && it.r.top < t.bottom + pad && it.r.bottom > t.top - pad);
+      if (!hit) taken.push(it.r);
+      it.a.label!.element.classList.toggle('dd-flag-off', hit);
+      if (it.a.toothpick) it.a.toothpick.visible = !hit;
+    }
+  }
 
   private adaptResolution(dt: number) {
     this.frameTimes.push(dt);

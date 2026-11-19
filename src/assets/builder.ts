@@ -4,7 +4,7 @@ import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { ANIMALS as WILDFORM } from '@ref/Animals/src/data/catalog';
 import type { AssetDef } from './types';
 import { loadModule, type AssetModule } from './modules';
-import { BUILTINS } from './builtin/fungi';
+import { BUILTINS } from './builtin';
 import type { Quality } from '../engine/types';
 
 export type RigRole = 'head' | 'tail' | 'wing' | 'leg' | 'jaw' | 'body' | 'other';
@@ -111,6 +111,7 @@ function qualityParams(def: AssetDef, q: Quality): Record<string, unknown> {
     case 'wildform': return { detailLevel: q === 'high' ? 'Studio' : 'Draft', mergeForProduction: false };
     case 'conifer': return {};
     case 'deciduous': return { leafDetailLevel: 'low', foliageDensity: q === 'low' ? 0.3 : undefined };
+    case 'flora': return { detail: q };
     case 'water': return q === 'low' ? { resolution: 'low' } : {};
     // Worldflora plants are very detailed; trim plumes/flowers/foliage on lower tiers
     case 'plant': return q === 'high' ? {} : q === 'medium'
@@ -128,7 +129,7 @@ const UNIQUE = new Set(['water', 'aquarium', 'builtin']);
 async function buildRaw(def: AssetDef, params: Record<string, unknown>): Promise<Proto> {
   if (def.path.startsWith('builtin:')) {
     const b = BUILTINS[def.path.slice(8)];
-    return { raw: b.createAsset(params), clips: [], schema: b.params, rigSpec: {} };
+    return { raw: b.createAsset(params), clips: [], schema: b.params, rigSpec: b.rig ?? {} };
   }
   const mod: AssetModule = await loadModule(def.path);
   const p = { ...params };
@@ -137,7 +138,7 @@ async function buildRaw(def: AssetDef, params: Record<string, unknown>): Promise
     const cfg = WILD_BY_ID[String(p.__animal)];
     p.__animal = cfg;
     if (mod.getSchema) schema = mod.getSchema(cfg);
-  }
+  } else if (def.family === 'flora' && mod.getSchema) schema = mod.getSchema(p);
   const raw = mod.createAsset(p);
   let clips: THREE.AnimationClip[] = [];
   if ((def.family === 'mammal' || def.family === 'bird') && mod.createClips) clips = mod.createClips(raw);
@@ -148,12 +149,12 @@ async function buildRaw(def: AssetDef, params: Record<string, unknown>): Promise
   return { raw, clips, schema, rigSpec };
 }
 
-export async function buildModel(def: AssetDef, userParams: Record<string, unknown>, quality: Quality, trueScale: boolean): Promise<BuiltModel> {
+export async function buildModel(def: AssetDef, userParams: Record<string, unknown>, quality: Quality, trueScale: boolean, cache = true): Promise<BuiltModel> {
   const params = { ...def.params, ...stripUndefined(qualityParams(def, quality)), ...userParams };
   const key = def.id + '|' + JSON.stringify(params);
   let proto: Proto;
   let raw: THREE.Object3D;
-  if (UNIQUE.has(def.family)) {
+  if (UNIQUE.has(def.family) || !cache) {
     proto = await buildRaw(def, params);
     raw = proto.raw;
   } else {
@@ -244,6 +245,7 @@ export async function getSchema(def: AssetDef) {
   if (def.path.startsWith('builtin:')) return BUILTINS[def.path.slice(8)].params;
   const mod = await loadModule(def.path);
   if (def.family === 'wildform' && mod.getSchema) return mod.getSchema(WILD_BY_ID[String(def.params.__animal)]);
+  if (def.family === 'flora' && mod.getSchema) return mod.getSchema(def.params);
   return mod.params ?? {};
 }
 
