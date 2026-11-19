@@ -167,8 +167,30 @@ export class Engine {
     this.labels.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.applyViewOffset();
     this.weather.setPixelRatio(h * this.pixelRatio);
   };
+
+  /**
+   * Screen pixels covered by UI along the bottom of the view (the phone's build/code sheet).
+   * The view's centre slides up into the part that is still visible, so whatever the camera
+   * looks at — a focused animal, the middle of the diorama — isn't hidden under the sheet.
+   */
+  setBottomInset(px: number) { this.insetTarget = Math.max(0, px); }
+  private insetTarget = 0;
+  private insetNow = 0;
+  private updateInset(dt: number) {
+    const want = this.walk?.active || this.xr?.active ? 0 : this.insetTarget;
+    if (want === this.insetNow) return;
+    const next = this.insetNow + (want - this.insetNow) * Math.min(1, dt * 12);
+    this.insetNow = Math.abs(want - next) < 0.5 || this.walk?.active ? want : next;
+    this.applyViewOffset();
+  }
+  private applyViewOffset() {
+    const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
+    if (this.insetNow < 0.5) { if (this.camera.view?.enabled) this.camera.clearViewOffset(); }
+    else this.camera.setViewOffset(w, h, 0, Math.min(h * 0.45, this.insetNow / 2), w, h);
+  }
 
   setQuality(q: Quality) {
     this.quality = q;
@@ -855,6 +877,7 @@ export class Engine {
     }
     if (this.walk?.active) this.walk.update(dt);
     else if (!this.xr?.active) this.controls.update();
+    this.updateInset(dt);
     this.renderer.render(this.scene, this.camera);
     if (!this.xr?.active) { this.labels.render(this.scene, this.camera); this.declutterLabels(); this.adaptResolution(dt); }
   };

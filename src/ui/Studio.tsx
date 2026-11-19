@@ -209,6 +209,8 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   const ctx = useMemo(() => api, [api]);
   const [sheetIdx, setSheetIdx] = useState(1);
   const [sheetH, setSheetH] = useState(0);
+  // keep the scene centred in the part of the view the phone sheet leaves visible
+  useEffect(() => { engine?.setBottomInset(!wide && (mode === 'build' || mode === 'code') ? sheetH : 0); }, [engine, wide, mode, sheetH]);
   const selected = engine?.getActor(engine.selectedId);
   const showContext = !!ctx && mode === 'build' && !playing && !!selected && !selected.isClone && !engine?.walk?.active;
   const goCode = useCallback(() => { if (engine && selected) { engine.select(selected.id); setMode('code'); } }, [engine, selected, setMode]);

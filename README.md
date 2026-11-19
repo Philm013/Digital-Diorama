@@ -172,7 +172,7 @@ Run these with `npm run dev` stopped (the review and UI scripts start their own 
 ## Devices & performance
 
 - Built on standard WebGL 2, WebAudio and Speech Synthesis, for current desktop and mobile browsers. Automated checks run in Chromium at desktop and phone sizes.
-- Touch: a draggable bottom sheet with snap points and fling, a bottom tab bar, one-finger orbit / two-finger pan-zoom, long-press to pick up, two-finger twist and pinch on a held object, forgiving taps on thin things like legs and branches, short haptic ticks where the device supports them, and safe-area padding for notched phones.
+- Touch: a draggable bottom sheet with snap points and fling (the scene re-centres in the space left above it, so a focused or selected object stays in view), a bottom tab bar, one-finger orbit / two-finger pan-zoom, long-press to pick up, two-finger twist and pinch on a held object, forgiving taps on thin things like legs and branches, short haptic ticks where the device supports them, and safe-area padding for notched phones.
 - Three graphics tiers (Fast / Balanced / Detailed) pick model detail, shadow resolution and grass density; the renderer also adapts its resolution to keep the frame rate up. Phones default to Fast.
 - All geometry is procedural and texture-free; the only network requests are fonts (optional — system fonts are the fallback). Library thumbnails are rendered in the background on first view and cached in IndexedDB.
 
