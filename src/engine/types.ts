@@ -71,6 +71,8 @@ export interface DioramaDoc {
   actors: ActorDoc[];
   worldScripts?: unknown;
   tour?: string[];
+  /** game progress for this diorama: completed quests and one-off moments */
+  progress?: { quests?: string[]; flags?: string[]; seasons?: string[] };
 }
 
 export const DEFAULT_ENV: EnvDoc = {

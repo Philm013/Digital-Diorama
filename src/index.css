@@ -92,16 +92,26 @@ button.dd-card:hover { transform: translateY(-3px) rotate(-0.3deg); box-shadow: 
 }
 .dd-side { background: #fbf8f1; }
 .dd-topbar {
-  background: linear-gradient(180deg, #24342b 0%, #1e2b24 100%);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
-  border-bottom: 3px solid var(--accent, #3f7d3a);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(180deg, #1d2a23 0%, #16211b 100%);
+  box-shadow: 0 6px 24px -8px rgba(0, 0, 0, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  position: relative;
 }
-.dd-bottomnav { background: #1e2b24; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.dd-topbar::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent, #3f7d3a) 15%, var(--accent, #3f7d3a) 85%, transparent);
+  opacity: 0.9;
+}
+.dd-bottomnav {
+  background: linear-gradient(180deg, #1a261f, #121a16);
+  box-shadow: 0 -8px 24px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
 .dd-sheet {
   background: #fbf8f1;
-  box-shadow: 0 -10px 40px -10px rgba(0, 0, 0, 0.45);
-  transition: height 0.25s ease;
+  box-shadow: 0 -14px 44px -12px rgba(0, 0, 0, 0.5), 0 -1px 0 rgba(255, 255, 255, 0.6) inset;
 }
+.dd-sheet-anim { transition: height 0.32s cubic-bezier(0.2, 0.9, 0.25, 1.08); }
 .dd-dock { background: rgba(255, 253, 246, 0.95); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.06); }
 .dd-dock::-webkit-scrollbar, .dd-scroll-x::-webkit-scrollbar { display: none; }
 .dd-dock, .dd-scroll-x { scrollbar-width: none; }
@@ -137,4 +147,144 @@ textarea.dd-input { resize: vertical; line-height: 1.4; }
 .blocklyText { font-family: var(--font-sans) !important; }
 @media (max-width: 640px) {
   .dd-code .blocklyToolboxCategoryLabel, .dd-code .blocklyTreeLabel { font-size: 11px; }
+}
+
+
+/* ======================================================================
+   Game UI layer: glass HUD, chunky buttons, celebrations, cards
+   ====================================================================== */
+@layer components {
+.dd-glass {
+  background: linear-gradient(180deg, rgba(30, 44, 36, 0.86), rgba(18, 27, 22, 0.88));
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(12px) saturate(1.2);
+  box-shadow: 0 14px 40px -14px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.dd-card-dark {
+  background: radial-gradient(120% 140% at 0% 0%, #2c4234 0%, #1a2820 55%, #131d18 100%);
+  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+.dd-hudchip {
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.dd-hudchip:hover { background: rgba(255, 255, 255, 0.13); }
+.dd-hudchip:active { transform: scale(0.96); }
+.dd-pop { animation: dd-pop-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2); transform-origin: top right; }
+@keyframes dd-pop-in { from { opacity: 0; transform: translateY(-6px) scale(0.96); } to { opacity: 1; transform: none; } }
+
+/* chunky "game" buttons that press down */
+.dd-3d {
+  position: relative;
+  box-shadow: 0 4px 0 var(--edge, rgba(0, 0, 0, 0.28)), 0 8px 18px -8px rgba(0, 0, 0, 0.45);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+}
+.dd-3d:hover { filter: brightness(1.06); }
+.dd-3d:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--edge, rgba(0, 0, 0, 0.28)), 0 3px 8px -4px rgba(0, 0, 0, 0.4); }
+
+/* mode switcher */
+.dd-modes { background: rgba(0, 0, 0, 0.32); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(255, 255, 255, 0.06); }
+.dd-mode-ind {
+  background: linear-gradient(180deg, #ffffff, #eef3ea);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25), 0 6px 14px -4px rgba(0, 0, 0, 0.45);
+  transition: transform 0.32s cubic-bezier(0.25, 0.9, 0.3, 1.15), width 0.32s cubic-bezier(0.25, 0.9, 0.3, 1.15);
+}
+
+/* celebrations */
+.dd-xp-floater {
+  color: #3d2a00;
+  background: linear-gradient(180deg, #ffe680, #ffbf2e);
+  box-shadow: 0 3px 0 #c98a00, 0 8px 18px -6px rgba(0, 0, 0, 0.45);
+  animation: dd-float-up 1.6s ease-out forwards;
+}
+@keyframes dd-float-up { 0% { opacity: 0; transform: translateY(10px) scale(0.8); } 15% { opacity: 1; transform: translateY(0) scale(1.08); } 25% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-26px); } }
+.dd-banner {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--b) 92%, white) 0%, var(--b) 45%, color-mix(in srgb, var(--b) 70%, black) 100%);
+  box-shadow: 0 6px 0 color-mix(in srgb, var(--b) 55%, black), 0 22px 44px -12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  animation: dd-banner-in 0.5s cubic-bezier(0.2, 1.3, 0.3, 1) both;
+}
+.dd-banner-big { transform-origin: center; }
+@keyframes dd-banner-in { 0% { opacity: 0; transform: translateY(-30px) scale(0.6) rotate(-4deg); } 100% { opacity: 1; transform: none; } }
+.dd-medal {
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.55) 60%, rgba(255, 255, 255, 0.25));
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.12), 0 3px 8px rgba(0, 0, 0, 0.25);
+  animation: dd-wiggle 0.9s ease-in-out 0.3s;
+}
+@keyframes dd-wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-12deg) scale(1.1); } 50% { transform: rotate(10deg) scale(1.12); } 75% { transform: rotate(-5deg); } }
+.dd-medal-badge {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--b) 55%, white), var(--b) 62%, color-mix(in srgb, var(--b) 65%, black));
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--b) 50%, black), inset 0 2px 0 rgba(255, 255, 255, 0.4), 0 0 0 4px rgba(255, 255, 255, 0.85), 0 0 0 5px rgba(0, 0, 0, 0.08);
+}
+.dd-beat { animation: dd-beat 1.2s ease-in-out infinite; }
+@keyframes dd-beat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.22); } 30% { transform: scale(1); } 45% { transform: scale(1.12); } }
+
+/* thumbnails & tiles */
+.dd-thumb-in { animation: dd-fade-pop 0.35s ease-out; }
+@keyframes dd-fade-pop { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: none; } }
+.dd-shimmer-text { animation: dd-breathe 1.4s ease-in-out infinite; }
+@keyframes dd-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+.dd-tile { transition: transform 0.12s ease, box-shadow 0.15s ease; }
+.dd-tile:hover { transform: translateY(-2px); box-shadow: 0 10px 18px -10px rgba(40, 30, 10, 0.5); }
+.dd-tile:active { transform: scale(0.95); }
+.dd-inv-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f7f2e6 100%);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+.dd-inv-card .dd-inv-glow { background: radial-gradient(60% 55% at 50% 45%, color-mix(in srgb, var(--role) 26%, transparent), transparent 70%); }
+
+/* species "trading card" */
+.dd-species-card { background: #fffdf8; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.05); }
+.dd-species-hero {
+  background:
+    radial-gradient(70% 80% at 50% 60%, rgba(255, 255, 255, 0.55), transparent 70%),
+    linear-gradient(160deg, color-mix(in srgb, var(--role) 55%, white) 0%, color-mix(in srgb, var(--role) 85%, black) 100%);
+}
+.dd-ribbon {
+  background: linear-gradient(90deg, #ffcf3d, #ff9f1c);
+  color: #3a2400;
+  box-shadow: 0 3px 0 #c27400;
+  animation: dd-pulse-glow 1.6s ease-in-out infinite;
+}
+@keyframes dd-pulse-glow { 0%, 100% { filter: drop-shadow(0 0 0 rgba(255, 200, 40, 0)); } 50% { filter: drop-shadow(0 0 10px rgba(255, 200, 40, 0.8)); } }
+
+/* explore hotbar */
+.dd-hotbar { background: linear-gradient(180deg, rgba(30, 44, 36, 0.9), rgba(16, 24, 20, 0.92)); box-shadow: 0 16px 40px -14px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.06); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.dd-hotkey { background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07); }
+.dd-hotkey:hover { background: rgba(255, 255, 255, 0.14); }
+.dd-hotkey.on { background: linear-gradient(180deg, #ffe680, #ffbf2e); color: #2b2100; box-shadow: 0 3px 0 #c98a00; }
+
+/* welcome / title screen */
+.dd-title-sky { background: linear-gradient(180deg, #5fa8e8 0%, #9fd0f2 45%, #e7f3f2 75%, #f4ecdc 100%); }
+.dd-cloud { position: absolute; background: #fff; border-radius: 999px; opacity: 0.9; filter: blur(0.3px); animation: dd-drift linear infinite; }
+.dd-cloud::before, .dd-cloud::after { content: ''; position: absolute; background: #fff; border-radius: 50%; }
+.dd-cloud::before { width: 55%; height: 160%; left: 12%; top: -70%; }
+.dd-cloud::after { width: 40%; height: 120%; right: 14%; top: -45%; }
+@keyframes dd-drift { from { transform: translateX(-30vw); } to { transform: translateX(130vw); } }
+.dd-logo { text-shadow: 0 3px 0 #fff, 0 6px 0 rgba(43, 38, 32, 0.15), 0 14px 30px rgba(43, 38, 32, 0.25); letter-spacing: -0.01em; }
+.dd-bob { animation: dd-bob 3.2s ease-in-out infinite; }
+@keyframes dd-bob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
+.dd-level-card { transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.22s ease; }
+.dd-level-card:hover { transform: translateY(-6px) rotate(-0.6deg); box-shadow: 0 24px 40px -18px rgba(60, 40, 10, 0.55); }
+.dd-level-card:active { transform: translateY(-2px) scale(0.98); }
+.dd-cta {
+  background: linear-gradient(180deg, #4fd36a, #2fae4b);
+  box-shadow: 0 6px 0 #1f7f35, 0 16px 30px -10px rgba(31, 127, 53, 0.7), inset 0 2px 0 rgba(255, 255, 255, 0.35);
+}
+.dd-cta:active { transform: translateY(4px); box-shadow: 0 2px 0 #1f7f35, 0 6px 14px -6px rgba(31, 127, 53, 0.7), inset 0 2px 0 rgba(255, 255, 255, 0.35); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dd-cloud, .dd-bob, .dd-beat, .dd-ribbon, .dd-medal { animation: none !important; }
+}
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 8px); }
+.pt-safe { padding-top: env(safe-area-inset-top); }
+
+.dd-modal { animation: dd-modal-in 0.3s cubic-bezier(0.2, 1.1, 0.3, 1) both; }
+.dd-modal-bg { animation: dd-fade 0.2s ease-out both; }
+@keyframes dd-modal-in { from { opacity: 0; transform: translateY(40px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes dd-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 640px) {
+  .dd-flag { font-size: 10.5px; padding: 2px 6px 2px 5px; border-left-width: 2px; max-width: 120px; }
 }

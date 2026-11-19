@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import { X, Crosshair, Volume2, Footprints, Tag, Network, BookOpen, Presentation, Clock, CloudSun, ChevronLeft, ChevronRight, Pause, Play, Video, Maximize2, CheckCircle2, Circle, Glasses, Smartphone, Move } from 'lucide-react';
+import { X, Crosshair, Volume2, Footprints, Tag, Network, BookOpen, Presentation, Clock, CloudSun, ChevronLeft, ChevronRight, Pause, Play, Video, Maximize2, CheckCircle2, Circle, Glasses, Smartphone, Move, Library } from 'lucide-react';
 import { XRMode } from '../engine/XRMode';
 import { useEngine, useEngineEvent, useEngineVersion } from './store';
 import { Btn, Chip, IconBtn, Modal, Segmented, Slider, statusColor } from './common';
@@ -11,8 +11,12 @@ import { timeLabel } from './BuildPanels';
 import type { Actor } from '../engine/Actor';
 import type { Engine } from '../engine/Engine';
 import type { Weather } from '../engine/types';
+import { AssetThumb } from './AssetThumb';
+import { discover, isDiscovered, awardBadge } from '../game/progress';
+import { flag, quests, starsFor } from '../game/ecology';
+import { haptic, uiSound } from './feedback';
 
-export function ExploreLayer({ wide }: { wide: boolean; playing?: boolean }) {
+export function ExploreLayer({ wide, onJournal }: { wide: boolean; playing?: boolean; onJournal?: () => void }) {
   const engine = useEngine();
   useEngineVersion();
   const [card, setCard] = useState<string | null>(null);
@@ -41,6 +45,7 @@ export function ExploreLayer({ wide }: { wide: boolean; playing?: boolean }) {
       engine.xr!.start(kind, overlayRef.current).catch((err: Error) => { setXrOn(false); engine.toast(`Couldn’t start ${kind.toUpperCase()}: ${err.message}`, 'error'); });
     });
   };
+  const walkIn = (eye: number) => { engine.walk?.enter(eye); document.dispatchEvent(new CustomEvent('dd-walk', { detail: eye })); };
   const xrOverlay = (
     <div ref={overlayRef} className={xrOn ? 'pointer-events-none fixed inset-0 z-[60] flex flex-col items-center justify-between p-4' : 'hidden'}>
       <div className="pointer-events-auto rounded-2xl bg-black/60 px-4 py-2 text-center font-display text-sm font-semibold text-white">
@@ -54,26 +59,36 @@ export function ExploreLayer({ wide }: { wide: boolean; playing?: boolean }) {
   );
   if (tour) return <Tour onExit={() => setTour(false)} />;
   const actor = engine.getActor(card);
+  const tools: { key: string; icon: React.ReactNode; label: string; on?: boolean; fn: () => void; sep?: boolean }[] = [
+    { key: 'labels', icon: <Tag size={20} />, label: 'Labels', on: engine.env.labels, fn: () => engine.setEnv({ labels: !engine.env.labels }, false) },
+    { key: 'time', icon: <Clock size={20} />, label: timeLabel(engine.env.time), on: pop === 'time', fn: () => setPop(pop === 'time' ? null : 'time') },
+    { key: 'weather', icon: <CloudSun size={20} />, label: 'Weather', on: pop === 'weather', fn: () => setPop(pop === 'weather' ? null : 'weather'), sep: true },
+    { key: 'web', icon: <Network size={20} />, label: 'Food web', fn: () => setWeb(true) },
+    { key: 'guide', icon: <BookOpen size={20} />, label: 'Guide', fn: () => setGuide(true) },
+    { key: 'journal', icon: <Library size={20} />, label: 'Journal', fn: () => onJournal?.() },
+    { key: 'tour', icon: <Presentation size={20} />, label: 'Tour', fn: () => { audio(); engine.select(null); setTour(true); } },
+    { key: 'walk', icon: <Footprints size={20} />, label: 'Walk in', fn: () => walkIn(1.6) },
+    ...(xrSupport.ar ? [{ key: 'ar', icon: <Smartphone size={20} />, label: 'AR table', fn: () => startXr('ar') }] : []),
+    ...(xrSupport.vr ? [{ key: 'vr', icon: <Glasses size={20} />, label: 'VR', fn: () => startXr('vr') }] : []),
+    { key: 'home', icon: <Maximize2 size={20} />, label: 'Overview', fn: () => { engine.follow(null); engine.frameCamera(); } },
+  ];
   return (
     <>
-      {actor && !walking && <InfoCard actor={actor} wide={wide} onClose={() => { setCard(null); engine.select(null); }} />}
-      {!walking && (
-        <div className={clsx('absolute inset-x-0 z-20 flex justify-center px-2', wide ? 'bottom-4' : 'bottom-2')}>
-          <div className="dd-dock relative flex max-w-full items-center gap-0.5 overflow-x-auto rounded-2xl p-1.5 shadow-xl">
-            <DockBtn icon={<Tag size={18} />} label="Labels" active={engine.env.labels} onClick={() => engine.setEnv({ labels: !engine.env.labels }, false)} />
-            <DockBtn icon={<Clock size={18} />} label={timeLabel(engine.env.time)} active={pop === 'time'} onClick={() => setPop(pop === 'time' ? null : 'time')} />
-            <DockBtn icon={<CloudSun size={18} />} label="Weather" active={pop === 'weather'} onClick={() => setPop(pop === 'weather' ? null : 'weather')} />
-            <span className="mx-1 h-7 w-px bg-black/10" />
-            <DockBtn icon={<Network size={18} />} label="Food web" onClick={() => setWeb(true)} />
-            <DockBtn icon={<BookOpen size={18} />} label="Guide" onClick={() => setGuide(true)} />
-            <DockBtn icon={<Presentation size={18} />} label="Tour" onClick={() => { audio(); engine.select(null); setTour(true); }} />
-            <DockBtn icon={<Footprints size={18} />} label="Walk in" onClick={() => { engine.walk?.enter(1.6); }} />
-            {xrSupport.ar && <DockBtn icon={<Smartphone size={18} />} label="AR table" onClick={() => startXr('ar')} />}
-            {xrSupport.vr && <DockBtn icon={<Glasses size={18} />} label="VR" onClick={() => startXr('vr')} />}
-            <DockBtn icon={<Maximize2 size={18} />} label="Overview" onClick={() => { engine.follow(null); engine.frameCamera(); }} />
+      {actor && !walking && <InfoCard actor={actor} wide={wide} onClose={() => { setCard(null); engine.select(null); }} onWalk={walkIn} />}
+      {!walking && !(actor && !wide) && (
+        <div className={clsx('pointer-events-none absolute inset-x-0 z-20 flex justify-center px-2', wide ? 'bottom-4' : 'bottom-2')}>
+          <div className="dd-hotbar dd-scroll-x pointer-events-auto relative flex max-w-full items-center gap-1 overflow-x-auto rounded-[22px] p-1.5">
+            {tools.map((t) => (
+              <span key={t.key} className="flex shrink-0 items-center gap-1">
+                <button onClick={() => { uiSound('tick'); haptic(6); t.fn(); }} className={clsx('dd-hotkey flex h-[54px] min-w-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl px-2 font-display text-[11px] font-semibold transition', t.on ? 'on' : 'text-white/85')}>
+                  {t.icon}<span className="whitespace-nowrap">{t.label}</span>
+                </button>
+                {t.sep && <span className="mx-0.5 h-8 w-px bg-white/15" />}
+              </span>
+            ))}
           </div>
           {pop && (
-            <div className="dd-panel absolute bottom-[calc(100%+8px)] w-[min(92vw,360px)] rounded-2xl p-3" onMouseLeave={() => setPop(null)}>
+            <div className="dd-panel dd-pop pointer-events-auto absolute bottom-[calc(100%+10px)] w-[min(92vw,360px)] rounded-3xl p-3.5" onMouseLeave={() => setPop(null)}>
               {pop === 'time' && <TimePop />}
               {pop === 'weather' && <WeatherPop />}
             </div>
@@ -84,14 +99,6 @@ export function ExploreLayer({ wide }: { wide: boolean; playing?: boolean }) {
       <Modal open={web} onClose={() => setWeb(false)} title="🕸️ Food web" wide><FoodWeb onPick={(id) => { setWeb(false); engine.select(id); engine.focusActor(id); setCard(id); }} /></Modal>
       <Modal open={guide} onClose={() => setGuide(false)} title={`${BIOME_BY_ID[engine.doc.biome]?.emoji ?? '📦'} Habitat guide`} wide><Guide /></Modal>
     </>
-  );
-}
-
-function DockBtn({ icon, label, onClick, active }: { icon: React.ReactNode; label: string; onClick: () => void; active?: boolean }) {
-  return (
-    <button onClick={onClick} className={clsx('flex min-w-[56px] shrink-0 flex-col items-center gap-0.5 rounded-xl px-2 py-1 font-display text-[11px] font-semibold transition-all', active ? 'bg-amber-200 text-ink' : 'text-ink/75 hover:bg-black/5')}>
-      {icon}<span className="whitespace-nowrap">{label}</span>
-    </button>
   );
 }
 
@@ -127,7 +134,7 @@ function factText(a: Actor) {
   const d = a.def;
   return [a.doc.note, d.info.fact ?? d.info.blurb].filter(Boolean).join(' ');
 }
-function InfoCard({ actor, wide, onClose }: { actor: Actor; wide: boolean; onClose: () => void }) {
+function InfoCard({ actor, wide, onClose, onWalk }: { actor: Actor; wide: boolean; onClose: () => void; onWalk: (eye: number) => void }) {
   const engine = useEngine();
   const d = actor.def;
   const role = roleOf(d);
@@ -136,30 +143,29 @@ function InfoCard({ actor, wide, onClose }: { actor: Actor; wide: boolean; onClo
   const chain = [info.kingdom, info.phylum, info.class, info.order, info.family].filter(Boolean) as string[];
   const ex = actor.model?.exhibitScale ?? 1;
   const [following, setFollowing] = useState(false);
+  // reading the card discovers the species (XP the first time)
+  const [isNew] = useState(() => d.living !== false && !isDiscovered(d.id));
+  useEffect(() => { if (d.living !== false) discover(d.id, d.name, d.emoji); }, [d]);
   useEffect(() => () => { engine.follow(null); stopSpeech(); }, [engine, actor.id]);
   const eatsList = useMemo(() => speciesList(engine.actorList.filter((o) => o !== actor && !o.isClone && o.def.living !== false && webEats(engine, actor, o))), [engine, actor]);
   const eatenBy = useMemo(() => speciesList(engine.actorList.filter((o) => o !== actor && !o.isClone && webEats(engine, o, actor))), [engine, actor]);
   return (
-    <div className={clsx('dd-panel absolute z-30 flex flex-col overflow-hidden rounded-3xl', wide ? 'right-4 top-4 max-h-[calc(100%-110px)] w-[360px]' : 'inset-x-2 bottom-[86px] max-h-[52%]')}>
-      <div className="flex items-start gap-3 p-4 pb-2" style={{ background: `linear-gradient(135deg, ${rm.color}22, transparent)` }}>
-        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white text-4xl shadow-sm">{d.emoji}</div>
-        <div className="min-w-0 flex-1">
-          <div className="font-display text-xl font-semibold leading-tight">{actor.name}</div>
-          {info.scientific && <div className="text-sm italic text-ink/60">{info.scientific}</div>}
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            <Chip color={rm.color}>{rm.emoji} {rm.label}</Chip>
-            {info.diet && info.diet !== 'none' && info.diet !== 'producer' && <Chip color="#5a6b7d">diet: {info.diet}</Chip>}
-            {info.status && <Chip color={statusColor(info.status)}>{info.status}</Chip>}
-          </div>
+    <div className={clsx('dd-species-card dd-pop absolute z-30 flex flex-col overflow-hidden rounded-[28px]', wide ? 'right-4 top-4 max-h-[calc(100%-32px)] w-[370px]' : 'inset-x-2 bottom-2 max-h-[64%]')} style={{ ['--role' as string]: rm.color }}>
+      <div className="dd-species-hero relative flex items-end gap-3 px-4 pb-3 pt-3">
+        <div className="grid h-[92px] w-[92px] shrink-0 place-items-center rounded-3xl bg-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,.5)]"><AssetThumb id={d.id} emoji={d.emoji} size={88} /></div>
+        <div className="min-w-0 flex-1 pb-1 text-white [text-shadow:0_1px_3px_rgba(0,0,0,.35)]">
+          {isNew && <span className="dd-ribbon mb-1 inline-block rounded-full px-2 py-0.5 font-display text-[10.5px] font-bold uppercase tracking-wider">✨ New discovery +15 XP</span>}
+          <div className="font-display text-[22px] font-bold leading-tight">{actor.name}</div>
+          {info.scientific && <div className="text-sm italic text-white/85">{info.scientific}</div>}
         </div>
-        <IconBtn label="Close" onClick={onClose}><X size={18} /></IconBtn>
+        <IconBtn label="Close" onClick={onClose} className="absolute right-2 top-2 bg-black/15 text-white hover:bg-black/25"><X size={18} /></IconBtn>
       </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-3 text-sm">
-        {chain.length > 1 && (
-          <div className="flex flex-wrap items-center gap-1 text-[11px] font-bold text-ink/55">
-            {chain.map((c, i) => <span key={c + i} className="flex items-center gap-1">{i > 0 && <span className="text-ink/30">›</span>}<span className="rounded-md bg-black/5 px-1.5 py-0.5">{c}</span></span>)}
-          </div>
-        )}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 pb-3 pt-3 text-sm">
+        <div className="flex flex-wrap gap-1">
+          <Chip color={rm.color}>{rm.emoji} {rm.label}</Chip>
+          {info.diet && info.diet !== 'none' && info.diet !== 'producer' && <Chip color="#5a6b7d">diet: {info.diet}</Chip>}
+          {info.status && <Chip color={statusColor(info.status)}>{info.status}</Chip>}
+        </div>
         {(info.fact || info.blurb) && <p className="leading-relaxed text-ink/85">💡 {info.fact ?? info.blurb}</p>}
         {actor.doc.note && <div className="rounded-2xl bg-amber-50 p-3 text-ink/85 ring-1 ring-amber-200"><div className="mb-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-700">My notes</div>{actor.doc.note}</div>}
         <div className="grid grid-cols-2 gap-2 text-[12px]">
@@ -169,20 +175,28 @@ function InfoCard({ actor, wide, onClose }: { actor: Actor; wide: boolean; onClo
           {d.loco !== 'sessile' && d.loco !== 'scenery' && <Fact k="Moves by" v={{ walk: 'walking', fly: 'flying', swim: 'swimming', slither: 'slithering', hop: 'hopping', crawl: 'crawling' }[d.loco] ?? d.loco} />}
         </div>
         {(eatsList.length > 0 || eatenBy.length > 0) && (
-          <div className="rounded-2xl bg-black/[0.03] p-3 text-[12.5px]">
-            {eatsList.length > 0 && <div><b>Eats here:</b> {eatsList.slice(0, 8).join(', ')}</div>}
-            {eatenBy.length > 0 && <div className="mt-1"><b>Eaten by:</b> {eatenBy.slice(0, 8).join(', ')}</div>}
+          <div className="space-y-1.5 rounded-2xl bg-black/[0.03] p-3 text-[12.5px]">
+            {eatsList.length > 0 && <div className="flex flex-wrap items-center gap-1"><b className="mr-1">🍽️ Eats here:</b>{eatsList.slice(0, 8).map((n) => <span key={n} className="rounded-full bg-white px-2 py-0.5 font-semibold ring-1 ring-black/10">{n}</span>)}</div>}
+            {eatenBy.length > 0 && <div className="flex flex-wrap items-center gap-1"><b className="mr-1">⚠️ Eaten by:</b>{eatenBy.slice(0, 8).map((n) => <span key={n} className="rounded-full bg-white px-2 py-0.5 font-semibold ring-1 ring-black/10">{n}</span>)}</div>}
+          </div>
+        )}
+        {chain.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1 text-[11px] font-bold text-ink/55">
+            {chain.map((c, i) => <span key={c + i} className="flex items-center gap-1">{i > 0 && <span className="text-ink/30">›</span>}<span className="rounded-md bg-black/5 px-1.5 py-0.5">{c}</span></span>)}
           </div>
         )}
       </div>
-      <div className="flex flex-wrap gap-1.5 border-t border-black/5 p-3">
-        <Btn size="sm" onClick={() => engine.focusActor(actor.id)}><Crosshair size={14} /> Focus</Btn>
-        <Btn size="sm" onClick={() => { audio(); void speak(`${actor.name}. ${info.scientific ? 'Scientific name: ' + info.scientific + '.' : ''} ${factText(actor)}`); }}><Volume2 size={14} /> Read</Btn>
-        <Btn size="sm" active={following} onClick={() => { if (following) { engine.follow(null); setFollowing(false); } else { engine.focusActor(actor.id, 0.8, () => engine.follow(actor.id)); setFollowing(true); } }}><Video size={14} /> {following ? 'Stop' : 'Follow'}</Btn>
-        <Btn size="sm" onClick={() => engine.walk?.enter(Math.max(0.03, Math.min(1.6, actor.height * 0.9)))}><Footprints size={14} /> Eye level</Btn>
+      <div className="grid grid-cols-4 gap-1.5 border-t border-black/5 p-2.5">
+        <CardBtn icon={<Crosshair size={18} />} label="Focus" onClick={() => engine.focusActor(actor.id)} />
+        <CardBtn icon={<Volume2 size={18} />} label="Read" onClick={() => { audio(); void speak(`${actor.name}. ${info.scientific ? 'Scientific name: ' + info.scientific + '.' : ''} ${factText(actor)}`); }} />
+        <CardBtn icon={<Video size={18} />} label={following ? 'Stop' : 'Follow'} on={following} onClick={() => { if (following) { engine.follow(null); setFollowing(false); } else { engine.focusActor(actor.id, 0.8, () => engine.follow(actor.id)); setFollowing(true); } }} />
+        <CardBtn icon={<Footprints size={18} />} label="Eye level" onClick={() => onWalk(Math.max(0.03, Math.min(1.6, actor.height * 0.9)))} />
       </div>
     </div>
   );
+}
+function CardBtn({ icon, label, onClick, on }: { icon: React.ReactNode; label: string; onClick: () => void; on?: boolean }) {
+  return <button onClick={() => { uiSound('tick'); onClick(); }} className={clsx('flex h-14 flex-col items-center justify-center gap-0.5 rounded-2xl font-display text-[11.5px] font-semibold transition active:scale-95', on ? 'bg-amber-200 text-ink' : 'bg-black/[0.04] text-ink/75 hover:bg-black/[0.08]')}>{icon}{label}</button>;
 }
 function Fact({ k, v }: { k: string; v: string }) {
   return <div className="rounded-xl bg-black/[0.03] px-2.5 py-1.5"><div className="text-[10px] font-bold uppercase tracking-wide text-ink/45">{k}</div><div className="font-semibold text-ink/85">{v}</div></div>;
@@ -259,37 +273,13 @@ function FoodWeb({ onPick }: { onPick: (id: string) => void }) {
 }
 
 /* ---------------- guide + checklist ---------------- */
-function useChecklist(engine: Engine) {
-  const actors = engine.actorList.filter((a) => !a.isClone);
-  const roles = actors.map((a) => roleOf(a.def));
-  const count = (r: Role) => roles.filter((x) => x === r).length;
-  const web = buildFoodWeb(actors.map((a) => ({ id: a.id, def: a.def, name: a.name })));
-  const maxLevel = Math.max(0, ...web.nodes.map((n) => n.level));
-  const water = !!engine.terrain?.waterLevel || engine.doc.base.kind === 'asset' || actors.some((a) => a.def.category === 'water');
-  const abiotic = water || actors.some((a) => a.def.category === 'land');
-  const notes = actors.filter((a) => (a.doc.note ?? '').trim().length > 10).length;
-  const coded = actors.some((a) => JSON.stringify(a.doc.scripts ?? '').includes('dd_when')) || JSON.stringify(engine.doc.worldScripts ?? '').includes('dd_when');
-  return [
-    { ok: engine.doc.title.trim().length > 2, text: 'Give your diorama a title', hint: 'Edit it in the top bar.' },
-    { ok: count('producer') >= 3, text: `At least 3 producers (${count('producer')})`, hint: 'Plants and algae make food from sunlight.' },
-    { ok: count('primary') >= 2, text: `At least 2 plant-eaters (${count('primary')})`, hint: 'Herbivores are primary consumers.' },
-    { ok: count('secondary') + count('tertiary') >= 1, text: 'At least 1 predator', hint: 'Secondary and top consumers eat other animals.' },
-    { ok: count('decomposer') >= 1, text: 'At least 1 decomposer', hint: 'Mushrooms, earthworms, a rotting log…' },
-    { ok: maxLevel >= 3, text: 'A food chain with 3+ links', hint: 'Open the food web to check.' },
-    { ok: water, text: 'A water source', hint: 'Every habitat needs water — add a pond or stream.' },
-    { ok: abiotic, text: 'Non-living (abiotic) features', hint: 'Rocks, water, soil, sunlight.' },
-    { ok: actors.filter((a) => (a.doc.label?.text ?? '').trim()).length >= 3, text: `Write your own label on 3 things (${actors.filter((a) => (a.doc.label?.text ?? '').trim()).length})`, hint: 'Build → select → label text, e.g. “Producer: makes food from sunlight”.' },
-    { ok: notes >= 3, text: `Research notes on 3 organisms (${notes})`, hint: 'Build → select → My notes.' },
-    { ok: coded, text: 'Bring something to life with code', hint: 'Code → “when ▶ clicked”.' },
-  ];
-}
 function Guide() {
   const engine = useEngine();
   useEngineVersion();
   const b = BIOME_BY_ID[engine.doc.biome] ?? BIOME_BY_ID.blank;
   const g = b.guide;
-  const list = useChecklist(engine);
-  const done = list.filter((x) => x.ok).length;
+  const list = quests(engine);
+  const done = list.filter((x) => x.done).length;
   return (
     <div className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
       <div className="space-y-4 text-sm">
@@ -305,13 +295,14 @@ function Guide() {
       </div>
       <div>
         <div className="rounded-3xl bg-[#fff8e6] p-4 ring-1 ring-amber-200">
-          <div className="flex items-center justify-between"><div className="font-display text-lg font-semibold">✅ Diorama checklist</div><div className="font-display text-sm font-semibold text-amber-700">{done}/{list.length}</div></div>
+          <div className="flex items-center justify-between"><div className="font-display text-lg font-semibold">✅ Diorama checklist</div><div className="font-display text-sm font-semibold text-amber-700">{done}/{list.length} · {'★'.repeat(starsFor(list))}{'☆'.repeat(3 - starsFor(list))}</div></div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-amber-100"><div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${(done / list.length) * 100}%` }} /></div>
+          <p className="mt-2 text-xs text-ink/60">The same quests as the trophy in the top bar — a ready-made rubric.</p>
           <ul className="mt-3 space-y-2">
             {list.map((x) => (
-              <li key={x.text} className="flex gap-2 text-sm">
-                {x.ok ? <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-leaf" /> : <Circle size={18} className="mt-0.5 shrink-0 text-ink/30" />}
-                <div><div className={clsx('font-semibold', x.ok && 'text-ink/60 line-through decoration-leaf/50')}>{x.text}</div>{!x.ok && <div className="text-xs text-ink/55">{x.hint}</div>}</div>
+              <li key={x.id} className="flex gap-2 text-sm">
+                {x.done ? <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-leaf" /> : <Circle size={18} className="mt-0.5 shrink-0 text-ink/30" />}
+                <div><div className={clsx('font-semibold', x.done && 'text-ink/60 line-through decoration-leaf/50')}>{x.emoji} {x.title}{x.need > 1 && !x.done ? ` (${x.cur}/${x.need})` : ''}</div>{!x.done && <div className="text-xs text-ink/55">{x.hint}</div>}</div>
               </li>
             ))}
           </ul>
@@ -353,9 +344,17 @@ function Tour({ onExit }: { onExit: () => void }) {
     return () => { cancelled = true; clearTimeout(timer.current); };
   }, [i, auto, narrate]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { stopSpeech(); engine.select(null); }, [engine]);
+  // reaching the last stop completes the tour quest and badge
+  useEffect(() => {
+    if (stops.length && i === stops.length - 1) {
+      if (flag(engine, 'tour')) engine.changed();
+      awardBadge('tour-guide');
+    }
+  }, [i, stops.length, engine]);
   return (
     <div className="pointer-events-none absolute inset-0 z-30 flex flex-col justify-end p-3 sm:p-5">
-      <div className="pointer-events-auto mx-auto w-full max-w-2xl dd-panel rounded-3xl p-4 sm:p-5">
+      <div className="dd-pop pointer-events-auto mx-auto w-full max-w-2xl rounded-[28px] bg-[#fffdf8] p-4 shadow-[0_24px_60px_-20px_rgba(0,0,0,.6)] ring-1 ring-black/5 sm:p-5">
+        <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-black/5"><div className="h-full rounded-full bg-gradient-to-r from-[#8f7bff] to-[#5ad1ff] transition-all duration-500" style={{ width: `${((i + 1) / (stops.length + 1)) * 100}%` }} /></div>
         <div className="flex items-start gap-3">
           <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white text-4xl shadow-sm">{stop ? stop.def.emoji : b?.emoji ?? '📦'}</div>
           <div className="min-w-0 flex-1">

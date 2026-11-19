@@ -9,14 +9,14 @@ export function Btn({ className, variant = 'soft', size = 'md', active, children
       className={clsx(
         'inline-flex items-center justify-center gap-1.5 rounded-xl font-display font-semibold transition-all select-none disabled:opacity-40 disabled:pointer-events-none active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500',
         size === 'sm' && 'h-8 px-2.5 text-[13px]',
-        size === 'md' && 'h-10 px-3.5 text-sm',
+        size === 'md' && 'h-11 px-3.5 text-sm',
         size === 'lg' && 'h-12 px-5 text-base',
         variant === 'soft' && (active ? 'bg-amber-200/90 text-ink ring-1 ring-amber-400' : 'bg-white/85 text-ink ring-1 ring-black/10 hover:bg-white'),
-        variant === 'solid' && 'bg-leaf text-white shadow-sm hover:brightness-110',
+        variant === 'solid' && 'dd-3d bg-leaf text-white [--edge:#275a24] hover:brightness-110',
         variant === 'ghost' && (active ? 'bg-black/10 text-current' : 'text-current hover:bg-black/5'),
         variant === 'danger' && 'bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100',
-        variant === 'go' && 'bg-[#3bb34a] text-white shadow hover:brightness-110',
-        variant === 'stop' && 'bg-[#e8453c] text-white shadow hover:brightness-110',
+        variant === 'go' && 'dd-3d bg-[#3bb34a] text-white [--edge:#23802f] hover:brightness-110',
+        variant === 'stop' && 'dd-3d bg-[#e8453c] text-white [--edge:#a5241e] hover:brightness-110',
         className,
       )}
     >
@@ -104,13 +104,14 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-6" onClick={onClose}>
-      <div className={clsx('dd-panel flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl', wide ? 'sm:max-w-4xl' : 'sm:max-w-lg')} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+    <div className="dd-modal-bg fixed inset-0 z-[65] flex items-end justify-center bg-black/45 p-0 backdrop-blur-[3px] sm:items-center sm:p-6" onClick={onClose}>
+      <div className={clsx('dd-panel dd-modal flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px]', wide ? 'sm:max-w-4xl' : 'sm:max-w-lg')} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="flex justify-center pt-2 sm:hidden"><span className="h-1.5 w-11 rounded-full bg-black/15" /></div>
         <div className="flex items-center justify-between gap-3 border-b border-black/5 px-5 py-3">
-          <h2 className="font-display text-lg font-semibold">{title}</h2>
-          <IconBtn label="Close" onClick={onClose}><X size={20} /></IconBtn>
+          <h2 className="font-display text-xl font-bold">{title}</h2>
+          <IconBtn label="Close" onClick={onClose} className="bg-black/[0.05] hover:bg-black/10"><X size={20} /></IconBtn>
         </div>
-        <div className="overflow-y-auto px-5 py-4">{children}</div>
+        <div className="overflow-y-auto overscroll-contain px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-4 sm:px-5">{children}</div>
       </div>
     </div>
   );

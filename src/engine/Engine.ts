@@ -626,16 +626,33 @@ export class Engine {
     const r = this.renderer.domElement.getBoundingClientRect();
     return new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
   }
-  pickActor(clientX: number, clientY: number): { actor: Actor; point: THREE.Vector3 } | null {
-    this.raycaster.setFromCamera(this.ndc(clientX, clientY), this.camera);
+  /**
+   * The actor under a screen point. `slop` (px) adds "fat-finger" tolerance: when the
+   * centre ray misses, rays on two small rings around the point are tried, nearest first,
+   * so thin legs, tails and tiny insects are still easy to tap.
+   */
+  pickActor(clientX: number, clientY: number, slop = 0): { actor: Actor; point: THREE.Vector3 } | null {
     const roots = [...this.actors.values()].filter((a) => a.root.visible && a.model).map((a) => a.root);
-    const hits = this.raycaster.intersectObjects(roots, true);
-    for (const h of hits) {
-      if ((h.object as THREE.Mesh).name === 'selection-ring' || h.object.name === 'toothpick') continue;
-      let o: THREE.Object3D | null = h.object;
-      while (o && !o.userData.actorId) o = o.parent;
-      const id = o?.userData.actorId;
-      if (id && this.actors.has(id)) return { actor: this.actors.get(id)!, point: h.point };
+    const cast = (x: number, y: number) => {
+      this.raycaster.setFromCamera(this.ndc(x, y), this.camera);
+      const hits = this.raycaster.intersectObjects(roots, true);
+      for (const h of hits) {
+        if ((h.object as THREE.Mesh).name === 'selection-ring' || h.object.name === 'toothpick') continue;
+        let o: THREE.Object3D | null = h.object;
+        while (o && !o.userData.actorId) o = o.parent;
+        const id = o?.userData.actorId;
+        if (id && this.actors.has(id)) return { actor: this.actors.get(id)!, point: h.point };
+      }
+      return null;
+    };
+    const hit = cast(clientX, clientY);
+    if (hit || slop <= 0) return hit;
+    for (const r of [slop * 0.5, slop]) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const h = cast(clientX + Math.cos(a) * r, clientY + Math.sin(a) * r);
+        if (h) return h;
+      }
     }
     return null;
   }

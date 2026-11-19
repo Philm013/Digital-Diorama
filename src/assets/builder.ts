@@ -149,12 +149,12 @@ async function buildRaw(def: AssetDef, params: Record<string, unknown>): Promise
   return { raw, clips, schema, rigSpec };
 }
 
-export async function buildModel(def: AssetDef, userParams: Record<string, unknown>, quality: Quality, trueScale: boolean): Promise<BuiltModel> {
+export async function buildModel(def: AssetDef, userParams: Record<string, unknown>, quality: Quality, trueScale: boolean, cache = true): Promise<BuiltModel> {
   const params = { ...def.params, ...stripUndefined(qualityParams(def, quality)), ...userParams };
   const key = def.id + '|' + JSON.stringify(params);
   let proto: Proto;
   let raw: THREE.Object3D;
-  if (UNIQUE.has(def.family)) {
+  if (UNIQUE.has(def.family) || !cache) {
     proto = await buildRaw(def, params);
     raw = proto.raw;
   } else {
