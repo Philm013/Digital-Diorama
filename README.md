@@ -32,6 +32,14 @@ The build in `dist/` is a static site (relative paths), so it can be hosted on G
 
 Deep links: `#new=savanna` opens a fresh diorama of a biome (`forest`, `taiga`, `grassland`, `savanna`, `rainforest`, `desert`, `tundra`, `wetland`, `mountain`, `reef`, `kelp`, `shore`, `garden`, `blank`); `#open=<project id>` reopens a saved one.
 
+### Publishing on GitHub Pages
+
+Every push to `main` builds the app and publishes it with GitHub Pages ([`.github/workflows/pages.yml`](.github/workflows/pages.yml)). Pull requests run the same build as a check, without publishing.
+
+- **Turn it on once:** Settings → Pages → Build and deployment → Source: **GitHub Actions**. The site then lives at `https://<owner>.github.io/<repo>/`, and Actions → *Deploy to GitHub Pages* → **Run workflow** republishes it at any time.
+- **Private repositories:** Pages for a private repository needs a paid GitHub plan (Pro, Team or Enterprise), and the published site is public on the internet either way.
+- **Saved projects stay with the address:** dioramas are stored in each browser for the site they were made on, so ones saved on `localhost` won't appear on the Pages site. Move them with *Download project file* and *Open a file*.
+
 ---
 
 ## What students can do
