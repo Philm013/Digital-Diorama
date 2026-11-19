@@ -141,15 +141,26 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
     toast(ok ? 'Saved on this device ✓' : 'Could not save — try downloading a copy', ok ? 'success' : 'error');
   }, [engine, toast]);
 
+  const exiting = useRef(false);
   const exit = useCallback(async () => {
-    if (engine) {
+    if (exiting.current) return;
+    exiting.current = true;
+    if (engine?.doc) {
       runtime?.stop();
-      const d = engine.serialize();
-      const thumb = await makeThumb(engine.screenshot());
-      await saveProject(d, thumb);
+      try {
+        const d = engine.serialize();
+        const thumb = await makeThumb(engine.screenshot());
+        await saveProject(d, thumb);
+      } catch (err) { console.error(err); }
     }
     onExit();
   }, [engine, runtime, onExit]);
+  // the phone's Back button (see App) asks to leave
+  useEffect(() => {
+    const fn = () => void exit();
+    document.addEventListener('dd-exit', fn);
+    return () => document.removeEventListener('dd-exit', fn);
+  }, [exit]);
 
   // the inspector's "Code" button asks to switch modes
   useEffect(() => {

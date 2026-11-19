@@ -67,16 +67,6 @@ body {
 
 @layer components {
 /* ---------- app chrome ---------- */
-.dd-welcome {
-  background:
-    radial-gradient(1200px 500px at 50% -120px, #fff6dc 0%, rgba(255, 246, 220, 0) 70%),
-    linear-gradient(180deg, #f4ecdc 0%, #efe5d2 100%);
-}
-.dd-welcome::before {
-  content: ''; position: fixed; inset: 0; pointer-events: none; opacity: 0.35;
-  background-image: radial-gradient(rgba(120, 90, 50, 0.08) 1px, transparent 1px);
-  background-size: 6px 6px;
-}
 .dd-card {
   position: relative;
   border-radius: 1.25rem;
@@ -115,6 +105,31 @@ button.dd-card:hover { transform: translateY(-3px) rotate(-0.3deg); box-shadow: 
 }
 .dd-sheet-anim { transition: height 0.32s cubic-bezier(0.2, 0.9, 0.25, 1); }
 .dd-sheet-side { box-shadow: -14px 0 40px -14px rgba(0, 0, 0, 0.45), inset 1px 0 0 rgba(0, 0, 0, 0.06); }
+/* pull-out trays (home screen) */
+.dd-tray {
+  background: #fbf8f1;
+  border-radius: 26px 26px 0 0;
+  box-shadow: 0 -18px 50px -16px rgba(0, 0, 0, 0.55), 0 -1px 0 rgba(255, 255, 255, 0.7) inset;
+  will-change: transform;
+}
+.dd-tray-anim { transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.22, 1); }
+.dd-tray-scrim { background: rgba(12, 20, 15, 0.42); opacity: 0; transition: opacity 0.3s ease; }
+.dd-tray-scrim.is-on { opacity: 1; }
+.dd-swap { animation: dd-swap 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+@keyframes dd-swap { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.dd-slide-in { animation: dd-slide-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+@keyframes dd-slide-in { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: none; } }
+.dd-sheet-snap { transition: transform 0.26s cubic-bezier(0.2, 0.9, 0.25, 1); }
+/* habitat and diorama tiles in the trays */
+.dd-tile-card {
+  background: #fffdf8;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 6px 16px -10px rgba(70, 48, 20, 0.45);
+  outline: 1px solid rgba(0, 0, 0, 0.06);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.dd-tile-card:hover { transform: translateY(-2px); box-shadow: 0 14px 24px -14px rgba(60, 40, 10, 0.55); }
+.dd-tile-card:active { transform: scale(0.97); }
+.dd-thumb-ph { background: linear-gradient(180deg, color-mix(in srgb, var(--accent, #4a8fdb) 30%, #9fd0f2) 0%, #dcebf0 58%, color-mix(in srgb, var(--accent, #6a9a3a) 55%, #c9b68c) 59%, color-mix(in srgb, var(--accent, #6a9a3a) 70%, #8a7a5a) 100%); }
 .dd-dock { background: rgba(255, 253, 246, 0.95); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.06); }
 .dd-dock::-webkit-scrollbar, .dd-scroll-x::-webkit-scrollbar { display: none; }
 .dd-dock, .dd-scroll-x { scrollbar-width: none; }
@@ -278,13 +293,16 @@ textarea.dd-input { resize: vertical; line-height: 1.4; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dd-cloud, .dd-bob, .dd-beat, .dd-ribbon, .dd-medal { animation: none !important; }
+  .dd-cloud, .dd-bob, .dd-beat, .dd-ribbon, .dd-medal, .dd-swap, .dd-slide-in { animation: none !important; }
+  .dd-tray-anim, .dd-sheet-snap { transition-duration: 0.01s !important; }
 }
 .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 8px); }
 .pt-safe { padding-top: env(safe-area-inset-top); }
+.px-safe { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 
-.dd-modal { animation: dd-modal-in 0.3s cubic-bezier(0.2, 1.1, 0.3, 1) both; }
-.dd-modal-bg { animation: dd-fade 0.2s ease-out both; }
+/* "backwards", not "both": once in, the sheet's transform is free to follow a drag */
+.dd-modal { animation: dd-modal-in 0.3s cubic-bezier(0.2, 1.1, 0.3, 1) backwards; }
+.dd-modal-bg { animation: dd-fade 0.2s ease-out backwards; }
 @keyframes dd-modal-in { from { opacity: 0; transform: translateY(40px) scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes dd-fade { from { opacity: 0; } to { opacity: 1; } }
 
