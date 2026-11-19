@@ -67,7 +67,8 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
     { key: 'weather', icon: <CloudSun size={20} />, label: 'Weather', on: pop === 'weather', fn: () => setPop(pop === 'weather' ? null : 'weather'), sep: true },
     { key: 'web', icon: <Network size={20} />, label: 'Food web', fn: () => setWeb(true) },
     { key: 'guide', icon: <BookOpen size={20} />, label: 'Guide', fn: () => setGuide(true) },
-    { key: 'journal', icon: <Library size={20} />, label: 'Journal', fn: () => onJournal?.() },
+    // on phones the Journal is in the tab bar
+    ...(wide || landscape ? [{ key: 'journal', icon: <Library size={20} />, label: 'Journal', fn: () => onJournal?.() }] : []),
     { key: 'tour', icon: <Presentation size={20} />, label: 'Tour', fn: () => { audio(); engine.select(null); setTour(true); } },
     { key: 'walk', icon: <Footprints size={20} />, label: 'Walk in', fn: () => walkIn(1.6) },
     ...(engine.terrain ? [{ key: 'roam', icon: <Earth size={20} />, label: 'Roam', fn: roam }] : []),

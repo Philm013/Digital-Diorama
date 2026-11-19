@@ -98,11 +98,11 @@ export function Celebrations({ sound }: { sound: boolean }) {
   return (
     <>
       <ConfettiCanvas />
-      <div className="pointer-events-none fixed right-3 top-16 z-[75] flex flex-col items-end gap-1 sm:right-5">
+      <div className="pointer-events-none fixed right-3 top-[calc(4rem+env(safe-area-inset-top))] z-[75] flex flex-col items-end gap-1 sm:right-5">
         {floaters.map((f) => <div key={f.key} className="dd-xp-floater rounded-full px-2.5 py-0.5 font-display text-sm font-bold">{f.text}</div>)}
       </div>
       {current && (
-        <div className="pointer-events-none fixed inset-x-0 top-[70px] z-[78] flex justify-center px-3">
+        <div className="pointer-events-none fixed inset-x-0 top-[calc(70px+env(safe-area-inset-top))] z-[78] flex justify-center px-3">
           <div key={current.key} onClick={() => setCurrent(null)} className={clsx('dd-banner pointer-events-auto flex max-w-[min(94vw,460px)] cursor-pointer items-center gap-3 rounded-[22px] py-2.5 pl-2.5 pr-5', current.kind === 'badge' || current.kind === 'level' ? 'dd-banner-big' : '')} style={{ ['--b' as string]: current.color }}>
             <div className="dd-medal grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-3xl">{current.emoji}</div>
             <div className="min-w-0">

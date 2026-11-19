@@ -72,7 +72,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
       subtitle={`${found}/${LIVING.length} species · ${profile.badges.length}/${BADGES.length} badges`} />,
   }[shownTray];
   const content = {
-    expeditions: <ExpeditionPicker settings={settings} updateSettings={updateSettings} onStart={onOpen} active={tray === 'expeditions'} />,
+    expeditions: <ExpeditionPicker settings={settings} updateSettings={updateSettings} onStart={onOpen} active={tray === 'expeditions'} dense={landscape} />,
     library: <DioramaLibrary projects={projects} onOpenProject={(id) => void openProject(id)} onChanged={() => void refresh()} onNew={() => go('expeditions')} onImport={() => fileRef.current?.click()} error={error} />,
     journal: <div className="absolute inset-0 overflow-y-auto overscroll-contain px-3 pb-[var(--tray-pb)] pt-1 sm:px-5"><Journal /></div>,
   }[shownTray];
@@ -95,7 +95,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
           <HomeCore projects={projects} profile={profile} wide={wide} landscape={landscape} onTab={go} onContinue={(id) => void openProject(id)} />
         </div>
         <Tray open={tray !== null} onClose={() => go('home')} isTop={trayOnTop} labelId="dd-tray-title" header={header}
-          className={wide ? 'h-[min(82%,780px)] max-w-[1180px] [--tray-pb:max(env(safe-area-inset-bottom),20px)]' : landscape ? 'top-1.5 [--tray-pb:max(env(safe-area-inset-bottom),12px)]' : 'top-2.5 [--tray-pb:16px]'}>
+          className={wide ? 'h-[min(86%,800px)] max-w-[1180px] [--tray-pb:max(env(safe-area-inset-bottom),20px)]' : landscape ? 'top-1.5 [--tray-pb:max(env(safe-area-inset-bottom),12px)]' : 'top-2.5 [--tray-pb:16px]'}>
           <div key={shownTray} className="dd-swap absolute inset-0">{content}</div>
         </Tray>
       </main>
@@ -143,15 +143,17 @@ function HomeCore({ projects, profile, wide, landscape, onTab, onContinue }: {
         <span key={i} className="dd-cloud" style={{ top: `${top * 0.6}%`, width: w, height: w * 0.32, animationDuration: `${dur * 2}s`, animationDelay: `-${delay * 7}s` }} />
       ))}
       {meadow && <div className="dd-thumb-in pointer-events-none absolute inset-x-0 bottom-0 h-[30%] min-h-[140px] bg-cover bg-bottom opacity-95" style={{ backgroundImage: `url(${meadow})`, maskImage: 'linear-gradient(to bottom, transparent, black 40%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 40%)' }} />}
-      <div className={clsx('relative mx-auto grid min-h-full max-w-6xl content-start gap-3.5 px-4 pb-8 pt-4 sm:px-8 [&>*]:min-w-0',
-        wide ? 'grid-cols-[1.2fr_1fr] content-center items-center gap-10 py-10' : landscape ? 'grid-cols-2 items-start gap-4 pt-3' : 'sm:max-w-xl sm:pt-8')}>
+      <div className={clsx('relative mx-auto grid min-h-full max-w-6xl gap-3.5 px-4 [&>*]:min-w-0',
+        wide ? 'grid-cols-[1.2fr_1fr] content-center items-center gap-10 px-8 py-10'
+          : landscape ? 'grid-cols-2 content-start items-start gap-4 pb-6 pt-3'
+            : 'content-start pb-8 pt-4 sm:max-w-xl sm:content-center sm:px-8 sm:py-10')}>
         <div className="flex flex-col gap-3">
-          {first || wide ? <Intro big={wide} /> : <Greeting name={profile.name} />}
+          {first || wide ? <Intro size={wide ? 'lg' : landscape ? 'sm' : 'md'} /> : <Greeting name={profile.name} />}
           {last ? <ContinueCard p={last} stars={profile.projectStars[last.id] ?? 0} onOpen={() => onContinue(last.id)} />
-            : first ? <button type="button" onClick={() => onTab('expeditions')} className="dd-cta flex h-14 w-full items-center justify-center gap-2 rounded-2xl px-6 font-display text-lg font-bold text-white lg:w-auto lg:self-start"><Sparkles size={21} /> Start your first expedition</button>
+            : first ? <button type="button" onClick={() => onTab('expeditions')} className="dd-cta flex h-14 w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl px-4 font-display text-[clamp(15px,4.6vw,18px)] font-bold text-white sm:px-6 lg:w-auto lg:self-start lg:text-lg"><Sparkles size={21} className="shrink-0" /> Start your first expedition</button>
               : <div className="h-[104px] animate-pulse rounded-[24px] bg-white/45" />}
           {!first && <QuickActions count={projects?.length ?? 0} onTab={onTab} />}
-          {(first || wide) && <FeatureTiles />}
+          {(first || wide) && !landscape && <FeatureTiles />}
         </div>
         <div className="flex flex-col gap-3">
           <RangerCard dark onOpenJournal={() => onTab('journal')} />
@@ -162,12 +164,13 @@ function HomeCore({ projects, profile, wide, landscape, onTab, onContinue }: {
   );
 }
 
-function Intro({ big }: { big: boolean }) {
+function Intro({ size }: { size: 'sm' | 'md' | 'lg' }) {
+  const big = size === 'lg';
   return (
     <div className={clsx('text-center', big && 'text-left')}>
       <div className="mb-2.5 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-kraft-dark shadow-sm ring-1 ring-black/5">📦 The shoebox diorama, reimagined</div>
-      <h1 className={clsx('dd-logo font-display font-bold leading-[0.95] text-ink', big ? 'text-7xl' : 'text-[42px] sm:text-6xl')}>Digital{big && <br />} Diorama</h1>
-      <p className={clsx('mt-3 max-w-xl font-semibold text-ink/75', big ? 'text-lg' : 'mx-auto text-[15px]')}>Build a living 3D habitat, discover real species, keep its ecosystem healthy — then bring it to life with code.</p>
+      <h1 className={clsx('dd-logo font-display font-bold leading-[0.95] text-ink', big ? 'text-7xl' : size === 'sm' ? 'text-[34px]' : 'text-[42px] sm:text-6xl')}>Digital{big && <br />} Diorama</h1>
+      <p className={clsx('max-w-xl font-semibold text-ink/75', big ? 'mt-3 text-lg' : size === 'sm' ? 'mx-auto mt-2 text-[13.5px] leading-snug' : 'mx-auto mt-3 text-[15px]')}>Build a living 3D habitat, discover real species, keep its ecosystem healthy — then bring it to life with code.</p>
     </div>
   );
 }
@@ -187,14 +190,14 @@ function ContinueCard({ p, stars, onOpen }: { p: ProjectMeta; stars: number; onO
   const b = BIOME_BY_ID[p.biome];
   return (
     <button type="button" onClick={onOpen} className="dd-card dd-level-card group flex w-full items-center gap-3 overflow-hidden rounded-[24px] p-2.5 pr-3 text-left" aria-label={`Continue ${p.title}`}>
-      <div className="relative aspect-[16/10] w-[44%] max-w-[210px] shrink-0 overflow-hidden rounded-[18px] bg-[#e9dfcc]" style={{ ['--accent' as string]: b?.accent }}>
+      <div className="relative aspect-[16/10] w-[38%] max-w-[210px] shrink-0 overflow-hidden rounded-[18px] bg-[#e9dfcc] min-[360px]:w-[44%]" style={{ ['--accent' as string]: b?.accent }}>
         {p.thumb ? <img src={p.thumb} alt="" draggable={false} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" /> : <div className="dd-thumb-ph grid h-full w-full place-items-center text-4xl">{b?.emoji ?? '📦'}</div>}
         <div className="absolute inset-x-0 bottom-0 h-[6px]" style={{ background: KRAFT_EDGE }} />
         <span className="absolute left-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-[10px] bg-white/95 text-[16px] leading-none shadow">{b?.emoji ?? '📦'}</span>
       </div>
       <div className="min-w-0 flex-1">
         <div className="font-display text-[11px] font-bold uppercase tracking-[0.16em] text-[#2a9a43]">Continue</div>
-        <div className="truncate font-display text-[19px] font-bold leading-tight">{p.title}</div>
+        <div className="line-clamp-2 font-display text-[clamp(16px,4.9vw,19px)] font-bold leading-tight">{p.title}</div>
         <div className="mt-0.5 truncate text-[12px] text-ink/55">{b?.name ?? 'Diorama'} · {ago(p.updated)}</div>
         <div className="mt-1.5 flex items-center justify-between gap-2">
           <Stars n={stars} size={13} />
@@ -217,10 +220,10 @@ function QuickActions({ count, onTab }: { count: number; onTab: (id: TabId) => v
 }
 function ActionTile({ onClick, icon, title, detail, className, iconClass }: { onClick: () => void; icon: ReactNode; title: string; detail: string; className: string; iconClass: string }) {
   return (
-    <button type="button" onClick={onClick} className={clsx('dd-3d flex min-w-0 items-center gap-2 rounded-[20px] p-2.5 text-left sm:gap-2.5 sm:p-3', className)}>
+    <button type="button" onClick={onClick} className={clsx('dd-3d flex min-w-0 flex-col items-start gap-1.5 rounded-[20px] p-2.5 text-left min-[360px]:flex-row min-[360px]:items-center min-[360px]:gap-2 sm:gap-2.5 sm:p-3', className)}>
       <span className={clsx('grid h-9 w-9 shrink-0 place-items-center rounded-[14px] sm:h-10 sm:w-10', iconClass)}>{icon}</span>
-      <span className="min-w-0">
-        <span className="block truncate font-display text-[14.5px] font-bold leading-tight sm:text-[16px]">{title}</span>
+      <span className="min-w-0 max-w-full">
+        <span className="block truncate font-display text-[clamp(13px,3.7vw,14.5px)] font-bold leading-tight sm:text-[16px]">{title}</span>
         <span className="block truncate text-[12px] font-semibold opacity-65">{detail}</span>
       </span>
     </button>

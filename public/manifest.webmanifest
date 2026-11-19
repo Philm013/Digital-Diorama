@@ -1,0 +1,15 @@
+{
+  "name": "Digital Diorama",
+  "short_name": "Diorama",
+  "description": "Build, explore and code living 3D habitat dioramas — a digital take on the classroom shoebox diorama.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#16211b",
+  "theme_color": "#1f2a24",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

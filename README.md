@@ -2,7 +2,7 @@
 
 **The classroom shoebox diorama, reimagined as a living 3D habitat you can build, explore, code and present.**
 
-Students pick a biome, shape the land with landforms, sculpting and painting, fill it with real species from a library of nearly 350 procedural plants, animals, fungi and habitat features, label what they learned on toothpick flags, then bring it to life with Scratch-style block code — and finally present it with a narrated guided tour. Along the way they earn XP and badges, fill a field journal with the species they discover, and complete habitat quests for up to three stars. Runs in any modern desktop or mobile browser; projects and progress save on the device, with no accounts.
+Students pick a biome, shape the land with landforms, sculpting and painting, fill it with real species from a library of nearly 350 procedural plants, animals, fungi and habitat features, label what they learned on toothpick flags, then bring it to life with Scratch-style block code — and finally present it with a narrated guided tour. Along the way they earn XP and badges, fill a field journal with the species they discover, and complete habitat quests for up to three stars. Runs in any modern desktop or mobile browser, and feels like an app on phones (top bar, bottom tab bar, pull-out trays; it can be added to the home screen to run full screen). Projects and progress save on the device, with no accounts.
 
 Most 3D models come from the procedural three.js assets in [`References/`](References), imported in place and code-split so each one only loads when used. Trees, wildflowers, grasses and a few marine animals and fungi come from the app's own procedural generators in `src/assets/flora` and `src/assets/builtin`. The reference modules are unchanged except for a small `specOverride` hook in the mammal and bird rigs (marked *Digital Diorama extension*), which lets related species such as a Bactrian camel or a blue jay share one rig.
 
@@ -30,7 +30,7 @@ npm run preview
 
 The build in `dist/` is a static site (relative paths), so it can be hosted on GitHub Pages, Netlify, a school server, or opened from any static file host.
 
-Deep links: `#new=savanna` opens a fresh diorama of a biome (`forest`, `taiga`, `grassland`, `savanna`, `rainforest`, `desert`, `tundra`, `wetland`, `mountain`, `reef`, `kelp`, `shore`, `garden`, `blank`); `#open=<project id>` reopens a saved one.
+Deep links: `#new=savanna` opens a fresh diorama of a biome (`forest`, `taiga`, `grassland`, `savanna`, `rainforest`, `desert`, `tundra`, `wetland`, `mountain`, `reef`, `kelp`, `shore`, `garden`, `blank`); `#open=<project id>` reopens a saved one. A diorama opened from the home screen shows its `#open=` address, so reloading the page reopens it.
 
 ### Publishing on GitHub Pages
 
@@ -43,6 +43,11 @@ Every push to `main` builds the app and publishes it with GitHub Pages ([`.githu
 ---
 
 ## What students can do
+
+### 🏠 Home
+- **One screen, like a phone app:** a top bar (with your level and Settings), the home itself in the middle and, on phones, a bottom tab bar: **Home · Expeditions · My dioramas · Journal**. The home picks up where you left off with a big *Continue* card, and shows your ranger profile. First-timers get a short introduction and a *Start your first expedition* button instead.
+- **Trays instead of long lists:** Expeditions, My dioramas and the Journal pull out from behind the tab bar over the home, to browse and load from. **Expeditions** shows every habitat as a small postcard (with *New*, stars and how many of its species you've found) so they can all be seen at a glance; tap one for its briefing, name the diorama and **Start expedition!** **My dioramas** shows your saved dioramas newest first: tap to open, or use ⋯ to download or delete one; *Open file* loads a `.diorama.json`, and a search box appears once there are more than six. Tap the open tab again, tap the dimmed home, press Escape or drag the tray down to put it away.
+- On wide screens (and phones held sideways) the tabs sit in the top bar and the trays are wider, with bigger postcards.
 
 ### 🏆 Play
 - **Ranger profile:** pick an avatar and name; XP raises your level through ranks from *Seedling* to *Planet Keeper*. XP comes from discovering species, placing things and finishing quests.
@@ -158,7 +163,10 @@ src/
   storage/       IndexedDB projects (localStorage fallback), export/import, settings
   game/          progress (XP, levels, ranks, discoveries, badges, stars; stored in localStorage),
                  ecology (ecosystem health score, quests, stars)
-  ui/            React UI: Welcome, Studio, Viewport (pointer/touch gestures), BuildPanels, LandPanel (land
+  ui/            React UI: Welcome (the home screen) + home/ (Expeditions and My dioramas trays), shell (top bar,
+                 bottom tab bar, top-bar tabs, shared breakpoints), Tray (pull-out tray), sheetDrag (drag a sheet
+                 down to close it), backStack (the phone's Back button closes the top-most tray, sheet or
+                 diorama), Studio, Viewport (pointer/touch gestures), BuildPanels, LandPanel (land
                  tools & diorama size), ExplorePanels,
                  CodePanel, BottomSheet (draggable phone sheet), ContextBar, AssetThumb + thumbs3d
                  (background 3D thumbnails cached in IndexedDB), feedback (haptics, UI sounds), game/
@@ -180,6 +188,7 @@ Run these with `npm run dev` stopped (the review and UI scripts start their own 
 - **Asset review harness** — `review.html` renders catalog assets through the app's own builder from several views (front ¾, side, top, with a marker showing which way is forward). Query parameters pick what to show: `ids=`, `cat=`, `group=`, `family=`, `match=`, `views=`, `clip=`, `season=`, `q=` (quality), or variants of one asset with `base=<id>&v=[{…},…]`. `node tools/review-assets.mjs --query "cat=animals&cols=3" --per 15 --out shots/animals` saves contact sheets.
 - **Screenshots** — `node tools/shoot.mjs` captures app URLs (desktop or `--device phone`) and prints triangles, draw calls and actor counts.
 - **UI smoke test** — `node tools/ui-check.mjs --out shots/ui-check` taps an animal (field card + discovery), selects it in Build (context bar, resize), twists and pinches it with two fingers, resizes the phone panel by its header and taps a panel tab, on desktop and phone, and reports any page errors.
+- **Home & Back-button check** — `node tools/home-check.mjs --out shots/home-check` opens each tray from the phone tab bar, steps back out of a habitat briefing, starts an expedition, opens and closes sheets in the studio, reloads, drags trays and sheets closed, and checks that Back always closes the top-most layer without leaving dead history entries. It exits non-zero if a check fails.
 
 ---
 
@@ -187,6 +196,7 @@ Run these with `npm run dev` stopped (the review and UI scripts start their own 
 
 - Built on standard WebGL 2, WebAudio and Speech Synthesis, for current desktop and mobile browsers. Automated checks run in Chromium at desktop and phone sizes.
 - Phones: in Build and Code the panel takes most of the screen under a smaller 3D view that always stays visible; drag the panel's header to give either more room (it snaps, and flings). Held sideways, the panel sits beside the view and the mode tabs move into the top bar. While the camera is at its overview it re-fits the diorama whenever the view changes shape. Tapping an organism in Explore glides the camera so it sits in the space left by its species card.
+- App feel: every screen has the same top bar and, on phones, the same bottom tab bar. The phone's Back button (or the browser's) closes whatever is on top — a tray, a habitat briefing, a sheet — and leaves a diorama for the home screen, instead of leaving the site. Sheets and trays can be dragged down to close. *Add to Home Screen* (or *Install app*) opens it full screen with its own icon; the bars then extend under the status bar and home indicator.
 - Touch: a bottom tab bar, undo/redo in the Build panel, one-finger orbit / two-finger pan-zoom, long-press to pick up, two-finger twist and pinch on a held object, forgiving taps on thin things like legs and branches, short haptic ticks where the device supports them, and safe-area padding for notched phones.
 - Three graphics tiers (Fast / Balanced / Detailed) pick model detail, shadow resolution and grass density; the renderer also adapts its resolution to keep the frame rate up. Phones default to Fast. In Roam they also set how far you can see (about 145, 175 or 210 m) and how many plants and animals fill the world; its land is built a few milliseconds per frame, nearest first, coarser further away.
 - Land grids are 25 cm for most dioramas and a little coarser for huge ones, so every size stays smooth to sculpt; huge dioramas keep a shorter undo history.

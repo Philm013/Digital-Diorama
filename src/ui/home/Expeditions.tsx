@@ -36,7 +36,11 @@ export function useBiomeProgress() {
  * The Expeditions tray: every habitat as a compact postcard tile, so they can all be browsed at a
  * glance. Picking one slides in its briefing, where the diorama is named and started.
  */
-export function ExpeditionPicker({ settings, updateSettings, onStart, active }: { settings: Settings; updateSettings: (s: Settings) => void; onStart: (doc: DioramaDoc) => void; active: boolean }) {
+export function ExpeditionPicker({ settings, updateSettings, onStart, active, dense }: {
+  settings: Settings; updateSettings: (s: Settings) => void; onStart: (doc: DioramaDoc) => void; active: boolean;
+  /** smaller tiles, for a short tray (phones held sideways) */
+  dense?: boolean;
+}) {
   const profile = useProfile();
   const progress = useBiomeProgress();
   const [pick, setPick] = useState<BiomeTemplate | null>(null);
@@ -49,7 +53,8 @@ export function ExpeditionPicker({ settings, updateSettings, onStart, active }: 
   return (
     <div className="absolute inset-0">
       <div className={clsx('absolute inset-0 overflow-y-auto overscroll-contain px-3 pb-[var(--tray-pb)] pt-1 sm:px-5', pick && 'invisible')} aria-hidden={!!pick || undefined}>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2 sm:grid-cols-[repeat(auto-fill,minmax(148px,1fr))] sm:gap-3">
+        <div className={clsx('grid gap-2', dense ? 'grid-cols-[repeat(auto-fill,minmax(96px,1fr))]'
+          : 'grid-cols-[repeat(auto-fill,minmax(100px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(148px,1fr))] sm:gap-3 lg:grid-cols-[repeat(auto-fill,minmax(196px,1fr))]')}>
           {BIOMES.map((b) => <HabitatTile key={b.id} b={b} {...facts(b)} onClick={() => { setPick(b); uiSound('open'); }} />)}
         </div>
         <p className="mt-3 text-center text-[11.5px] font-semibold text-ink/45">Every habitat has its own species to discover and quests to complete.</p>
@@ -63,7 +68,7 @@ function HabitatTile({ b, found, total, stars, fresh, onClick }: { b: BiomeTempl
   const url = useBiomeThumb(b.env.backdrop ?? 'meadow', 320, 220);
   return (
     <button type="button" onClick={onClick} title={b.tagline} className="dd-tile-card group relative flex min-w-0 flex-col overflow-hidden rounded-2xl text-left" style={{ ['--accent' as string]: b.accent }}>
-      <div className="relative aspect-[16/11] w-full overflow-hidden">
+      <div className="relative aspect-[16/11] w-full overflow-hidden lg:aspect-[16/10]">
         {url ? <img src={url} alt="" draggable={false} className="dd-thumb-in h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" /> : <div className="dd-thumb-ph h-full w-full" />}
         <div className="absolute inset-x-0 bottom-0 h-[7px]" style={{ background: KRAFT_EDGE }} />
         <span className="absolute left-1.5 top-1.5 grid h-8 w-8 place-items-center rounded-[11px] bg-white/95 text-[19px] leading-none shadow-md transition-transform group-hover:-rotate-6 group-hover:scale-110 sm:h-9 sm:w-9 sm:text-[21px]">{b.emoji}</span>
@@ -99,7 +104,7 @@ function Briefing({ b, found, total, stars, settings, updateSettings, onBack, on
     <div className="dd-slide-in absolute inset-0 flex flex-col" role="group" aria-label={`${b.name} expedition`}>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3 sm:px-5">
         <button type="button" onClick={onBack} className="mb-1.5 inline-flex h-9 items-center gap-0.5 rounded-xl pl-1 pr-3 font-display text-[14px] font-semibold text-ink/65 transition hover:bg-black/5 hover:text-ink"><ChevronLeft size={19} /> All habitats</button>
-        <div className="grid gap-4 md:grid-cols-[1.15fr_1fr] md:gap-6">
+        <div className="grid gap-4 sm:grid-cols-[1.15fr_1fr] sm:gap-5 md:gap-6">
           <div className="min-w-0">
             <div className="relative overflow-hidden rounded-3xl" style={{ ['--accent' as string]: b.accent }}>
               <div className="aspect-[16/7.5] w-full">{hero ? <img src={hero} alt="" className="dd-thumb-in h-full w-full object-cover" /> : <div className="dd-thumb-ph h-full w-full" />}</div>
@@ -142,7 +147,7 @@ function Briefing({ b, found, total, stars, settings, updateSettings, onBack, on
         </div>
       </div>
       <div className="shrink-0 border-t border-black/5 px-3 pb-[var(--tray-pb)] pt-2.5 sm:px-5">
-        <button type="button" onClick={start} className="dd-cta flex h-14 w-full items-center justify-center gap-2 rounded-2xl font-display text-xl font-bold text-white md:ml-auto md:max-w-sm"><Sparkles size={22} /> Start expedition!</button>
+        <button type="button" onClick={start} className="dd-cta flex h-14 w-full items-center justify-center gap-2 rounded-2xl font-display text-xl font-bold text-white sm:ml-auto sm:max-w-sm"><Sparkles size={22} /> Start expedition!</button>
       </div>
     </div>
   );
