@@ -40,7 +40,9 @@ body {
   white-space: nowrap;
   transform: translateY(2px) rotate(-1.5deg);
   max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+  transition: opacity 0.25s ease;
 }
+.dd-flag.dd-flag-off { opacity: 0; }
 .dd-bubble {
   position: relative;
   font-family: var(--font-display);

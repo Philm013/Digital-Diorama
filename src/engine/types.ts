@@ -72,7 +72,7 @@ export interface DioramaDoc {
   worldScripts?: unknown;
   tour?: string[];
   /** game progress for this diorama: completed quests and one-off moments */
-  progress?: { quests?: string[]; flags?: string[]; seasons?: string[] };
+  progress?: { quests?: string[]; flags?: string[]; seasons?: string[]; /** ecosystem-badge conditions the diorama already met when it was created */ given?: string[] };
 }
 
 export const DEFAULT_ENV: EnvDoc = {

@@ -856,8 +856,41 @@ export class Engine {
     if (this.walk?.active) this.walk.update(dt);
     else if (!this.xr?.active) this.controls.update();
     this.renderer.render(this.scene, this.camera);
-    if (!this.xr?.active) { this.labels.render(this.scene, this.camera); this.adaptResolution(dt); }
+    if (!this.xr?.active) { this.labels.render(this.scene, this.camera); this.declutterLabels(); this.adaptResolution(dt); }
   };
+
+  /**
+   * Hide toothpick flags that would overlap a nearer one (crowded phone views, zoomed-out
+   * overviews). The selected object and student-written labels win; speech bubbles stay clear.
+   * Runs every few frames with a little hysteresis so flags don't flicker while the camera moves.
+   */
+  private declutterTick = 0;
+  private declutterLabels() {
+    if (++this.declutterTick % 6) return;
+    const cam = this.camera.position;
+    const items: { a: Actor; r: DOMRect; key: number; off: boolean }[] = [];
+    const taken: DOMRect[] = [];
+    for (const a of this.actors.values()) {
+      const b = a.bubble?.element;
+      if (b && b.style.display !== 'none') { const r = b.getBoundingClientRect(); if (r.width) taken.push(r); }
+      const el = a.label?.element;
+      if (!el || el.style.display === 'none') continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width) continue;
+      const off = el.classList.contains('dd-flag-off');
+      const custom = !!a.doc.label?.text?.trim();
+      const key = a.id === this.selectedId ? -1 : a.root.position.distanceTo(cam) * (off ? 1 : 0.8) * (custom ? 0.7 : 1);
+      items.push({ a, r, key, off });
+    }
+    items.sort((x, y) => x.key - y.key);
+    for (const it of items) {
+      const pad = it.off ? 6 : -3; // a hidden flag needs clear space to come back
+      const hit = it.key >= 0 && taken.some((t) => it.r.left < t.right + pad && it.r.right > t.left - pad && it.r.top < t.bottom + pad && it.r.bottom > t.top - pad);
+      if (!hit) taken.push(it.r);
+      it.a.label!.element.classList.toggle('dd-flag-off', hit);
+      if (it.a.toothpick) it.a.toothpick.visible = !hit;
+    }
+  }
 
   private adaptResolution(dt: number) {
     this.frameTimes.push(dt);

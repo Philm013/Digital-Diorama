@@ -15,8 +15,8 @@ export function useProfile() {
 /**
  * The "game director": recomputes health and quests whenever the diorama changes,
  * hands out quest XP (once per diorama), stars and badges, and records moments
- * like visiting at night. Quests already complete when a diorama first opens are
- * recorded silently so templates don't shower free XP.
+ * like visiting at night. Quests and ecosystem badges already met when a diorama
+ * first opens are recorded silently so templates don't shower free rewards.
  */
 export function useGame(engine: Engine | undefined, version: number, loaded: boolean): GameState {
   const profileV = useSyncExternalStore(subscribeProfile, profileVersion);
@@ -39,6 +39,7 @@ export function useGame(engine: Engine | undefined, version: number, loaded: boo
         // first time this diorama opens: count what's already there as the starting point
         for (const q of state.quests) if (q.done && !doneIds.includes(q.id)) doneIds.push(q.id);
         engine.doc.progress.flags = [];
+        engine.doc.progress.given = Object.entries(ecoBadges(engine, state.health)).filter(([, met]) => met).map(([id]) => id);
         recordStars(engine.doc.id, engine.doc.biome, state.stars, true);
         return;
       }
@@ -47,13 +48,14 @@ export function useGame(engine: Engine | undefined, version: number, loaded: boo
     for (const q of state.quests) if (q.done && !doneIds.includes(q.id)) { doneIds.push(q.id); questDone(q.id, q.title, q.xp); any = true; }
     if (any) engine.changed();
     recordStars(engine.doc.id, engine.doc.biome, state.stars);
-    // badges from the state of this diorama
-    const h = state.health;
-    if (h.maxLevel >= 4) awardBadge('food-chain');
-    if (h.score >= 90) awardBadge('balanced');
-    if (h.species >= 25) awardBadge('biodiversity');
-    const decomposers = new Set(engine.actorList.filter((a) => !a.isClone && roleOf(a.def) === 'decomposer').map((a) => a.def.id));
-    if (decomposers.size >= 3) awardBadge('decomposer');
+    // ecosystem badges are earned by the student's own changes: a condition the template already
+    // met only counts once it has been lost and then reached again
+    const given = (p.given ??= []);
+    for (const [id, met] of Object.entries(ecoBadges(engine, state.health))) {
+      const i = given.indexOf(id);
+      if (met && i < 0) awardBadge(id);
+      else if (!met && i >= 0) given.splice(i, 1);
+    }
   }, [state, loaded, engine]);
   // moments from the environment
   useEffect(() => {
@@ -66,6 +68,11 @@ export function useGame(engine: Engine | undefined, version: number, loaded: boo
     if (!seasons.includes(env.season)) { seasons.push(env.season); if (seasons.length >= 4) awardBadge('seasons'); }
   }, [version, loaded, engine]);
   return state;
+}
+
+function ecoBadges(engine: Engine, h: Health): Record<string, boolean> {
+  const decomposers = new Set(engine.actorList.filter((a) => !a.isClone && roleOf(a.def) === 'decomposer').map((a) => a.def.id));
+  return { 'food-chain': h.maxLevel >= 4, balanced: h.score >= 90, biodiversity: h.species >= 25, decomposer: decomposers.size >= 3 };
 }
 
 function ecosystemHealthEmpty(): Health {
