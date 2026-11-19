@@ -1459,7 +1459,10 @@ export const night = { eyes: { color: '#ffd77a', intensity: 0.2, distance: 1, de
 export const ANIMATIONS = Object.entries(BIRD_CLIPS).map(([name, c]) => ({ name, label: c.label, loop: c.loop, duration: name === 'perch' ? 4.2 : name === 'glide' ? 3.5 : 0.6 }));
 
 function resolveSpec(p) {
-  const sp = SPECIES[p.species] || SPECIES[DEFAULT_SPECIES], S = {};
+  // Digital Diorama extension: `specOverride` merges anatomy/pattern/palette changes onto the preset
+  // (one level deep), so related species can share one rig.
+  const sp0 = SPECIES[p.species] || SPECIES[DEFAULT_SPECIES], ov = p.specOverride && typeof p.specOverride === 'object' ? p.specOverride : null;
+  const sp = ov ? { ...sp0, ...Object.fromEntries(Object.entries(ov).map(([k, v]) => [k, v && typeof v === 'object' && !Array.isArray(v) && sp0[k] && typeof sp0[k] === 'object' ? { ...sp0[k], ...v } : v])) } : sp0, S = {};
   for (const [k, v] of Object.entries({ ...BDEF, ...sp })) S[k] = v && typeof v === 'object' && !Array.isArray(v) ? { ...(BDEF[k] || {}), ...v } : v;
   if (p.bodyForm !== 'auto') S.bodyForm = p.bodyForm;
   S.palette = { ...BASE, ...sp.palette };

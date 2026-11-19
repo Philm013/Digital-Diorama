@@ -266,7 +266,7 @@ export function createNest(p: Record<string, unknown> = {}) {
   return group;
 }
 
-export const BUILTINS: Record<string, { createAsset: (p?: Record<string, unknown>) => THREE.Object3D; params: Record<string, ParamSpec> }> = {
+export const FUNGI_BUILTINS: Record<string, { createAsset: (p?: Record<string, unknown>) => THREE.Object3D; params: Record<string, ParamSpec> }> = {
   mushrooms: { createAsset: createMushrooms, params: MUSHROOM_PARAMS },
   log: { createAsset: createLog, params: LOG_PARAMS },
   'termite-mound': { createAsset: createTermiteMound, params: MOUND_PARAMS },

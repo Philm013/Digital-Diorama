@@ -281,6 +281,7 @@ export class Engine {
     if (def.family === 'deciduous') return { leafHueAndSeason: { spring: 'freshSpring', summer: 'deepSummer', autumn: 'peakAutumn', winter: 'moonlit' }[season] };
     if (def.family === 'terraTree' && ['broadleaf', 'shrub', 'acacia'].includes(String(def.params.species))) return season === 'autumn' ? { colorway: 'autumn' } : season === 'winter' ? { colorway: 'dusk' } : {};
     if (def.family === 'water' && def.id.startsWith('grove/') && season === 'autumn') return { colorway: 'autumn' };
+    if (def.family === 'flora' && def.seasonal) return { season };
     return {};
   }
   private paramsFor(a: ActorDoc, def: AssetDef) {

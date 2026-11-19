@@ -1955,6 +1955,9 @@ const SPECIES_KEYS = Object.keys(SPECIES);
 
 /** Applies user proportions / style overrides to a species spec (true rebuilds, never uniform scaling). */
 function specFor(base, p) {
+  // Digital Diorama extension: `specOverride` deep-merges anatomy/palette changes onto the preset
+  // (e.g. a Bactrian camel's second hump), so related species can share one rig.
+  if (p.specOverride && typeof p.specOverride === 'object') base = mergeDeep(base, p.specOverride);
   const S = mergeDeep(base, {});
   S.ear = { ...base.ear }; S.tail = { ...base.tail };
   const juv = p.age === 'juvenile';

@@ -127,3 +127,32 @@ export function wildformGroup(category: string, phylum: string, override?: strin
   if (category === 'Marine') return 'Sea invertebrates';
   return 'Invertebrates';
 }
+
+/** Real facts for species whose Wildform description talks about the 3D model rather than the animal. */
+export const WILDFORM_FACTS: Record<string, string> = {
+  'harp-seal': 'Harp seals give birth on drifting sea ice; pups are born with white fur and gain up to 2 kg a day on their mother’s fat-rich milk.',
+  'bottlenose-dolphin': 'Each bottlenose dolphin has its own “signature whistle” — a sound that works like a name.',
+  'humpback-whale': 'Male humpbacks sing long, changing songs that can travel for kilometres underwater; their flippers can be 5 m long.',
+  'american-alligator': 'Alligators dig “gator holes” that hold water through droughts, giving fish, turtles and birds a place to survive.',
+  'manta-ray': 'Mantas have the largest brain-to-body ratio of any fish, and may recognise themselves in a mirror.',
+  'horseshoe-crab': 'Not a true crab: horseshoe crabs are closer to spiders and have barely changed in 450 million years. Their blue blood is used to test medicines.',
+  nautilus: 'A nautilus floats by adjusting gas in the chambers of its shell, rising at night to feed and sinking by day.',
+  'portuguese-man-o-war': 'It is not one animal but a colony of specialised zooids: a gas-filled float with a sail, plus feeding, stinging and breeding polyps.',
+  'sea-cucumber': 'Sea cucumbers vacuum up sand, digest the food in it and leave cleaner sand behind — the reef’s recyclers.',
+  tapeworm: 'A tapeworm has no mouth or gut: it absorbs digested food through its skin inside its host’s intestine.',
+  'sea-hare': 'When disturbed, a sea hare squirts a cloud of purple ink; its two rolled “ears” are rhinophores that smell the water.',
+  'snow-leopard': 'A snow leopard wraps its long, thick tail around its face like a scarf while it sleeps.',
+  pronghorn: 'The fastest land animal in the Americas can run 90 km/h — fast enough to outrun predators that went extinct 10,000 years ago.',
+  'bactrian-camel': 'Bactrian camels can drink 100 litres of water in 15 minutes and survive from −40 °C winters to 40 °C summers.',
+};
+
+/** IUCN Red List categories for the Wildform vertebrates (2025 assessments where they changed). */
+export const WILDFORM_STATUS: Record<string, string> = {
+  'arctic-fox': 'Least Concern', 'fennec-fox': 'Least Concern', coyote: 'Least Concern', 'golden-jackal': 'Least Concern', 'snow-leopard': 'Vulnerable',
+  pronghorn: 'Least Concern', 'bactrian-camel': 'Domesticated', 'harp-seal': 'Near Threatened', 'bottlenose-dolphin': 'Least Concern', 'humpback-whale': 'Least Concern',
+  'eastern-gray-squirrel': 'Least Concern', 'eastern-chipmunk': 'Least Concern', 'eastern-cottontail': 'Least Concern', 'virginia-opossum': 'Least Concern',
+  'barn-owl': 'Least Concern', 'blue-jay': 'Least Concern', 'downy-woodpecker': 'Least Concern', 'american-robin': 'Least Concern', 'mourning-dove': 'Least Concern',
+  'sand-lizard': 'Least Concern', 'american-alligator': 'Least Concern', 'green-anole': 'Least Concern', 'eastern-box-turtle': 'Vulnerable', 'common-garter-snake': 'Least Concern',
+  'common-toad': 'Least Concern', 'glass-frog': 'Least Concern', 'alpine-newt': 'Least Concern', 'great-white-shark': 'Vulnerable', 'manta-ray': 'Endangered',
+  'yellow-tang': 'Least Concern', seahorse: 'Vulnerable', lionfish: 'Least Concern', 'monarch-butterfly': 'Vulnerable', 'blue-crab': 'Least Concern', 'american-lobster': 'Least Concern',
+};

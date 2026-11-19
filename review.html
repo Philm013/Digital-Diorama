@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asset review</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 12px/1.35 system-ui, sans-serif; background: #fff; color: #2b2620; }
+      header { padding: 10px 14px; border-bottom: 2px solid #e4dccb; background: #fbf7ef; }
+      header h1 { margin: 0; font-size: 16px; }
+      #status { color: #a3702c; font-weight: 600; }
+      .grid { display: grid; grid-template-columns: repeat(var(--cols, 3), 1fr); gap: 10px; padding: 10px; }
+      .card { border: 1px solid #ddd5c4; border-radius: 8px; overflow: hidden; background: #f6f3ec; }
+      .card.err { border-color: #d55; background: #fdeeee; }
+      .head { padding: 5px 8px; border-bottom: 1px solid #e4dccb; display: flex; gap: 6px; align-items: baseline; }
+      .head b { font-size: 13px; }
+      .head .idx { font-size: 10px; color: #fff; background: #7a8f66; border-radius: 3px; padding: 0 5px; }
+      .head small { color: #857a66; font-size: 10px; margin-left: auto; text-align: right; }
+      .imgs { display: flex; }
+      .imgs figure { margin: 0; flex: 1; position: relative; }
+      .imgs figure + figure { border-left: 1px solid #e4dccb; }
+      .imgs img { width: 100%; display: block; }
+      .imgs figcaption { position: absolute; left: 4px; bottom: 3px; font-size: 9px; color: #6d6452; background: #fffc; border-radius: 3px; padding: 0 4px; }
+      .meta { padding: 3px 8px 5px; font-size: 10px; color: #6d6452; }
+      .msg { padding: 12px; color: #a33; white-space: pre-wrap; font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <header><h1>Asset review <span id="title"></span></h1><div id="status">Rendering…</div></header>
+    <div class="grid" id="grid"></div>
+    <script type="module" src="/src/review/review.ts"></script>
+  </body>
+</html>

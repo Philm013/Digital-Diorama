@@ -42,6 +42,8 @@ const LOADERS = import.meta.glob<AssetModule>([
   '/References/Fish Tank/src/aquarium/fauna-*.mjs',
   '/References/Fish Tank/src/aquarium/hardscape-*.mjs',
   '/References/Fish Tank/src/aquarium/flora-*.mjs',
+  '/src/assets/flora/trees.ts',
+  '/src/assets/flora/herbs.ts',
 ]);
 
 export const MODULE_PATHS = {
@@ -57,6 +59,7 @@ export const MODULE_PATHS = {
   water: (id: string) => `/References/water-world/assets/${id}.mjs`,
   beach: (id: string) => `/References/Beach/src/assets/${id}.mjs`,
   aquarium: (id: string) => `/References/Fish Tank/src/aquarium/${id}.mjs`,
+  flora: (id: 'trees' | 'herbs') => `/src/assets/flora/${id}.ts`,
 } as const;
 
 const cache = new Map<string, Promise<AssetModule>>();

@@ -1,4 +1,4 @@
-export type Family = 'mammal' | 'bird' | 'wildform' | 'reptile' | 'plant' | 'deciduous' | 'conifer' | 'terraTree' | 'rock' | 'water' | 'beach' | 'aquarium' | 'builtin';
+export type Family = 'mammal' | 'bird' | 'wildform' | 'reptile' | 'plant' | 'deciduous' | 'conifer' | 'terraTree' | 'rock' | 'water' | 'beach' | 'aquarium' | 'builtin' | 'flora';
 export type Locomotion = 'walk' | 'fly' | 'swim' | 'slither' | 'hop' | 'crawl' | 'sessile' | 'scenery';
 export type Category = 'animals' | 'plants' | 'fungi' | 'habitats' | 'water' | 'land' | 'sky' | 'human' | 'finds';
 export type Diet = 'herbivore' | 'carnivore' | 'omnivore' | 'insectivore' | 'piscivore' | 'filter feeder' | 'detritivore' | 'decomposer' | 'producer' | 'nectarivore' | 'frugivore' | 'scavenger' | 'parasite' | 'carnivorous plant' | 'none';
@@ -53,6 +53,8 @@ export interface AssetDef {
   /** natural cruising speed in m/s */
   speed?: number;
   living?: boolean;
+  /** rebuilt when the diorama's season changes (blossom, autumn colour, bare winters) */
+  seasonal?: boolean;
 }
 
 export const BIOME_IDS = ['forest', 'taiga', 'grassland', 'savanna', 'rainforest', 'desert', 'tundra', 'wetland', 'mountain', 'reef', 'kelp', 'shore', 'garden'] as const;
