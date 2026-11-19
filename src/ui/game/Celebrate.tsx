@@ -68,7 +68,12 @@ export function Celebrations({ sound }: { sound: boolean }) {
       return;
     }
     let b: Banner | null = null;
-    if (e.type === 'discover') b = { key, kind: 'discover', title: 'New species discovered!', sub: e.name, emoji: e.emoji, color: '#3d85c6' };
+    if (e.type === 'discover') {
+      // the species card already shows a "new discovery" ribbon; on phones a banner would also
+      // sit right on top of the organism the camera just brought into view
+      if (innerWidth < 1024) { if (soundRef.current) { audio(); playSound('chime'); } return; }
+      b = { key, kind: 'discover', title: 'New species discovered!', sub: e.name, emoji: e.emoji, color: '#3d85c6' };
+    }
     if (e.type === 'quest') b = { key, kind: 'quest', title: 'Quest complete!', sub: `${e.title}  ·  +${e.xp} XP`, emoji: '✅', color: '#7c5cff' };
     if (e.type === 'badge') { const d = BADGE_BY_ID[e.id]; b = { key, kind: 'badge', title: 'Badge unlocked!', sub: `${d.name} — ${d.how}`, emoji: d.emoji, color: d.color }; }
     if (e.type === 'level') b = { key, kind: 'level', title: `Level ${e.level}!`, sub: `You are now a ${e.rank}`, emoji: '🎉', color: '#e0a800' };

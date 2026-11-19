@@ -64,9 +64,9 @@ Every push to `main` builds the app and publishes it with GitHub Pages ([`.githu
 
 ### 🔨 Build
 - **Library** of nearly 350 things with 3D thumbnails, filtered to fit the current habitat (or *All*), searchable by name, scientific name, class or phylum, and colour-coded by food-web role, with marks for what is already in the diorama and what you have discovered. Tap to add near the centre of the view, or drag onto the diorama (drop an animal onto a plant or rock to perch it there).
-- Drag objects to move them. A **context bar** above the selection turns, resizes, duplicates, focuses, deletes or opens it in Code; on touch, **long-press** picks an object up and a second finger **twists** and **pinches** it. Keys: `R` / `Shift+R` turn, `+` / `−` resize, `1` `2` `3` switch Explore / Build / Code.
+- Drag objects to move them. A **context bar** above the selection (on phones, at the top of the Edit panel) turns, resizes, duplicates, focuses, deletes or opens it in Code; on touch, **long-press** picks an object up and a second finger **twists** and **pinches** it. Keys: `R` / `Shift+R` turn, `+` / `−` resize, `1` `2` `3` switch Explore / Build / Code.
 - The inspector (Place · Label · Look · Info) sets direction, size, flying/swimming height, label text, research notes, animation, and every shape/colour parameter the asset module exposes (generated from its `params` schema).
-- **Land tools**: raise, dig, smooth, flatten, roughen, and paint 14 ground types (grass, meadow, forest floor, dry grass, jungle, soil, mud, sand, desert sand, rock, gravel, tundra moss, snow, ice); water level; grass density. The front of the base is a cut-away showing soil horizons and rock strata, with a water cross-section where ponds meet the edge.
+- **Land tools**: raise, dig, smooth, flatten, roughen, and paint 14 ground types (grass, meadow, forest floor, dry grass, jungle, soil, mud, sand, desert sand, rock, gravel, tundra moss, snow, ice); water level; grass density. Brushes work like an airbrush: press and hold to keep building a hill or digging a hole in one spot, or drag to shape; only the area under the brush is rebuilt, so sculpting stays smooth on phones, and the grass rides along with the ground. The front of the base is a cut-away showing soil horizons and rock strata, with a water cross-section where ponds meet the edge.
 - Swap the whole base for a habitat tile (coral reef, kelp forest, tide pools, beach, marsh, mangroves, frozen lake, lake, cave, groundwater cut-away).
 - Undo/redo, duplicate, delete, autosave, download/open `.diorama.json` files, save a picture.
 
@@ -165,14 +165,15 @@ Run these with `npm run dev` stopped (the review and UI scripts start their own 
 
 - **Asset review harness** — `review.html` renders catalog assets through the app's own builder from several views (front ¾, side, top, with a marker showing which way is forward). Query parameters pick what to show: `ids=`, `cat=`, `group=`, `family=`, `match=`, `views=`, `clip=`, `season=`, `q=` (quality), or variants of one asset with `base=<id>&v=[{…},…]`. `node tools/review-assets.mjs --query "cat=animals&cols=3" --per 15 --out shots/animals` saves contact sheets.
 - **Screenshots** — `node tools/shoot.mjs` captures app URLs (desktop or `--device phone`) and prints triangles, draw calls and actor counts.
-- **UI smoke test** — `node tools/ui-check.mjs --out shots/ui-check` taps an animal (field card + discovery), selects it in Build (context bar, resize), twists and pinches it with two fingers and drags the phone sheet, on desktop and phone, and reports any page errors.
+- **UI smoke test** — `node tools/ui-check.mjs --out shots/ui-check` taps an animal (field card + discovery), selects it in Build (context bar, resize), twists and pinches it with two fingers, resizes the phone panel by its header and taps a panel tab, on desktop and phone, and reports any page errors.
 
 ---
 
 ## Devices & performance
 
 - Built on standard WebGL 2, WebAudio and Speech Synthesis, for current desktop and mobile browsers. Automated checks run in Chromium at desktop and phone sizes.
-- Touch: a draggable bottom sheet with snap points and fling (the scene re-centres in the space left above it, so a focused or selected object stays in view), a bottom tab bar, one-finger orbit / two-finger pan-zoom, long-press to pick up, two-finger twist and pinch on a held object, forgiving taps on thin things like legs and branches, short haptic ticks where the device supports them, and safe-area padding for notched phones.
+- Phones: in Build and Code the panel takes most of the screen under a smaller 3D view that always stays visible; drag the panel's header to give either more room (it snaps, and flings). Held sideways, the panel sits beside the view and the mode tabs move into the top bar. While the camera is at its overview it re-fits the diorama whenever the view changes shape. Tapping an organism in Explore glides the camera so it sits in the space left by its species card.
+- Touch: a bottom tab bar, undo/redo in the Build panel, one-finger orbit / two-finger pan-zoom, long-press to pick up, two-finger twist and pinch on a held object, forgiving taps on thin things like legs and branches, short haptic ticks where the device supports them, and safe-area padding for notched phones.
 - Three graphics tiers (Fast / Balanced / Detailed) pick model detail, shadow resolution and grass density; the renderer also adapts its resolution to keep the frame rate up. Phones default to Fast.
 - All geometry is procedural and texture-free; the only network requests are fonts (optional — system fonts are the fallback). Library thumbnails are rendered in the background on first view and cached in IndexedDB.
 

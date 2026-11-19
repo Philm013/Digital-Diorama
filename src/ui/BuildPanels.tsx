@@ -73,7 +73,7 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
 
   return (
     <div className="flex h-full flex-col">
-      <div className="space-y-2 border-b border-black/5 p-3 pb-2">
+      <div className={clsx('border-b border-black/5', compact ? 'space-y-1.5 px-2.5 pb-1.5 pt-1' : 'space-y-2 p-3 pb-2')}>
         {!compact && (
           <div className="flex items-center gap-2">
             <div className="font-display text-lg font-bold">Inventory</div>
@@ -85,10 +85,10 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
         <div className="flex gap-1.5">
           <div className="relative min-w-0 flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search species & things…" className="dd-input h-11 pl-9 text-[15px]" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search species & things…" className={clsx('dd-input pl-9 text-[15px]', compact ? 'h-10' : 'h-11')} />
           </div>
           {compact && !q && biome !== 'blank' && ['animals', 'plants', 'fungi'].includes(cat) && (
-            <button onClick={() => setFits(!fits)} title={fits ? `Showing only species from the ${BIOME_BY_ID[biome]?.name ?? biome}` : 'Showing everything'} className={clsx('flex h-11 shrink-0 items-center gap-1 rounded-2xl px-3 font-display text-[13px] font-semibold transition', fits ? 'bg-emerald-600 text-white' : 'bg-black/[0.06] text-ink/60')}>
+            <button onClick={() => setFits(!fits)} title={fits ? `Showing only species from the ${BIOME_BY_ID[biome]?.name ?? biome}` : 'Showing everything'} className={clsx('flex h-10 shrink-0 items-center gap-1 rounded-2xl px-3 font-display text-[13px] font-semibold transition', fits ? 'bg-emerald-600 text-white' : 'bg-black/[0.06] text-ink/60')}>
               {BIOME_BY_ID[biome]?.emoji ?? '📍'} {fits ? 'Here' : 'All'}
             </button>
           )}
@@ -96,7 +96,7 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
         {!q && (
           <div className="dd-scroll-x -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
             {CATS.map((c) => (
-              <button key={c} onClick={() => { setCat(c); uiSound('tick'); }} className={clsx('flex h-10 shrink-0 items-center gap-1.5 rounded-2xl px-3 font-display text-[13.5px] font-semibold transition', cat === c ? 'dd-3d bg-ink text-white [--edge:#000]' : 'bg-white text-ink/75 ring-1 ring-black/10 hover:bg-black/5')}>
+              <button key={c} onClick={() => { setCat(c); uiSound('tick'); }} className={clsx('flex shrink-0 items-center gap-1.5 rounded-2xl px-3 font-display text-[13.5px] font-semibold transition', compact ? 'h-9' : 'h-10', cat === c ? 'dd-3d bg-ink text-white [--edge:#000]' : 'bg-white text-ink/75 ring-1 ring-black/10 hover:bg-black/5')}>
                 <span className="text-base">{CAT_ICON[c]}</span>{CATEGORY_META[c].label}<span className={clsx('rounded-full px-1.5 text-[10.5px] tabular-nums', cat === c ? 'bg-white/20' : 'bg-black/5 text-ink/45')}>{counts[c]}</span>
               </button>
             ))}
@@ -120,7 +120,7 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
           }}><Mountain size={14} /> Use sculptable land instead</Btn>
         )}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
+      <div className={clsx('min-h-0 flex-1 overflow-y-auto overscroll-contain', compact ? 'px-2.5 pb-3 pt-2' : 'p-3')}>
         {groups.length === 0 && <div className="py-10 text-center text-sm text-ink/55">Nothing here — try turning off the habitat filter or searching.</div>}
         {groups.map(([g, list]) => (
           <div key={g} className="mb-4">
@@ -153,15 +153,15 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
 }
 
 /* =============================== Inspector =============================== */
-export function InspectorPanel({ onCollapse }: { onCollapse?: () => void } = {}) {
+export function InspectorPanel({ onCollapse, compact }: { onCollapse?: () => void; compact?: boolean } = {}) {
   const engine = useEngine();
   useEngineVersion();
   const a = engine.getActor(engine.selectedId);
-  if (!a) return <DioramaPanel onCollapse={onCollapse} />;
-  return <ActorInspector key={a.id} id={a.id} onCollapse={onCollapse} />;
+  if (!a) return <DioramaPanel onCollapse={onCollapse} compact={compact} />;
+  return <ActorInspector key={a.id} id={a.id} onCollapse={onCollapse} compact={compact} />;
 }
 
-function ActorInspector({ id, onCollapse }: { id: string; onCollapse?: () => void }) {
+function ActorInspector({ id, onCollapse, compact }: { id: string; onCollapse?: () => void; compact?: boolean }) {
   const engine = useEngine();
   useEngineVersion();
   const a = engine.getActor(id)!;
@@ -177,29 +177,47 @@ function ActorInspector({ id, onCollapse }: { id: string; onCollapse?: () => voi
   const setTransform = (fn: () => void) => { fn(); engine.commitTransform(a); engine.changed(); bump((x) => x + 1); };
   const deg = Math.round(((180 - (a.root.rotation.y * 180) / Math.PI) % 360 + 360) % 360);
 
-  return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-black/5 p-3" style={{ background: `linear-gradient(135deg, ${rm.color}1f, transparent 70%)` }}>
-        <div className="flex items-start gap-3">
-          <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-white shadow-sm ring-1 ring-black/5"><AssetThumb id={def.id} emoji={def.emoji} size={58} /></div>
-          <div className="min-w-0 flex-1">
-            <input className="w-full rounded-lg bg-transparent px-1 font-display text-lg font-bold outline-none hover:bg-black/5 focus:bg-white" value={a.doc.name}
-              onChange={(e) => { a.doc.name = e.target.value; engine.syncActorLabel(a); engine.changed(); bump((x) => x + 1); }} />
+  const heroBg = { background: `linear-gradient(135deg, ${rm.color}1f, transparent 70%)` };
+  const nameRow = (
+    <div className={clsx('flex gap-3', compact ? 'items-center' : 'items-start')}>
+      <div className={clsx('grid shrink-0 place-items-center bg-white shadow-sm ring-1 ring-black/5', compact ? 'h-11 w-11 rounded-xl' : 'h-16 w-16 rounded-2xl')}><AssetThumb id={def.id} emoji={def.emoji} size={compact ? 40 : 58} /></div>
+      <div className="min-w-0 flex-1">
+        <input className={clsx('w-full rounded-lg bg-transparent px-1 font-display font-bold outline-none hover:bg-black/5 focus:bg-white', compact ? 'text-base leading-tight' : 'text-lg')} value={a.doc.name}
+          onChange={(e) => { a.doc.name = e.target.value; engine.syncActorLabel(a); engine.changed(); bump((x) => x + 1); }} />
+        {compact ? (
+          <div className="flex min-w-0 items-center gap-1.5 px-1 text-[11.5px]">
+            <span className="truncate italic text-ink/60">{def.info.scientific ?? def.name}</span>
+            <span className="shrink-0 font-semibold" style={{ color: rm.color }}>· {rm.emoji} {rm.label}</span>
+          </div>
+        ) : (
+          <>
             <div className="truncate px-1 text-xs italic text-ink/60">{def.info.scientific ?? def.name}</div>
             <div className="mt-1 flex flex-wrap gap-1 px-1">
               <Chip color={rm.color}>{rm.emoji} {rm.label}</Chip>
               {def.info.status && <Chip color={statusColor(def.info.status)}>{def.info.status}</Chip>}
             </div>
-          </div>
-          {onCollapse && <IconBtn label="Hide panel" onClick={onCollapse} className="h-9 w-9 text-ink/50"><PanelRightClose size={18} /></IconBtn>}
-        </div>
-        <div className="mt-3 flex gap-1 rounded-2xl bg-black/[0.05] p-1">
-          {([['place', '📍 Place'], ['label', '🏷️ Label'], ['look', '🎨 Look'], ['about', 'ℹ️ Info']] as const).map(([t, l]) => (
-            <button key={t} onClick={() => { setTab(t); uiSound('tick'); }} className={clsx('h-9 flex-1 rounded-xl font-display text-[12.5px] font-semibold transition', tab === t ? 'bg-white text-ink shadow-sm' : 'text-ink/55 hover:text-ink')}>{l}</button>
-          ))}
-        </div>
+          </>
+        )}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+      {onCollapse && <IconBtn label="Hide panel" onClick={onCollapse} className="h-9 w-9 text-ink/50"><PanelRightClose size={18} /></IconBtn>}
+    </div>
+  );
+  const tabRow = (
+    <div className={clsx('flex gap-1 rounded-2xl bg-black/[0.05] p-1', !compact && 'mt-3')}>
+      {([['place', '📍 Place'], ['label', '🏷️ Label'], ['look', '🎨 Look'], ['about', 'ℹ️ Info']] as const).map(([t, l]) => (
+        <button key={t} onClick={() => { setTab(t); uiSound('tick'); }} className={clsx('flex-1 rounded-xl font-display text-[12.5px] font-semibold transition', compact ? 'h-8' : 'h-9', tab === t ? 'bg-white text-ink shadow-sm' : 'text-ink/55 hover:text-ink')}>{l}</button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="flex h-full flex-col">
+      {!compact && <div className="border-b border-black/5 p-3" style={heroBg}>{nameRow}{tabRow}</div>}
+      {/* phones: the name scrolls away and the tabs stay pinned, so the content gets the room */}
+      <div className={clsx('min-h-0 flex-1 overflow-y-auto overscroll-contain', compact ? 'pb-3' : 'px-3 py-3')}>
+        {compact && <div className="px-2.5 pb-1.5 pt-2" style={heroBg}>{nameRow}</div>}
+        {compact && <div className="sticky top-0 z-10 border-b border-black/5 bg-[#fbf8f1] px-2.5 py-1.5">{tabRow}</div>}
+        <div className={compact ? 'px-3 pt-3' : undefined}>
         {tab === 'place' && (
           <div className="space-y-4">
             <div>
@@ -266,6 +284,7 @@ function ActorInspector({ id, onCollapse }: { id: string; onCollapse?: () => voi
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
@@ -348,7 +367,7 @@ export function EnvironmentControls() {
   );
 }
 
-function DioramaPanel({ onCollapse }: { onCollapse?: () => void }) {
+function DioramaPanel({ onCollapse, compact }: { onCollapse?: () => void; compact?: boolean }) {
   const engine = useEngine();
   useEngineVersion();
   const env = engine.env;
@@ -358,13 +377,20 @@ function DioramaPanel({ onCollapse }: { onCollapse?: () => void }) {
   const setTool = (tool: SculptTool | 'paint' | null) => { brush.tool = brush.tool === tool ? null : tool; engine.changed(false); };
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-start gap-2 border-b border-black/5 p-3">
-        <div className="flex-1">
-          <div className="font-display text-lg font-bold">World & land</div>
-          <div className="text-xs text-ink/55">Tap something in the scene to edit it.</div>
+      {compact ? (
+        <div className="flex items-baseline gap-2 border-b border-black/5 px-3 py-1.5">
+          <div className="font-display text-[15px] font-bold">🌍 World & land</div>
+          <div className="truncate text-[11.5px] text-ink/55">Tap something in the scene to edit it</div>
         </div>
-        {onCollapse && <IconBtn label="Hide panel" onClick={onCollapse} className="h-9 w-9 text-ink/50"><PanelRightClose size={18} /></IconBtn>}
-      </div>
+      ) : (
+        <div className="flex items-start gap-2 border-b border-black/5 p-3">
+          <div className="flex-1">
+            <div className="font-display text-lg font-bold">World & land</div>
+            <div className="text-xs text-ink/55">Tap something in the scene to edit it.</div>
+          </div>
+          {onCollapse && <IconBtn label="Hide panel" onClick={onCollapse} className="h-9 w-9 text-ink/50"><PanelRightClose size={18} /></IconBtn>}
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto px-3">
         {t && (
           <Section title="Land tools">
@@ -373,7 +399,7 @@ function DioramaPanel({ onCollapse }: { onCollapse?: () => void }) {
                 <Btn key={x.tool} size="sm" active={brush.tool === x.tool} onClick={() => setTool(x.tool)}>{x.icon}{x.label}</Btn>
               ))}
             </div>
-            {brush.tool && <p className="text-[11px] text-ink/55">Drag on the land to {brush.tool === 'paint' ? 'paint' : 'sculpt'}. Two fingers or right-drag still move the camera. Tap the tool again to stop.</p>}
+            {brush.tool && <p className="text-[11px] text-ink/55">{brush.tool === 'paint' ? 'Drag on the land to paint.' : 'Press and hold on the land to keep working one spot, or drag to shape it.'} Two fingers or right-drag still move the camera. Tap the tool again to stop.</p>}
             {brush.tool === 'paint' && (
               <div className="grid grid-cols-4 gap-1.5">
                 {GROUND_TYPES.map((g, i) => (

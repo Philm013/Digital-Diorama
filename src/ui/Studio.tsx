@@ -46,6 +46,8 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   const [libOpen, setLibOpen] = useState(true);
   const [inspOpen, setInspOpen] = useState(true);
   const wide = useMedia('(min-width: 1024px)');
+  // phones on their side: the build/code panel moves beside the viewer and the mode tabs into the top bar
+  const landscape = useMedia('(orientation: landscape) and (max-height: 540px)') && !wide;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   useEffect(() => { setUiSound(settings.sound); }, [settings.sound]);
@@ -208,9 +210,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   const biome = BIOME_BY_ID[doc.biome];
   const ctx = useMemo(() => api, [api]);
   const [sheetIdx, setSheetIdx] = useState(1);
-  const [sheetH, setSheetH] = useState(0);
-  // keep the scene centred in the part of the view the phone sheet leaves visible
-  useEffect(() => { engine?.setBottomInset(!wide && (mode === 'build' || mode === 'code') ? sheetH : 0); }, [engine, wide, mode, sheetH]);
+  const phonePanel = !wide && (mode === 'build' || mode === 'code');
   const selected = engine?.getActor(engine.selectedId);
   const showContext = !!ctx && mode === 'build' && !playing && !!selected && !selected.isClone && !engine?.walk?.active;
   const goCode = useCallback(() => { if (engine && selected) { engine.select(selected.id); setMode('code'); } }, [engine, selected, setMode]);
@@ -218,7 +218,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   return (
     <div className="dd-studio flex h-full flex-col" style={{ ['--accent' as string]: biome?.accent ?? '#3f7d3a' }}>
       {/* ---------------- top HUD ---------------- */}
-      <header className="dd-topbar pt-safe z-40 flex h-[60px] shrink-0 items-center gap-1.5 px-2 sm:gap-2 sm:px-3">
+      <header className={clsx('dd-topbar pt-safe z-40 flex shrink-0 items-center gap-1.5 px-2 sm:gap-2 sm:px-3', wide ? 'h-[60px]' : 'h-[52px]')}>
         <IconBtn label="Back to all dioramas" onClick={() => void exit()} className="text-white hover:bg-white/10"><ArrowLeft size={21} /></IconBtn>
         <div className="flex min-w-0 items-center gap-2">
           <span className="hidden h-10 w-10 shrink-0 place-items-center rounded-2xl text-2xl sm:grid" style={{ background: 'color-mix(in srgb, var(--accent) 45%, transparent)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.15)' }}>{biome?.emoji ?? '📦'}</span>
@@ -228,7 +228,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
               onChange={(e) => setTitle(e.target.value)}
               onBlur={() => { if (engine && title.trim() && title !== engine.doc.title) { engine.doc.title = title.trim(); engine.frame.setTitle(engine.doc.title, engine.doc.author ? `by ${engine.doc.author}` : ''); engine.changed(); } }}
               onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className="block w-[30vw] min-w-0 max-w-[240px] truncate rounded-lg bg-transparent px-1.5 font-display text-[15px] font-semibold leading-tight text-white outline-none hover:bg-white/10 focus:bg-white/15 sm:text-lg"
+              className={clsx('block min-w-0 truncate rounded-lg bg-transparent px-1.5 font-display text-[15px] font-semibold leading-tight text-white outline-none hover:bg-white/10 focus:bg-white/15 sm:text-lg', landscape ? 'w-[19vw]' : 'w-[30vw] max-w-[240px]')}
               aria-label="Diorama title"
             />
             <button onClick={() => setQuestLog(true)} className="flex items-center gap-1 px-1.5 text-[11px] font-bold text-white/55 hover:text-white/85" title="Quests (Q)">
@@ -236,7 +236,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
             </button>
           </div>
         </div>
-        {wide && <ModeTabs mode={mode} onMode={setMode} />}
+        {(wide || landscape) && <ModeTabs mode={mode} onMode={setMode} compact={landscape} />}
         <div className="flex-1" />
         {engine && mode === 'build' && wide && <UndoRedo engine={engine} />}
         {engine && !loading && <HealthChip game={game} compact={!wide} />}
@@ -266,20 +266,20 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
       </header>
 
       {/* ---------------- body ---------------- */}
-      <div className="relative flex min-h-0 flex-1">
+      <div className={clsx('relative flex min-h-0 flex-1', phonePanel && !landscape && 'flex-col')}>
         {ctx && (
           <StudioContext.Provider value={ctx}>
             {wide && mode === 'build' && libOpen && <aside className="dd-side z-20 w-[340px] shrink-0 overflow-hidden border-r border-black/10"><LibraryPanel onCollapse={() => setLibOpen(false)} /></aside>}
             {wide && mode === 'code' && <aside className="dd-side z-20 w-[56%] min-w-[460px] max-w-[980px] shrink-0 overflow-hidden border-r border-black/10"><CodePanel /></aside>}
           </StudioContext.Provider>
         )}
-        <div className="relative min-w-0 flex-1">
+        <div className={clsx('relative min-w-0 flex-1', phonePanel && 'min-h-[96px]')}>
           <div ref={hostRef} className="absolute inset-0 overflow-hidden bg-[#d8cfc2]" />
           {ctx && (
             <StudioContext.Provider value={ctx}>
               <Viewport mode={mode} playing={playing} toast={toast} />
-              {mode === 'explore' && <ExploreLayer wide={wide} playing={playing} onJournal={() => setJournal(true)} />}
-              {!loading && mode !== 'code' && !(mode === 'build' && !wide) && !engine?.walk?.active && (
+              {mode === 'explore' && <ExploreLayer wide={wide} landscape={landscape} playing={playing} onJournal={() => setJournal(true)} />}
+              {!loading && mode !== 'code' && !(mode === 'build' && !wide) && !(mode === 'explore' && !wide && selected) && !engine?.walk?.active && (
                 <div className={clsx('pointer-events-none absolute z-20', wide ? 'left-3 top-3' : 'left-2 top-2')}>
                   <QuestTracker game={game} mobile={!wide || mode === 'build'} onOpen={() => setQuestLog(true)} />
                 </div>
@@ -290,7 +290,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
               {wide && mode === 'build' && !inspOpen && (
                 <button onClick={() => setInspOpen(true)} className="dd-3d absolute bottom-5 right-4 z-20 flex h-12 items-center gap-2 rounded-2xl bg-white px-4 font-display text-sm font-bold text-ink [--edge:rgba(0,0,0,.2)]"><Settings2 size={18} /> {selected ? 'Edit' : 'Diorama'}</button>
               )}
-              {showContext && <ContextBar docked={!wide} bottom={wide ? 0 : sheetH} onCode={goCode} />}
+              {showContext && wide && <ContextBar onCode={goCode} />}
             </StudioContext.Provider>
           )}
           {loading && <LoadingScreen biome={biome} loading={loading} />}
@@ -300,23 +300,23 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
             <aside className="dd-side z-20 w-[330px] shrink-0 overflow-hidden border-l border-black/10"><InspectorPanel onCollapse={() => setInspOpen(false)} /></aside>
           </StudioContext.Provider>
         )}
-        {ctx && !wide && (mode === 'build' || mode === 'code') && (
+        {ctx && phonePanel && (
           <StudioContext.Provider value={ctx}>
-            <MobileSheet mode={mode} index={sheetIdx} setIndex={setSheetIdx} onHeight={setSheetH} />
+            <MobileSheet mode={mode} index={sheetIdx} setIndex={setSheetIdx} side={landscape} showActions={showContext} onCode={goCode} />
           </StudioContext.Provider>
         )}
       </div>
 
       {/* ---------------- mobile bottom nav ---------------- */}
-      {!wide && (
-        <nav className="dd-bottomnav pb-safe z-40 flex shrink-0 justify-around gap-1 px-2 pt-1.5">
+      {!wide && !landscape && (
+        <nav className="dd-bottomnav pb-safe z-40 flex shrink-0 justify-around gap-1 px-2 pt-1">
           {MODES.map(([m, label, Icon]) => (
-            <button key={m} onClick={() => { setMode(m); if (m !== 'explore') setSheetIdx(1); }} className={clsx('flex h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl font-display text-[12px] font-semibold transition', mode === m ? 'bg-white/[0.14] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.12)]' : 'text-white/60 active:bg-white/10')}>
-              <Icon size={22} strokeWidth={mode === m ? 2.4 : 2} />{label}
+            <button key={m} onClick={() => { setMode(m); if (m !== 'explore') setSheetIdx(1); }} className={clsx('flex h-12 flex-1 flex-col items-center justify-center rounded-2xl font-display text-[11.5px] font-semibold transition', mode === m ? 'bg-white/[0.14] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.12)]' : 'text-white/60 active:bg-white/10')}>
+              <Icon size={20} strokeWidth={mode === m ? 2.4 : 2} />{label}
             </button>
           ))}
-          <button onClick={() => setJournal(true)} className="flex h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl font-display text-[12px] font-semibold text-white/60 active:bg-white/10">
-            <BookOpen size={22} />Journal
+          <button onClick={() => setJournal(true)} className="flex h-12 flex-1 flex-col items-center justify-center rounded-2xl font-display text-[11.5px] font-semibold text-white/60 active:bg-white/10">
+            <BookOpen size={20} />Journal
           </button>
         </nav>
       )}
@@ -368,14 +368,14 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
 const noopSub = () => () => {};
 const zero = () => 0;
 
-function ModeTabs({ mode, onMode }: { mode: Mode; onMode: (m: Mode) => void }) {
+function ModeTabs({ mode, onMode, compact }: { mode: Mode; onMode: (m: Mode) => void; compact?: boolean }) {
   const i = MODES.findIndex(([m]) => m === mode);
   return (
-    <nav className="dd-modes relative ml-2 flex rounded-[18px] p-1" role="tablist">
+    <nav className={clsx('dd-modes relative flex rounded-[18px] p-1', compact ? 'ml-1' : 'ml-2')} role="tablist">
       <span className="dd-mode-ind absolute bottom-1 top-1 rounded-[14px]" style={{ width: 'calc((100% - 8px) / 3)', transform: `translateX(${i * 100}%)` }} />
       {MODES.map(([m, label, Icon], k) => (
-        <button key={m} role="tab" aria-selected={mode === m} onClick={() => onMode(m)} title={`${label} (${k + 1})`} className={clsx('relative z-10 flex h-10 w-[112px] items-center justify-center gap-1.5 rounded-[14px] font-display text-[15px] font-semibold transition-colors', mode === m ? 'text-ink' : 'text-white/75 hover:text-white')}>
-          <Icon size={17} strokeWidth={2.3} />{label}
+        <button key={m} role="tab" aria-selected={mode === m} onClick={() => onMode(m)} title={`${label} (${k + 1})`} className={clsx('relative z-10 flex items-center justify-center gap-1.5 rounded-[14px] font-display font-semibold transition-colors', compact ? 'h-9 w-[76px] text-[13px]' : 'h-10 w-[112px] text-[15px]', mode === m ? 'text-ink' : 'text-white/75 hover:text-white')}>
+          <Icon size={compact ? 15 : 17} strokeWidth={2.3} />{label}
         </button>
       ))}
     </nav>
@@ -383,12 +383,13 @@ function ModeTabs({ mode, onMode }: { mode: Mode; onMode: (m: Mode) => void }) {
 }
 
 /** subscribes to the engine so the buttons enable as soon as there is something to undo */
-function UndoRedo({ engine }: { engine: Engine }) {
+function UndoRedo({ engine, light }: { engine: Engine; light?: boolean }) {
   useSyncExternalStore(engine.subscribe, engine.getVersion);
+  const cls = light ? 'h-10 w-10 shrink-0 rounded-2xl bg-black/[0.05] text-ink/70 disabled:opacity-35' : 'text-white hover:bg-white/10';
   return (
     <>
-      <IconBtn label="Undo (Ctrl+Z)" disabled={!engine.canUndo} onClick={() => void engine.undo()} className="text-white hover:bg-white/10"><Undo2 size={19} /></IconBtn>
-      <IconBtn label="Redo (Ctrl+Shift+Z)" disabled={!engine.canRedo} onClick={() => void engine.redo()} className="text-white hover:bg-white/10"><Redo2 size={19} /></IconBtn>
+      <IconBtn label="Undo (Ctrl+Z)" disabled={!engine.canUndo} onClick={() => void engine.undo()} className={cls}><Undo2 size={light ? 18 : 19} /></IconBtn>
+      <IconBtn label="Redo (Ctrl+Shift+Z)" disabled={!engine.canRedo} onClick={() => void engine.redo()} className={cls}><Redo2 size={light ? 18 : 19} /></IconBtn>
     </>
   );
 }
@@ -452,30 +453,46 @@ function Briefing({ biome, onHelp, onDone }: { biome: string; onHelp: () => void
   );
 }
 
-function MobileSheet({ mode, index, setIndex, onHeight }: { mode: Mode; index: number; setIndex: (i: number) => void; onHeight: (h: number) => void }) {
-  const [tab, setTab] = useState<'library' | 'inspector'>('library');
-  const engineSel = useRef<string | null>(null);
+/**
+ * Build/Code panel on phones: under a smaller 3D viewer in portrait (drag the grip to resize),
+ * beside it in landscape. Edit shows the selected object's quick actions as a toolbar row.
+ */
+function MobileSheet({ mode, index, setIndex, side, showActions, onCode }: { mode: Mode; index: number; setIndex: (i: number) => void; side: boolean; showActions: boolean; onCode: () => void }) {
   const api = useContextSafe();
-  // selecting something in the scene flips to the editor
+  // arriving with something selected (e.g. from Explore) opens its editor
+  const [tab, setTab] = useState<'library' | 'inspector'>(() => (api?.engine.getActor(api.engine.selectedId) ? 'inspector' : 'library'));
+  const engineSel = useRef<string | null>(api?.engine.selectedId ?? null);
+  // selecting — or tapping again — something in the scene flips to the editor
   useEffect(() => {
     if (!api) return;
     const off = api.engine.on((e) => {
-      if (e.type === 'select' && e.id && e.id !== engineSel.current) { setTab('inspector'); if (index === 0) setIndex(1); }
+      if ((e.type === 'tap' && e.id) || (e.type === 'select' && e.id && e.id !== engineSel.current)) { setTab('inspector'); if (index === 0) setIndex(1); }
       if (e.type === 'select') engineSel.current = e.id;
     });
     return () => { off(); };
   }, [api, index, setIndex]);
-  const snaps = mode === 'code' ? [0.1, 0.62, 0.92] : [0.11, 0.48, 0.9];
+  // portrait sizes: the header only (peek), most of the screen (default) and nearly all of it —
+  // a strip of the 3D view always stays visible above
+  const snaps = mode === 'code' ? [60, 0.66, 0.84] : [68, 0.62, 0.82];
   return (
-    <BottomSheet snaps={snaps} index={index} onIndex={setIndex} onHeight={onHeight}
+    <BottomSheet snaps={snaps} index={side ? 1 : index} onIndex={setIndex} layout={side ? 'side' : 'split'} className={side ? 'w-[min(430px,52%)]' : undefined}
       header={mode === 'build' ? (
-        <div className="flex gap-1 px-3 pb-2">
+        <div className="flex items-center gap-1 px-2.5 pb-1.5">
           {([['library', '➕ Add things'], ['inspector', '🛠️ Edit']] as const).map(([t, l]) => (
-            <button key={t} onClick={() => { setTab(t); if (index === 0) setIndex(1); uiSound('tab'); }} className={clsx('h-11 flex-1 rounded-2xl font-display text-[15px] font-semibold transition', tab === t ? 'bg-ink text-white shadow' : 'bg-black/[0.05] text-ink/70')}>{l}</button>
+            <button key={t} onClick={() => { setTab(t); if (index === 0) setIndex(1); uiSound('tab'); }} className={clsx('h-10 min-w-0 flex-1 rounded-2xl font-display text-[14.5px] font-semibold transition', tab === t ? 'bg-ink text-white shadow' : 'bg-black/[0.05] text-ink/70')}>{l}</button>
           ))}
+          {api && <UndoRedo engine={api.engine} light />}
         </div>
-      ) : <div className="px-4 pb-2 font-display text-sm font-semibold text-ink/60">🧩 Code — drag up for more room</div>}>
-      {mode === 'code' ? <CodePanel compact /> : tab === 'library' ? <LibraryPanel compact onAdded={() => { setTab('inspector'); setIndex(0); }} /> : <InspectorPanel />}
+      ) : <div className="px-4 pb-1.5 font-display text-sm font-semibold text-ink/60">🧩 Code{side ? '' : ' — drag the bar up for more room'}</div>}>
+      {mode === 'code' ? <CodePanel compact /> : tab === 'library' ? (
+        // stay in the inventory after adding, so several things can be placed in a row
+        <LibraryPanel compact onAdded={() => setTab('library')} />
+      ) : (
+        <div className="flex h-full flex-col">
+          {showActions && <ContextBar inline onCode={onCode} />}
+          <div className="min-h-0 flex-1"><InspectorPanel compact /></div>
+        </div>
+      )}
     </BottomSheet>
   );
 }

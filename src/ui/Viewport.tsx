@@ -61,7 +61,7 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
   useEffect(() => {
     const el = engine.renderer.domElement;
     const host = el.parentElement!;
-    type Down = { x: number; y: number; t: number; id: number; touch: boolean; actor?: Actor; armed?: boolean; offset?: THREE.Vector3; dragging?: boolean; stroke?: boolean };
+    type Down = { x: number; y: number; t: number; id: number; touch: boolean; actor?: Actor; armed?: boolean; offset?: THREE.Vector3; dragging?: boolean; stroke?: boolean; sx?: number; sy?: number };
     let down: Down | null = null;
     const pts = new Map<number, { x: number; y: number }>();
     let longTimer = 0;
@@ -69,6 +69,16 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
     let lastTap = { t: 0, id: '' };
     let lastStroke = 0;
     const dragEvent = (on: boolean) => document.dispatchEvent(new CustomEvent('dd-drag', { detail: on }));
+    const ringUp = new THREE.Vector3(0, 0.08, 0);
+    const placeRing = (point: THREE.Vector3 | null) => {
+      const r = ring.current;
+      if (!r) return;
+      r.visible = !!point;
+      if (!point) return;
+      r.position.copy(point).add(ringUp);
+      r.scale.setScalar(engine.brush.radius);
+      (r.material as THREE.MeshBasicMaterial).color.set(engine.brush.tool === 'lower' ? '#ffb4a8' : engine.brush.tool === 'paint' ? '#ffe28a' : '#ffffff');
+    };
     const pair = () => { const [a, b] = [...pts.values()]; return { ang: Math.atan2(b.y - a.y, b.x - a.x), dist: Math.hypot(b.x - a.x, b.y - a.y) }; };
     const arm = (d: Down, actor: Actor, e: { clientX: number; clientY: number }) => {
       d.actor = actor;
@@ -97,7 +107,7 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       if (pts.size > 1) {
         // a second finger without a held object: hand control back to orbit/zoom
         clearTimeout(longTimer);
-        if (down?.stroke) engine.endStroke();
+        if (down?.stroke) { engine.endStroke(); placeRing(null); }
         if (down?.dragging) { engine.commitTransform(down.actor!); engine.changed(); dragEvent(false); }
         down = null;
         engine.controls.enabled = true;
@@ -113,9 +123,21 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
           if (g) {
             engine.controls.enabled = false;
             d.stroke = true;
+            d.sx = e.clientX; d.sy = e.clientY;
             engine.beginStroke(g.point);
-            engine.strokeAt(g.point, 1 / 30);
+            engine.strokeAt(g.point, 1 / 60);
+            placeRing(g.point);
             lastStroke = performance.now();
+            // airbrush: keep working every frame while held — holding still builds a hill
+            const tick = () => {
+              if (down !== d) return;
+              const now = performance.now();
+              const gp = engine.pickGround(d.sx!, d.sy!);
+              if (gp) { engine.strokeAt(gp.point, Math.min(0.1, (now - lastStroke) / 1000)); placeRing(gp.point); }
+              lastStroke = now;
+              requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
           }
           return;
         }
@@ -160,20 +182,12 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
         return;
       }
       if (down?.dragging) el.style.cursor = 'grabbing';
-      const r = ring.current;
       if (modeRef.current === 'build' && engine.brush.tool && engine.terrain && !engine.walk?.active) {
-        const g = engine.pickGround(e.clientX, e.clientY);
-        if (r) {
-          r.visible = !!g;
-          if (g) { r.position.copy(g.point).add(new THREE.Vector3(0, 0.08, 0)); r.scale.setScalar(engine.brush.radius); (r.material as THREE.MeshBasicMaterial).color.set(engine.brush.tool === 'lower' ? '#ffb4a8' : engine.brush.tool === 'paint' ? '#ffe28a' : '#ffffff'); }
-        }
-        if (down?.stroke && g && e.pointerId === down.id) {
-          const now = performance.now();
-          engine.strokeAt(g.point, Math.min(0.1, (now - lastStroke) / 1000));
-          lastStroke = now;
-        }
+        // while sculpting the frame loop applies the brush; moves only steer it
+        if (down?.stroke && e.pointerId === down.id) { down.sx = e.clientX; down.sy = e.clientY; return; }
+        if (e.pointerType === 'mouse') placeRing(engine.pickGround(e.clientX, e.clientY)?.point ?? null);
         return;
-      } else if (r) r.visible = false;
+      } else if (ring.current) ring.current.visible = false;
       if (!down || e.pointerId !== down.id || !down.actor) return;
       const dist = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       if (!down.armed) { if (dist > 10) clearTimeout(longTimer); return; }
@@ -211,7 +225,7 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       const d = down;
       down = null;
       engine.controls.enabled = true;
-      if (d.stroke) { engine.endStroke(); return; }
+      if (d.stroke) { engine.endStroke(); if (d.touch) placeRing(null); return; }
       if (d.dragging && d.actor) { engine.commitTransform(d.actor); engine.changed(); dragEvent(false); haptic(10); uiSound('tick'); return; }
       const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y);
       if (moved > 8 || performance.now() - d.t > 600) return;
@@ -235,9 +249,11 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       pts.delete(e.pointerId);
       clearTimeout(longTimer);
       if (twist) { engine.commitTransform(twist.actor); engine.changed(); twist = null; }
-      if (down?.stroke) engine.endStroke();
-      if (down?.dragging && down.actor) { engine.commitTransform(down.actor); engine.changed(); dragEvent(false); }
-      if (down && e.pointerId === down.id) down = null;
+      if (down && e.pointerId === down.id) {
+        if (down.stroke) { engine.endStroke(); placeRing(null); }
+        if (down.dragging && down.actor) { engine.commitTransform(down.actor); engine.changed(); dragEvent(false); }
+        down = null;
+      }
       engine.controls.enabled = true;
     };
     const onLeave = () => { if (ring.current) ring.current.visible = false; };
@@ -269,6 +285,8 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
     el.addEventListener('contextmenu', ctxMenu);
     return () => {
       clearTimeout(longTimer);
+      if (down?.stroke) engine.endStroke();
+      down = null; // also stops the brush loop
       host.removeEventListener('pointerdown', onDown, { capture: true });
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);

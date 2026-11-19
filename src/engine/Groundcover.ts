@@ -162,6 +162,25 @@ export class Groundcover {
     this.count += n;
   }
 
+  /** keep blades, flowers, pebbles and leaves on the ground inside an area that was just sculpted */
+  follow(terrain: Terrain, x0: number, x1: number, z0: number, z1: number) {
+    for (const mesh of this.meshes) {
+      const attr = mesh.instanceMatrix, a = attr.array as Float32Array;
+      let lo = -1, hi = -1;
+      for (let i = 0; i < mesh.count; i++) {
+        const o = i * 16, x = a[o + 12], z = a[o + 14];
+        if (x < x0 || x > x1 || z < z0 || z > z1) continue;
+        a[o + 13] = terrain.heightAt(x, z);
+        if (lo < 0) lo = i;
+        hi = i;
+      }
+      if (lo < 0) continue;
+      attr.clearUpdateRanges();
+      attr.addUpdateRange(lo * 16, (hi - lo + 1) * 16); // instances were laid out row by row, so this span is small
+      attr.needsUpdate = true;
+    }
+  }
+
   clear() {
     for (const m of this.meshes) { this.group.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose(); m.dispose(); }
     this.meshes = [];
