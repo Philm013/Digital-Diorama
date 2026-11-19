@@ -1,38 +1,9 @@
 import * as THREE from 'three';
 import { Noise2D, clamp, smoothstep } from './util';
 import { b64ToBytes, bytesToB64, type TerrainDoc } from './types';
+import { GROUND_TYPES, GROUND_UNIFORMS, createGroundMaterial, createPaintTexture, dominantGround, type GroundLocalUniforms, type GroundType, type PaintGrid } from './ground';
 
-export interface GroundType {
-  id: string;
-  name: string;
-  emoji: string;
-  color: string;
-  color2: string;
-  /** groundcover densities per m² */
-  grass?: number;
-  grassColor?: string;
-  flowers?: number;
-  pebbles?: number;
-  litter?: number;
-}
-
-export const GROUND_TYPES: GroundType[] = [
-  { id: 'grass', name: 'Grass', emoji: '🌱', color: '#5c8a3a', color2: '#77a347', grass: 4.2, grassColor: '#79aa45' },
-  { id: 'meadow', name: 'Meadow', emoji: '🌼', color: '#6a9541', color2: '#8db45a', grass: 3.4, grassColor: '#88b850', flowers: 0.8 },
-  { id: 'forest', name: 'Forest floor', emoji: '🍂', color: '#4d3d25', color2: '#6a5432', grass: 0.35, grassColor: '#5e7d36', litter: 3.5, pebbles: 0.1 },
-  { id: 'dry', name: 'Dry grass', emoji: '🌾', color: '#a8914f', color2: '#c4ad68', grass: 3.0, grassColor: '#c8ae5e' },
-  { id: 'jungle', name: 'Jungle floor', emoji: '🌿', color: '#3c5527', color2: '#536f34', grass: 1.4, grassColor: '#3f7a32', litter: 1.5 },
-  { id: 'soil', name: 'Soil', emoji: '🟫', color: '#654a32', color2: '#7a5a3c', pebbles: 0.15 },
-  { id: 'mud', name: 'Mud', emoji: '🪵', color: '#47382a', color2: '#56442f', pebbles: 0.05 },
-  { id: 'sand', name: 'Sand', emoji: '🏖️', color: '#d8c08b', color2: '#e8d4a2', grass: 0.06, grassColor: '#a9a35c', pebbles: 0.05 },
-  { id: 'redsand', name: 'Desert sand', emoji: '🏜️', color: '#c98a54', color2: '#dba46c', grass: 0.03, grassColor: '#a6935a' },
-  { id: 'rock', name: 'Rock', emoji: '🪨', color: '#78756d', color2: '#918c82', pebbles: 0.9 },
-  { id: 'gravel', name: 'Gravel', emoji: '⚪', color: '#8a8378', color2: '#a39a8b', pebbles: 3 },
-  { id: 'moss', name: 'Tundra moss', emoji: '🍃', color: '#6b7a4c', color2: '#8a9361', grass: 1.2, grassColor: '#7f8b52', flowers: 0.12 },
-  { id: 'snow', name: 'Snow', emoji: '❄️', color: '#e9eff4', color2: '#ffffff' },
-  { id: 'ice', name: 'Ice', emoji: '🧊', color: '#b6d4e2', color2: '#d3e7f0' },
-];
-export const GROUND_INDEX: Record<string, number> = Object.fromEntries(GROUND_TYPES.map((g, i) => [g.id, i]));
+export { GROUND_TYPES, GROUND_INDEX, type GroundType } from './ground';
 
 export interface StrataStyle { id: string; name: string; soil: [string, string]; layers: string[]; bottom: string }
 export const STRATA: Record<string, StrataStyle> = {
@@ -44,11 +15,16 @@ export const STRATA: Record<string, StrataStyle> = {
   granite: { id: 'granite', name: 'Granite', soil: ['#3e3527', '#5f5545'], layers: ['#8b8a86', '#9c9890', '#7b7a76', '#a7a39b', '#6c6b68'], bottom: '#45443f' },
 };
 
-const tmpA = new THREE.Color(), tmpB = new THREE.Color(), tmpC = new THREE.Color();
+const tmpB = new THREE.Color();
 
 export type SculptTool = 'raise' | 'lower' | 'smooth' | 'flatten' | 'roughen';
 /** inclusive rectangle of grid vertices */
 export interface GridRect { i0: number; i1: number; j0: number; j1: number }
+/** lowest and highest ground the tools may sculpt (m) */
+export const MIN_HEIGHT = -12, MAX_HEIGHT = 30;
+/** shading looks this far (m) around each vertex to find valleys and ridges */
+const AO_NEAR = 0.5, AO_FAR = 1.8;
+const DIRS8: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7071, 0.7071], [-0.7071, 0.7071], [0.7071, -0.7071], [-0.7071, -0.7071]];
 
 export class Terrain {
   width: number;
@@ -70,12 +46,13 @@ export class Terrain {
   /** R channel: water depth (0..1 over DEPTH_RANGE m) for the water shader */
   depthTexture: THREE.DataTexture;
   static DEPTH_RANGE = 4;
+  /** ground-type index per vertex, uploaded for the ground shader */
+  paintTexture: THREE.DataTexture;
   snow = 0;
   version = 0;
   private noise: Noise2D;
-  private groundColors: THREE.Color[][];
   private surfaceMat: THREE.MeshStandardMaterial;
-  private snowUniform = { value: 0 };
+  private groundU: GroundLocalUniforms;
 
   constructor(opts: { width: number; depth: number; nx: number; nz: number; heights?: Float32Array; paint?: Uint8Array; waterLevel?: number | null; strata?: string; seed?: number }) {
     this.width = opts.width;
@@ -88,8 +65,10 @@ export class Terrain {
     this.strata = STRATA[opts.strata ?? 'loam'] ?? STRATA.loam;
     this.seed = opts.seed ?? 1;
     this.noise = new Noise2D(this.seed * 7 + 3);
-    this.groundColors = GROUND_TYPES.map((g) => [new THREE.Color(g.color), new THREE.Color(g.color2)]);
     this.group.name = 'terrain';
+    // unknown ground types (a file from a newer version) fall back to grass
+    for (let k = 0; k < this.paint.length; k++) if (this.paint[k] >= GROUND_TYPES.length) this.paint[k] = 0;
+    this.paintTexture = createPaintTexture(this.paint, this.nx, this.nz);
 
     // --- surface ---
     const g = new THREE.BufferGeometry();
@@ -111,15 +90,8 @@ export class Terrain {
       const k = j * this.nx + i;
       pos.setXYZ(k, this.xOf(i), 0, this.zOf(j));
     }
-    this.surfaceMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 });
-    const snowU = this.snowUniform;
-    this.surfaceMat.onBeforeCompile = (sh) => {
-      sh.uniforms.uSnow = snowU;
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vUp;')
-        .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvUp = objectNormal.y;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uSnow;\nvarying float vUp;')
-        .replace('#include <color_fragment>', '#include <color_fragment>\n{ float s = smoothstep(0.55, 0.85, vUp) * uSnow; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93,0.96,0.99), s); }');
-    };
+    this.surfaceMat = createGroundMaterial({ paint: this.paintTexture, x0: -this.width / 2, z0: -this.depth / 2, dx: this.dx, dz: this.dz, nx: this.nx, nz: this.nz, waterY: this.waterLevel });
+    this.groundU = this.surfaceMat.userData.ground as GroundLocalUniforms;
     this.surface = new THREE.Mesh(g, this.surfaceMat);
     this.surface.name = 'terrain-surface';
     this.surface.receiveShadow = true;
@@ -172,10 +144,11 @@ export class Terrain {
     return out.set(this.heightAt(x - e, z) - this.heightAt(x + e, z), 2 * e, this.heightAt(x, z - e) - this.heightAt(x, z + e)).normalize();
   }
   slopeAt(x: number, z: number) { const n = this.normalAt(x, z); return Math.sqrt(1 - n.y * n.y) / Math.max(n.y, 0.05); }
+  /** the paint grid in the form the ground shader (and its CPU twin) reads */
+  get paintGrid(): PaintGrid { return { paint: this.paint, nx: this.nx, nz: this.nz, x0: -this.width / 2, z0: -this.depth / 2, dx: this.dx, dz: this.dz }; }
+  /** the kind of ground that shows at a point (follows the shader's ragged edges) */
   groundAt(x: number, z: number): GroundType {
-    const i = Math.round(clamp((x + this.width / 2) / this.dx, 0, this.nx - 1));
-    const j = Math.round(clamp((z + this.depth / 2) / this.dz, 0, this.nz - 1));
-    return GROUND_TYPES[this.paint[j * this.nx + i]] ?? GROUND_TYPES[0];
+    return GROUND_TYPES[dominantGround(this.paintGrid, x, z)] ?? GROUND_TYPES[0];
   }
   isUnderwater(x: number, z: number, margin = 0) {
     return this.waterLevel !== null && this.heightAt(x, z) < this.waterLevel - margin;
@@ -183,8 +156,19 @@ export class Terrain {
   minHeight() { let m = Infinity; for (const v of this.heights) if (v < m) m = v; return m; }
   maxHeight() { let m = -Infinity; for (const v of this.heights) if (v > m) m = v; return m; }
   get bottomY() { return Math.min(this.minHeight(), this.waterLevel ?? 0) - this.baseDepth; }
+  /** grid vertices covering a world-space box (clamped to the terrain) */
+  rectFor(x0: number, z0: number, x1: number, z1: number): GridRect {
+    return {
+      i0: clamp(Math.floor((Math.min(x0, x1) + this.width / 2) / this.dx), 0, this.nx - 1),
+      i1: clamp(Math.ceil((Math.max(x0, x1) + this.width / 2) / this.dx), 0, this.nx - 1),
+      j0: clamp(Math.floor((Math.min(z0, z1) + this.depth / 2) / this.dz), 0, this.nz - 1),
+      j1: clamp(Math.ceil((Math.max(z0, z1) + this.depth / 2) / this.dz), 0, this.nz - 1),
+    };
+  }
 
-  setSnow(v: number) { this.snow = v; this.snowUniform.value = v; }
+  setSnow(v: number) { this.snow = v; GROUND_UNIFORMS.uSnow.value = v; }
+  /** the paint grid changed: re-upload it for the shader */
+  paintChanged() { this.paintTexture.needsUpdate = true; this.version++; }
 
   /* ---------- rebuild ---------- */
   /**
@@ -199,12 +183,20 @@ export class Terrain {
       this.updateDepthTexture();
     } else {
       const { nx, nz } = this;
-      const r = { i0: Math.max(0, rect.i0 - 1), i1: Math.min(nx - 1, rect.i1 + 1), j0: Math.max(0, rect.j0 - 1), j1: Math.min(nz - 1, rect.j1 + 1) };
+      // valley shading looks a little way around each vertex, so refresh a margin around the edit
+      const m = 1 + Math.ceil(AO_FAR / Math.min(this.dx, this.dz));
+      const r = { i0: Math.max(0, rect.i0 - m), i1: Math.min(nx - 1, rect.i1 + m), j0: Math.max(0, rect.j0 - m), j1: Math.min(nz - 1, rect.j1 + m) };
       this.updateSurface(r);
-      if (r.i0 === 0 || r.j0 === 0 || r.i1 === nx - 1 || r.j1 === nz - 1 || this.bottomY !== this.sidesBottom) this.updateSides();
+      if (rect.i0 <= 1 || rect.j0 <= 1 || rect.i1 >= nx - 2 || rect.j1 >= nz - 2 || this.bottomY !== this.sidesBottom) this.updateSides();
       this.updateDepthTexture(r);
     }
+    this.paintTexture.needsUpdate = true;
     this.version++;
+  }
+
+  /** height sampled at a world offset from a grid vertex (bilinear, clamped) */
+  private hOff(i: number, j: number, ox: number, oz: number) {
+    return this.heightAt(this.xOf(i) + ox, this.zOf(j) + oz);
   }
 
   private updateSurface(rect?: GridRect) {
@@ -213,7 +205,6 @@ export class Terrain {
     const nor = g.attributes.normal as THREE.BufferAttribute;
     const col = g.attributes.color as THREE.BufferAttribute;
     const { nx, nz, dx, dz } = this;
-    const wl = this.waterLevel;
     const r = rect ?? { i0: 0, i1: nx - 1, j0: 0, j1: nz - 1 };
     for (let j = r.j0; j <= r.j1; j++) {
       for (let i = r.i0; i <= r.i1; i++) {
@@ -224,34 +215,12 @@ export class Terrain {
         const hz = this.h(i, j - 1) - this.h(i, j + 1);
         const nl = Math.hypot(hx, 2 * dx, hz * (dx / dz));
         nor.setXYZ(k, hx / nl, (2 * dx) / nl, (hz * (dx / dz)) / nl);
-        // blended ground colour (3x3 neighbourhood) for soft transitions
-        let r = 0, gg = 0, b = 0, wsum = 0;
-        for (let oj = -1; oj <= 1; oj++) for (let oi = -1; oi <= 1; oi++) {
-          const ii = i + oi, jj = j + oj;
-          if (ii < 0 || jj < 0 || ii >= nx || jj >= nz) continue;
-          const kk = jj * nx + ii;
-          const w = oi === 0 && oj === 0 ? 2 : 1;
-          const pair = this.groundColors[this.paint[kk]] ?? this.groundColors[0];
-          const x = this.xOf(ii), z = this.zOf(jj);
-          const t = 0.5 + 0.5 * this.noise.fbm(x * 0.35, z * 0.35, 3);
-          tmpA.copy(pair[0]).lerp(pair[1], t);
-          r += tmpA.r * w; gg += tmpA.g * w; b += tmpA.b * w; wsum += w;
-        }
-        tmpC.setRGB(r / wsum, gg / wsum, b / wsum);
-        // fine speckle + slope darkening
-        const x = this.xOf(i), z = this.zOf(j);
-        const speck = this.noise.noise(x * 2.7, z * 2.7) * 0.05;
-        const ny = (2 * dx) / nl;
-        const steep = smoothstep(0.92, 0.6, ny);
-        tmpC.offsetHSL(0, 0, speck - steep * 0.08);
-        if (steep > 0) tmpC.lerp(tmpB.set('#7d7466'), steep * 0.55);
-        if (wl !== null && y < wl) {
-          const d = clamp((wl - y) / 2.5, 0, 1);
-          tmpC.lerp(tmpB.set('#3d5a52'), 0.25 + d * 0.45);
-        } else if (wl !== null && y < wl + 0.25) {
-          tmpC.multiplyScalar(0.78); // wet bank
-        }
-        col.setXYZ(k, tmpC.r, tmpC.g, tmpC.b);
+        // valleys and creases a little darker, ridges a little lighter: landforms read from above
+        let s1 = 0, s2 = 0;
+        for (const [ox, oz] of DIRS8) { s1 += this.hOff(i, j, ox * AO_NEAR, oz * AO_NEAR); s2 += this.hOff(i, j, ox * AO_FAR, oz * AO_FAR); }
+        const cav = (s1 / 8 - y) * 0.55 + (s2 / 8 - y) * 0.22;
+        const ao = cav > 0 ? 1 - 0.3 * Math.tanh(cav * 1.8) : 1 + 0.07 * Math.tanh(-cav * 2);
+        col.setXYZ(k, ao, ao, ao);
       }
     }
     // upload only the touched rows
@@ -362,9 +331,11 @@ export class Terrain {
     this.depthTexture.needsUpdate = true;
   }
 
-  setWaterLevel(v: number | null) {
+  /** change the water level (`rebuild` false when the caller rebuilds the changed area itself) */
+  setWaterLevel(v: number | null, rebuild = true) {
     this.waterLevel = v;
-    this.rebuild();
+    this.groundU.uWaterY.value = v ?? -1e4;
+    if (rebuild) this.rebuild();
   }
 
   /* ---------- editing ---------- */
@@ -397,7 +368,7 @@ export class Terrain {
           break;
         }
       }
-      this.heights[k] = clamp(v, -8, 14);
+      this.heights[k] = clamp(v, MIN_HEIGHT, MAX_HEIGHT);
     }
     return { i0, i1, j0, j1 };
   }
@@ -446,5 +417,6 @@ export class Terrain {
       if (m.isMesh) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
     });
     this.depthTexture.dispose();
+    this.paintTexture.dispose();
   }
 }

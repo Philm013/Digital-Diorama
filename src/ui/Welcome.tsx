@@ -6,6 +6,7 @@ import type { BiomeTemplate } from '../biomes/types';
 import { deleteProject, exportProject, importProjectFile, listProjects, loadProject, saveSettings, type ProjectMeta, type Settings } from '../storage/projects';
 import type { DioramaDoc } from '../engine/types';
 import { newDoc } from '../biomes/factory';
+import { DIORAMA_SIZES } from '../engine/sizes';
 import { CATALOG } from '../assets/catalog';
 import { biomeThumb } from './thumbs';
 import { Btn, Modal, Segmented } from './common';
@@ -21,6 +22,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
   const [pick, setPick] = useState<BiomeTemplate | null>(null);
   const [title, setTitle] = useState('');
+  const [size, setSize] = useState('medium');
   const [error, setError] = useState('');
   const [journal, setJournal] = useState<null | 'species' | 'badges'>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -37,7 +39,8 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
     if (!pick) return;
     uiSound('pop');
     const author = (settings.author || profile.name).trim();
-    const doc = newDoc(pick, settings.quality, { title: title.trim() || pick.name, author });
+    const sz = DIORAMA_SIZES.find((x) => x.id === size);
+    const doc = newDoc(pick, settings.quality, { title: title.trim() || pick.name, author, size: pick.id === 'blank' && sz ? { width: sz.w, depth: sz.d } : undefined });
     setPick(null);
     onOpen(doc);
   };
@@ -202,6 +205,12 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
               <span className="text-[13px] font-semibold text-ink/70">Made by (optional)</span>
               <input className="dd-input mt-1 h-11" value={settings.author || profile.name} placeholder="Your name or team" onChange={(e) => { updateSettings({ ...settings, author: e.target.value }); if (!profile.name) updateProfile({ name: e.target.value.slice(0, 24) }); }} maxLength={40} />
             </label>
+            {pick.id === 'blank' && (
+              <div>
+                <div className="mb-1 text-[13px] font-semibold text-ink/70">Size of the box <span className="font-normal text-ink/50">(you can change it later in Build)</span></div>
+                <Segmented value={size} onChange={setSize} options={DIORAMA_SIZES.map((x) => ({ value: x.id, label: x.label, title: `${x.w} × ${x.d} m` }))} />
+              </div>
+            )}
             <button onClick={start} className="dd-cta flex h-14 w-full items-center justify-center gap-2 rounded-2xl font-display text-xl font-bold text-white"><Sparkles size={22} /> Start expedition!</button>
           </div>
         )}

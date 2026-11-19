@@ -176,8 +176,9 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
       if (runtime.running) runtime.key(e.key === ' ' ? ' ' : e.key, true);
       if (isTypingTarget(e.target)) return;
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); void (e.shiftKey ? engine.redo() : engine.undo()); return; }
-      if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); void engine.redo(); return; }
+      // (not while walking: the land under your feet would change)
+      if (mod && e.key.toLowerCase() === 'z' && !engine.walk?.active) { e.preventDefault(); void (e.shiftKey ? engine.redo() : engine.undo()); return; }
+      if (mod && e.key.toLowerCase() === 'y' && !engine.walk?.active) { e.preventDefault(); void engine.redo(); return; }
       if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); void saveNow(); return; }
       if (engine.walk?.active) { if (e.key === 'Escape') { engine.walk.exit(); force((x) => x + 1); } return; }
       if (!mod && !runtime.running && ['1', '2', '3'].includes(e.key)) { setMode(MODES[Number(e.key) - 1][0]); return; }
@@ -185,6 +186,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
       if ((e.key === 'Delete' || e.key === 'Backspace') && sel && mode === 'build' && !runtime.running) { e.preventDefault(); engine.removeActor(sel); uiSound('trash'); }
       else if (e.key.toLowerCase() === 'd' && sel && mode === 'build' && !runtime.running) void engine.duplicateActor(sel);
       else if (e.key.toLowerCase() === 'f' && sel) engine.focusActor(sel);
+      else if (e.key.toLowerCase() === 'r' && mode === 'build' && engine.brush.tool === 'stamp') { engine.land.stamp.angle += (e.shiftKey ? -1 : 1) * Math.PI / 8; engine.changed(false); }
       else if ((e.key.toLowerCase() === 'r' || e.key === '+' || e.key === '=' || e.key === '-') && sel && mode === 'build' && !runtime.running) {
         // R / Shift+R turn by 45°, + and − resize the selected object
         const a = engine.getActor(sel);
@@ -195,7 +197,15 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
           engine.commitTransform(a); engine.changed(); uiSound('tick');
         }
       }
-      else if (e.key === 'Escape') { if (runtime.running) runtime.stop(); else engine.select(null); }
+      else if (e.key === 'Escape') { if (runtime.running) runtime.stop(); else if (engine.brush.tool) engine.setLandTool(null); else engine.select(null); }
+      else if (e.key.toLowerCase() === 't' && !mod && mode === 'build' && engine.terrain) engine.setTopView(!engine.topView);
+      else if ((e.key === '[' || e.key === ']') && mode === 'build' && engine.brush.tool) {
+        // [ and ] size the brush or the landform
+        const k = e.key === ']' ? 1.15 : 1 / 1.15;
+        if (engine.brush.tool === 'stamp') engine.land.stamp.radius = Math.min(40, Math.max(0.8, +(engine.land.stamp.radius * k).toFixed(1)));
+        else engine.brush.radius = Math.min(20, Math.max(0.5, +(engine.brush.radius * k).toFixed(1)));
+        engine.changed(false);
+      }
       else if (e.key.toLowerCase() === 'l' && !mod) engine.setEnv({ labels: !engine.env.labels }, false);
       else if (e.key.toLowerCase() === 'o' && !mod) engine.frameCamera();
       else if (e.key.toLowerCase() === 'j' && !mod) setJournal((v) => !v);
@@ -213,12 +223,14 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   const phonePanel = !wide && (mode === 'build' || mode === 'code');
   const selected = engine?.getActor(engine.selectedId);
   const showContext = !!ctx && mode === 'build' && !playing && !!selected && !selected.isClone && !engine?.walk?.active;
+  // roaming the endless world: nothing but the view and its own controls
+  const immersive = !!engine?.walk?.active && !!engine.walk.endless;
   const goCode = useCallback(() => { if (engine && selected) { engine.select(selected.id); setMode('code'); } }, [engine, selected, setMode]);
 
   return (
     <div className="dd-studio flex h-full flex-col" style={{ ['--accent' as string]: biome?.accent ?? '#3f7d3a' }}>
       {/* ---------------- top HUD ---------------- */}
-      <header className={clsx('dd-topbar pt-safe z-40 flex shrink-0 items-center gap-1.5 px-2 sm:gap-2 sm:px-3', wide ? 'h-[60px]' : 'h-[52px]')}>
+      <header className={clsx('dd-topbar pt-safe z-40 flex shrink-0 items-center gap-1.5 px-2 sm:gap-2 sm:px-3', wide ? 'h-[60px]' : 'h-[52px]', immersive && 'hidden')}>
         <IconBtn label="Back to all dioramas" onClick={() => void exit()} className="text-white hover:bg-white/10"><ArrowLeft size={21} /></IconBtn>
         <div className="flex min-w-0 items-center gap-2">
           <span className="hidden h-10 w-10 shrink-0 place-items-center rounded-2xl text-2xl sm:grid" style={{ background: 'color-mix(in srgb, var(--accent) 45%, transparent)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.15)' }}>{biome?.emoji ?? '📦'}</span>
@@ -308,7 +320,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
       </div>
 
       {/* ---------------- mobile bottom nav ---------------- */}
-      {!wide && !landscape && (
+      {!wide && !landscape && !immersive && (
         <nav className="dd-bottomnav pb-safe z-40 flex shrink-0 justify-around gap-1 px-2 pt-1">
           {MODES.map(([m, label, Icon]) => (
             <button key={m} onClick={() => { setMode(m); if (m !== 'explore') setSheetIdx(1); }} className={clsx('flex h-12 flex-1 flex-col items-center justify-center rounded-2xl font-display text-[11.5px] font-semibold transition', mode === m ? 'bg-white/[0.14] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.12)]' : 'text-white/60 active:bg-white/10')}>
@@ -506,7 +518,9 @@ function HelpContent() {
     ['🏆', 'Quests & badges', 'Each diorama has 16 quests: finish 5, 10 and all 16 for one, two and three stars. Badges are earned across all your dioramas.'],
     ['🧩', 'Code', 'Choose an object, then snap blocks together like Scratch. Start scripts with “when ▶ clicked”, then press Play. Stop resets everything to how you built it.'],
     ['🎤', 'Present', 'Add notes to your organisms (Build → Edit → My notes). The Tour visits each one in food-chain order and can read your notes aloud.'],
-    ['⌨️', 'Shortcuts', '1 2 3 modes · J journal · Q quests · R / Shift+R turn · + − resize · D duplicate · Delete remove · F focus · L labels · O overview · Ctrl+Z undo · Ctrl+Shift+Z redo · Esc stop/deselect · WASD walk'],
+    ['🏔️', 'Land', 'In Build → World & land: stamp Landforms (tap the land, or press and drag to size and point them), select an Area and grow mountains, dunes, canyons, lakes, rivers or islands in it, sculpt with brushes and paint the ground. Top view (T) looks straight down for easy editing. Diorama size makes the box bigger or smaller.'],
+    ['🌍', 'Roam', 'Explore → Roam walks you out of your diorama into an endless landscape of the same habitat. Fly with 🦅 to see far; 🏠 brings you back.'],
+    ['⌨️', 'Shortcuts', '1 2 3 modes · J journal · Q quests · R / Shift+R turn · + − resize · D duplicate · Delete remove · F focus · L labels · O overview · T top view · [ ] brush / landform size · Ctrl+Z undo · Ctrl+Shift+Z redo · Esc stop/put tool away/deselect · WASD walk'],
   ];
   const challenges = [
     '🐝 Make a bee visit three different flowers, then fly home.',

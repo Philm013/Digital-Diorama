@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import { X, Crosshair, Volume2, Footprints, Tag, Network, BookOpen, Presentation, Clock, CloudSun, ChevronLeft, ChevronRight, Pause, Play, Video, Maximize2, CheckCircle2, Circle, Glasses, Smartphone, Move, Library } from 'lucide-react';
+import { X, Crosshair, Volume2, Footprints, Earth, Tag, Network, BookOpen, Presentation, Clock, CloudSun, ChevronLeft, ChevronRight, Pause, Play, Video, Maximize2, CheckCircle2, Circle, Glasses, Smartphone, Move, Library } from 'lucide-react';
 import { XRMode } from '../engine/XRMode';
 import { useEngine, useEngineEvent, useEngineVersion } from './store';
 import { Btn, Chip, IconBtn, Modal, Segmented, Slider, statusColor } from './common';
@@ -46,6 +46,8 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
     });
   };
   const walkIn = (eye: number) => { engine.walk?.enter(eye); document.dispatchEvent(new CustomEvent('dd-walk', { detail: eye })); };
+  // out of the box and into an endless landscape of the same habitat
+  const roam = () => { engine.select(null); engine.walk?.enter(1.6, { endless: true }); document.dispatchEvent(new CustomEvent('dd-walk', { detail: 1.6 })); };
   const xrOverlay = (
     <div ref={overlayRef} className={xrOn ? 'pointer-events-none fixed inset-0 z-[60] flex flex-col items-center justify-between p-4' : 'hidden'}>
       <div className="pointer-events-auto rounded-2xl bg-black/60 px-4 py-2 text-center font-display text-sm font-semibold text-white">
@@ -68,6 +70,7 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
     { key: 'journal', icon: <Library size={20} />, label: 'Journal', fn: () => onJournal?.() },
     { key: 'tour', icon: <Presentation size={20} />, label: 'Tour', fn: () => { audio(); engine.select(null); setTour(true); } },
     { key: 'walk', icon: <Footprints size={20} />, label: 'Walk in', fn: () => walkIn(1.6) },
+    ...(engine.terrain ? [{ key: 'roam', icon: <Earth size={20} />, label: 'Roam', fn: roam }] : []),
     ...(xrSupport.ar ? [{ key: 'ar', icon: <Smartphone size={20} />, label: 'AR table', fn: () => startXr('ar') }] : []),
     ...(xrSupport.vr ? [{ key: 'vr', icon: <Glasses size={20} />, label: 'VR', fn: () => startXr('vr') }] : []),
     { key: 'home', icon: <Maximize2 size={20} />, label: 'Overview', fn: () => { engine.follow(null); engine.frameCamera(); } },

@@ -1,4 +1,5 @@
 import { generateTerrain } from '../engine/terrainGen';
+import { cellFor } from '../engine/sizes';
 import { DEFAULT_ENV, type ActorDoc, type DioramaDoc, type Quality } from '../engine/types';
 import { rng, uid, clamp } from '../engine/util';
 import { getDef } from '../assets/catalog';
@@ -6,7 +7,7 @@ import type { BiomeTemplate } from './types';
 import { BIOME_BY_ID } from './templates';
 import { scriptsFor } from '../code/recipes';
 
-export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: string; author?: string } = {}): DioramaDoc {
+export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: string; author?: string; size?: { width: number; depth: number } } = {}): DioramaDoc {
   const now = Date.now();
   const R = rng((biome.terrain?.seed ?? 5) * 101 + 7);
   let groundAt = (_x: number, _z: number) => 0;
@@ -14,7 +15,9 @@ export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: s
   let bounds = { minX: -14, maxX: 14, minZ: -14, maxZ: 14 };
   let base: DioramaDoc['base'];
   if (biome.terrain) {
-    const t = generateTerrain(biome.terrain);
+    // a chosen size (blank dioramas) also picks a grid fine enough to sculpt, coarse enough to stay smooth
+    const sized = opts.size ? { width: opts.size.width, depth: opts.size.depth, cell: cellFor(opts.size.width, opts.size.depth) } : {};
+    const t = generateTerrain({ ...biome.terrain, ...sized });
     groundAt = (x, z) => t.heightAt(x, z);
     wetAt = (x, z) => t.isUnderwater(x, z, 0.05);
     bounds = { minX: -t.width / 2, maxX: t.width / 2, minZ: -t.depth / 2, maxZ: t.depth / 2 };

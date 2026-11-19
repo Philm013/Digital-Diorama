@@ -2,7 +2,7 @@
 
 **The classroom shoebox diorama, reimagined as a living 3D habitat you can build, explore, code and present.**
 
-Students pick a biome, sculpt the land, fill it with real species from a library of nearly 350 procedural plants, animals, fungi and habitat features, label what they learned on toothpick flags, then bring it to life with Scratch-style block code — and finally present it with a narrated guided tour. Along the way they earn XP and badges, fill a field journal with the species they discover, and complete habitat quests for up to three stars. Runs in any modern desktop or mobile browser; projects and progress save on the device, with no accounts.
+Students pick a biome, shape the land with landforms, sculpting and painting, fill it with real species from a library of nearly 350 procedural plants, animals, fungi and habitat features, label what they learned on toothpick flags, then bring it to life with Scratch-style block code — and finally present it with a narrated guided tour. Along the way they earn XP and badges, fill a field journal with the species they discover, and complete habitat quests for up to three stars. Runs in any modern desktop or mobile browser; projects and progress save on the device, with no accounts.
 
 Most 3D models come from the procedural three.js assets in [`References/`](References), imported in place and code-split so each one only loads when used. Trees, wildflowers, grasses and a few marine animals and fungi come from the app's own procedural generators in `src/assets/flora` and `src/assets/builtin`. The reference modules are unchanged except for a small `specOverride` hook in the mammal and bird rigs (marked *Digital Diorama extension*), which lets related species such as a Bactrian camel or a blue jay share one rig.
 
@@ -57,7 +57,8 @@ Every push to `main` builds the app and publishes it with GitHub Pages ([`.githu
 - **Labels** puts paper flags on toothpicks next to every species (on by default, one flag per species; students can rewrite the text). When flags would overlap, the nearer ones, the selected object's and the students' own labels stay; the rest fade out until you zoom in.
 - **Food web** draws the energy flow between the organisms actually in the diorama, by trophic level.
 - **Guide** gives the habitat's climate, location, adaptations, threats, vocabulary and discussion questions, plus the live quest checklist — a ready-made rubric.
-- **Walk in** drops you inside the diorama at the eye level of a person, fox, frog or ant (WASD, Shift to run). On touch, a joystick appears wherever your thumb lands; push it to the rim to run. ⬆ jumps; underwater, hold ⬆/⬇ to swim up and down.
+- **Walk in** drops you inside the diorama at the eye level of a person, fox, frog or ant (WASD, Shift to run), or lets you fly over it as a 🦅 bird (Space climbs, C dives). On touch, a joystick appears wherever your thumb lands; push it to the rim to run. ⬆ jumps; underwater, hold ⬆/⬇ to swim up and down.
+- **Roam** walks you out of the box into an endless landscape of the same habitat. The diorama's edges flow out into rolling land with lakes, winding rivers and, further off, big mountains; its own plants grow across the world, its animals wander it, and grass and flowers carpet the ground near you. The top bar and labels step aside, a compass shows the way back (🏠 takes you there), and on browsers that allow it the view can go full screen. Nothing out there is saved: the land is the same each visit.
 - **AR table** (phones/tablets with WebXR AR) places the diorama on a real table through the camera; **VR** (WebXR headsets) shows it at table height in front of you. These buttons only appear on devices that support them.
 - **Time of day**, a day–night cycle, **weather** (clear, cloudy, rain, storm with lightning, snow, fog), **seasons** (trees and grass change colour; winter brings snow cover) and **wind**.
 - Animals live on their own: they wander, graze, peck, circle overhead or swim in loops; fireflies and glowing fungi light up at night.
@@ -66,7 +67,15 @@ Every push to `main` builds the app and publishes it with GitHub Pages ([`.githu
 - **Library** of nearly 350 things with 3D thumbnails, filtered to fit the current habitat (or *All*), searchable by name, scientific name, class or phylum, and colour-coded by food-web role, with marks for what is already in the diorama and what you have discovered. Tap to add near the centre of the view, or drag onto the diorama (drop an animal onto a plant or rock to perch it there).
 - Drag objects to move them. A **context bar** above the selection (on phones, at the top of the Edit panel) turns, resizes, duplicates, focuses, deletes or opens it in Code; on touch, **long-press** picks an object up and a second finger **twists** and **pinches** it. Keys: `R` / `Shift+R` turn, `+` / `−` resize, `1` `2` `3` switch Explore / Build / Code.
 - The inspector (Place · Label · Look · Info) sets direction, size, flying/swimming height, label text, research notes, animation, and every shape/colour parameter the asset module exposes (generated from its `params` schema).
-- **Land tools**: raise, dig, smooth, flatten, roughen, and paint 14 ground types (grass, meadow, forest floor, dry grass, jungle, soil, mud, sand, desert sand, rock, gravel, tundra moss, snow, ice); water level; grass density. Brushes work like an airbrush: press and hold to keep building a hill or digging a hole in one spot, or drag to shape; only the area under the brush is rebuilt, so sculpting stays smooth on phones, and the grass rides along with the ground. The front of the base is a cut-away showing soil horizons and rock strata, with a water cross-section where ponds meet the edge.
+- **Land tools** (World & land panel), in four tabs:
+  - **Landforms** — stamp a hill, mountain (snow-capped when tall), volcano, mesa, plateau, ridge, cliff, canyon, valley, crater, lake, island or sand dune. Tap the land to place one, or press and drag to size it (stretched ones point the way you drag). A see-through preview shows the new shape first; size, height and direction sliders and *Paint the ground to match* (rocky cliffs, snowy peaks, sandy shores, layered canyon walls) are in the panel. `[` `]` resize, `R` turns.
+  - **Area** — drag a box (or oval) across the land, pick what grows there — mountains, hills, plains, dunes, canyons, mesas, volcanoes, a lake, a river, marsh, islands or a coast — and its ground style (suits the landform, this habitat, or any of 15 styles), height, ruggedness and how soft its edge is, then **Generate**. **Try another** swaps the result for a new variation; *Plants: some / lots* also plants it with species of that habitat; *Repaint the ground only* keeps the shape.
+  - **Sculpt** — raise, dig, smooth, flatten and roughen brushes. They work like an airbrush: press and hold to keep building a hill or digging a hole in one spot, or drag to shape; only the area under the brush is rebuilt, so sculpting stays smooth on phones, and the grass rides along with the ground.
+  - **Paint** — 22 ground types (grass, meadow, forest floor, dry grass, jungle, soil, mud, sand, desert sand, rock, gravel, tundra moss, snow, ice, scree, cliff rock, volcanic ash, red clay, salt flat, heather, marsh reeds, pebble beach) or **✨ Auto**, which picks the ground from the shape of the land; *Auto-paint the whole diorama* repaints everything to match.
+
+  Neighbouring grounds blend into each other along ragged, natural edges (decided per pixel by the terrain shader), and grass, flowers and pebbles stop exactly where their ground does. New landforms and areas fade into the land around them. Lakes, rivers, islands and coasts add water when the diorama has none. Plus: water level and grass density. The front of the base is a cut-away showing soil horizons and rock strata, with a water cross-section where ponds meet the edge.
+- **Top view** (`T`, or the map button over the 3D view) looks straight down with a metre grid — drag to pan, pinch or scroll to zoom — which makes selecting areas and placing landforms easy. Every land tool works in it.
+- **Diorama size**: Small 24 × 16, Medium 40 × 28, Large 64 × 44 or Huge 96 × 64 m, or any size from 12 to 128 m. Growing adds land around the edges that carries on the old edge; shrinking trims them (anything left outside is removed, after asking). Blank dioramas can also pick a size when they are created.
 - Swap the whole base for a habitat tile (coral reef, kelp forest, tide pools, beach, marsh, mangroves, frozen lake, lake, cave, groundwater cut-away).
 - Undo/redo, duplicate, delete, autosave, download/open `.diorama.json` files, save a picture.
 
@@ -129,8 +138,12 @@ src/
                  landscape painting), Sky (time-of-day palette & dome), Groundcover (instanced grass,
                  flowers, pebbles, leaf litter), Weather, wind (shared sway patch), Actor (placed object:
                  animation clips, procedural rig idle/gait, ambient behaviour, labels, speech bubbles),
-                 HeightProbe (GPU top-down height maps for habitat tiles), WalkMode (first person),
-                 XRMode (WebXR table-top AR/VR)
+                 HeightProbe (GPU top-down height maps for habitat tiles), WalkMode (first person,
+                 flying, roaming), XRMode (WebXR table-top AR/VR), ground (ground types, the per-pixel
+                 ground shader with editor outlines, and its CPU twin), landforms (ground styles,
+                 landform stamps, area generators), LandEditor (stamp preview, area selection, try
+                 again, auto-paint), EndlessWorld (streamed terrain chunks with LOD and skirts, chunk
+                 water, instanced plants, roaming animals), sizes (diorama size presets)
   assets/        catalog (nearly 350 entries), data-* (taxonomy, diet, status, facts, food tags), data-remap
                  (species rebuilt on better-matching rigs), modules (lazy loaders for References/* and
                  flora), builder (quality tiers, prototype cache & cloning, orientation, exhibit scale,
@@ -145,7 +158,8 @@ src/
   storage/       IndexedDB projects (localStorage fallback), export/import, settings
   game/          progress (XP, levels, ranks, discoveries, badges, stars; stored in localStorage),
                  ecology (ecosystem health score, quests, stars)
-  ui/            React UI: Welcome, Studio, Viewport (pointer/touch gestures), BuildPanels, ExplorePanels,
+  ui/            React UI: Welcome, Studio, Viewport (pointer/touch gestures), BuildPanels, LandPanel (land
+                 tools & diorama size), ExplorePanels,
                  CodePanel, BottomSheet (draggable phone sheet), ContextBar, AssetThumb + thumbs3d
                  (background 3D thumbnails cached in IndexedDB), feedback (haptics, UI sounds), game/
                  (HUD chips, quest tracker, journal, celebrations)
@@ -174,8 +188,9 @@ Run these with `npm run dev` stopped (the review and UI scripts start their own 
 - Built on standard WebGL 2, WebAudio and Speech Synthesis, for current desktop and mobile browsers. Automated checks run in Chromium at desktop and phone sizes.
 - Phones: in Build and Code the panel takes most of the screen under a smaller 3D view that always stays visible; drag the panel's header to give either more room (it snaps, and flings). Held sideways, the panel sits beside the view and the mode tabs move into the top bar. While the camera is at its overview it re-fits the diorama whenever the view changes shape. Tapping an organism in Explore glides the camera so it sits in the space left by its species card.
 - Touch: a bottom tab bar, undo/redo in the Build panel, one-finger orbit / two-finger pan-zoom, long-press to pick up, two-finger twist and pinch on a held object, forgiving taps on thin things like legs and branches, short haptic ticks where the device supports them, and safe-area padding for notched phones.
-- Three graphics tiers (Fast / Balanced / Detailed) pick model detail, shadow resolution and grass density; the renderer also adapts its resolution to keep the frame rate up. Phones default to Fast.
-- All geometry is procedural and texture-free; the only network requests are fonts (optional — system fonts are the fallback). Library thumbnails are rendered in the background on first view and cached in IndexedDB.
+- Three graphics tiers (Fast / Balanced / Detailed) pick model detail, shadow resolution and grass density; the renderer also adapts its resolution to keep the frame rate up. Phones default to Fast. In Roam they also set how far you can see (about 145, 175 or 210 m) and how many plants and animals fill the world; its land is built a few milliseconds per frame, nearest first, coarser further away.
+- Land grids are 25 cm for most dioramas and a little coarser for huge ones, so every size stays smooth to sculpt; huge dioramas keep a shorter undo history.
+- All geometry is procedural and texture-free (the ground shader's speckle comes from a small noise texture generated at start-up); the only network requests are fonts (optional — system fonts are the fallback). Library thumbnails are rendered in the background on first view and cached in IndexedDB.
 
 ## Licences
 

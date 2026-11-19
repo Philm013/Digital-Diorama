@@ -2,7 +2,13 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { Actor, type WorldQuery } from './Actor';
-import { Terrain, GROUND_TYPES, type SculptTool } from './Terrain';
+import { Terrain, GROUND_TYPES, type GridRect, type SculptTool } from './Terrain';
+import { LandEditor } from './LandEditor';
+import { EndlessWorld } from './EndlessWorld';
+import { GROUND_UNIFORMS } from './ground';
+import { autoPaintBrush, styleForBiome, terrainLevels, waterDistance } from './landforms';
+import { resampleTerrain } from './terrainGen';
+import { cellFor } from './sizes';
 import { Water } from './Water';
 import { Frame } from './Frame';
 import { SkyDome, skyAt, type SkyState } from './Sky';
@@ -28,7 +34,9 @@ export type EngineEvent =
   | { type: 'actors' }
   | { type: 'thunder' };
 
-export interface BrushState { tool: SculptTool | 'paint' | null; radius: number; strength: number; ground: number }
+export type LandTool = SculptTool | 'paint' | 'stamp' | 'area';
+/** `ground` is a ground-type index, or −1 for ✨ Auto (chosen from the shape of the land) */
+export interface BrushState { tool: LandTool | null; radius: number; strength: number; ground: number }
 
 const tmpV = new THREE.Vector3();
 const tmpInset = new THREE.Vector2();
@@ -85,6 +93,13 @@ export class Engine {
   private flight: { from: THREE.Vector3; to: THREE.Vector3; tFrom: THREE.Vector3; tTo: THREE.Vector3; t: number; dur: number; done?: () => void } | null = null;
   private followId: string | null = null;
   walk: import('./WalkMode').WalkMode | null = null;
+  /** landform stamps, area generation and the ground outlines */
+  land: LandEditor;
+  /** Build mode's map-like view straight down */
+  topView = false;
+  /** the endless world around the diorama (Explore → Roam) */
+  endless: EndlessWorld | null = null;
+  private lightDir = new THREE.Vector3(0, 1, 0);
   xr: import('./XRMode').XRMode | null = null;
   disposed = false;
   private resizeObs?: ResizeObserver;
@@ -138,6 +153,7 @@ export class Engine {
     this.world.name = 'world';
     this.scene.add(this.world, this.frame.group, this.sky.mesh, this.groundcover.group, this.weather.group);
     this.weather.onThunder = () => this.emit({ type: 'thunder' });
+    this.land = new LandEditor(this);
 
     window.addEventListener('resize', this.resize);
     // panels opening/closing change the viewport without a window resize
@@ -174,7 +190,9 @@ export class Engine {
     this.weather.setPixelRatio(h * this.pixelRatio);
     // the view changed shape (phone panel opened, device rotated): keep the whole diorama in
     // view — but only while the camera is still at the overview the user hasn't moved away from
-    if (this.atOverview && this.doc && Math.abs(this.camera.aspect - prevAspect) > 0.02 && !this.walk?.active && !this.xr?.active) this.frameCamera(!this.flight);
+    if (this.atOverview && this.doc && Math.abs(this.camera.aspect - prevAspect) > 0.02 && !this.walk?.active && !this.xr?.active) {
+      if (this.topView) this.frameTop(true); else this.frameCamera(!this.flight);
+    }
   };
   /** true from frameCamera() until the user (or a flight elsewhere) moves the camera */
   private atOverview = false;
@@ -212,11 +230,13 @@ export class Engine {
 
   /* ================= world queries ================= */
   groundAt = (x: number, z: number): number => {
+    if (this.endless?.active) return this.endless.heightAt(x, z);
     if (this.terrain) return this.terrain.heightAt(x, z);
     if (this.groundGrid) return sampleGrid(this.groundGrid, x, z) ?? (this.seaLevel ?? 0) - 3;
     return 0;
   };
   waterAt = (x: number, z: number): number | null => {
+    if (this.endless?.active) return this.endless.waterAt(x, z);
     if (this.terrain) {
       const wl = this.terrain.waterLevel;
       return wl !== null && this.terrain.heightAt(x, z) < wl ? wl : null;
@@ -412,12 +432,16 @@ export class Engine {
     } else { groundY = 0; backY = 1; }
     const subtitle = this.doc.author ? `by ${this.doc.author}` : (BACKDROPS[env.backdrop]?.name ?? '');
     this.frame.build(env.frame, env.backdrop, { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ, bottomY: b.bottom, topY: b.top, groundY, backGroundY: backY }, this.doc.title, subtitle);
+    const endless = !!this.endless?.active;
     this.sky.mesh.visible = env.frame === 'island' || env.frame === 'open' || !!this.walk?.active;
-    const room = env.frame === 'shoebox' || env.frame === 'museum';
+    const room = (env.frame === 'shoebox' || env.frame === 'museum') && !endless;
     this.scene.background = room ? new THREE.Color('#d8cfc2') : null;
-    // shadow camera covers the whole box
+    // out in the endless world there is no box: just land and sky
+    this.frame.group.visible = !endless;
+    if (this.terrain) { this.terrain.bottom.visible = !endless; this.terrain.waterSides.visible = !endless && this.terrain.waterLevel !== null; }
+    // shadow camera covers the whole box (or the land around the walker)
     const sc = this.sun.shadow.camera;
-    const half = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) * 0.75 + 4;
+    const half = endless ? 46 : Math.max(b.maxX - b.minX, b.maxZ - b.minZ) * 0.75 + 4;
     sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.near = 1; sc.far = 400;
     sc.updateProjectionMatrix();
   }
@@ -449,8 +473,12 @@ export class Engine {
     const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
     const night = s.night;
     const lightDir = night > 0.5 ? s.moonDir : s.sunDir;
-    this.sun.position.set(cx + lightDir.x * 80, lightDir.y * 80 + 5, cz + lightDir.z * 80);
-    this.sun.target.position.set(cx, 0, cz);
+    this.lightDir.copy(lightDir);
+    if (this.endless?.active) this.placeSun(this.camera.position);
+    else {
+      this.sun.position.set(cx + lightDir.x * 80, lightDir.y * 80 + 5, cz + lightDir.z * 80);
+      this.sun.target.position.set(cx, 0, cz);
+    }
     this.sun.color.copy(s.lightColor);
     let li = s.lightIntensity * (1 - overcast * 0.55);
     if (under) li *= 0.85;
@@ -470,8 +498,14 @@ export class Engine {
     const walking = !!this.walk?.active;
     if (fogAmt > 0.01 || walking) {
       const col = under ? new THREE.Color('#2a7f9e').multiplyScalar(1 - night * 0.7) : s.horizon.clone().lerp(new THREE.Color('#c8ccd0'), overcast * 0.6);
-      const near = walking ? size * (0.6 - fogAmt * 0.5) : this.camera.position.distanceTo(this.controls.target) * (1.0 - fogAmt * 0.55);
-      const far = near + size * (walking ? 2.6 : 2.2) * (1.15 - fogAmt);
+      let near = walking ? size * (0.6 - fogAmt * 0.5) : this.camera.position.distanceTo(this.controls.target) * (1.0 - fogAmt * 0.55);
+      let far = near + size * (walking ? 2.6 : 2.2) * (1.15 - fogAmt);
+      if (this.endless?.active) {
+        // the haze hides where the streamed land ends
+        const vd = this.endless.viewDistance;
+        near = vd * (0.3 - fogAmt * 0.24);
+        far = vd * (0.97 - fogAmt * 0.5);
+      }
       if (!(this.scene.fog instanceof THREE.Fog)) this.scene.fog = new THREE.Fog(col, near, far);
       const f = this.scene.fog as THREE.Fog;
       f.color.copy(col); f.near = near; f.far = far;
@@ -492,6 +526,37 @@ export class Engine {
     // night lights in assets
     for (const a of this.actors.values()) a.model?.setNight?.(night);
     this.base?.model?.setNight?.(night);
+    this.endless?.setNight(night);
+  }
+
+  /** aim the sun (or moon) light and its shadows at a point: the walker, out in the endless world */
+  private placeSun(at: THREE.Vector3) {
+    // move in whole shadow-map texels so shadow edges don't shimmer as the walker moves
+    const texel = (2 * 46) / this.sun.shadow.mapSize.x;
+    const x = Math.round(at.x / texel) * texel, z = Math.round(at.z / texel) * texel;
+    const y = this.groundAt(at.x, at.z);
+    const d = this.lightDir;
+    this.sun.target.position.set(x, y, z);
+    this.sun.position.set(x + d.x * 80, y + d.y * 80 + 5, z + d.z * 80);
+  }
+
+  /** step out into (or back from) the endless world around the diorama */
+  setEndless(on: boolean) {
+    if (on === !!this.endless?.active) return;
+    if (on) {
+      if (!this.terrain) return;
+      this.setTopView(false);
+      this.endless ??= new EndlessWorld(this);
+      this.endless.start();
+    } else {
+      this.endless?.stop();
+      this.weather.follow(null);
+    }
+    this.labels.domElement.style.visibility = on ? 'hidden' : '';
+    for (const a of this.actors.values()) this.syncActorLabel(a);
+    this.buildFrame();
+    this.applyEnv();
+    this.changed(false);
   }
 
   buildWeather() {
@@ -627,7 +692,8 @@ export class Engine {
   }
 
   syncActorLabel(a: Actor) {
-    const show = this.env.labels && a.doc.label?.show !== false && a.def.category !== 'sky' && a.def.category !== 'habitats';
+    // flags and toothpicks stay home while roaming the endless world
+    const show = this.env.labels && !this.endless?.active && a.doc.label?.show !== false && a.def.category !== 'sky' && a.def.category !== 'habitats';
     const saved = a.doc.label;
     a.doc.label = { ...(saved ?? {}), show };
     a.syncLabel();
@@ -647,7 +713,17 @@ export class Engine {
     this.mode = m;
     const sel = this.getActor(this.selectedId);
     sel?.setSelected(m !== 'explore');
-    this.brush.tool = null;
+    this.setLandTool(null);
+    if (m !== 'build') { this.setTopView(false); this.land.setAreaRect(null); }
+    this.changed(false);
+  }
+
+  /** arm a land tool (null puts it away); the ground outlines follow */
+  setLandTool(tool: LandTool | null) {
+    this.brush.tool = tool;
+    this.land.hidePreview();
+    // a selected area belongs to the Area tool: putting it away clears the outline
+    if (tool !== 'area' && this.land.area.rect) this.land.setAreaRect(null);
     this.changed(false);
   }
 
@@ -714,9 +790,12 @@ export class Engine {
 
   /* ================= terrain tools ================= */
   private flattenTo = 0;
+  private strokeAuto: { levels: { base: number; H: number }; dist: Float32Array } | null = null;
   beginStroke(p: THREE.Vector3) {
     this.pushUndo();
     this.flattenTo = p.y;
+    // ✨ Auto paint reads the shape of the land; work out what it needs once per stroke
+    this.strokeAuto = this.terrain && this.brush.tool === 'paint' && this.brush.ground < 0 ? { levels: terrainLevels(this.terrain), dist: waterDistance(this.terrain) } : null;
   }
   /**
    * Apply the brush for `dt` seconds at a point. The viewport calls this every frame while the
@@ -726,9 +805,14 @@ export class Engine {
     const t = this.terrain;
     if (!t || !this.brush.tool) return;
     const r = this.brush.radius;
-    const rect = this.brush.tool === 'paint'
-      ? t.paintAt(this.brush.ground, p.x, p.z, r)
-      : t.sculpt(this.brush.tool, p.x, p.z, r, this.brush.strength * dt * 16, this.flattenTo);
+    const tool = this.brush.tool;
+    if (tool === 'stamp' || tool === 'area') return;
+    let rect: GridRect;
+    if (tool === 'paint') {
+      rect = this.brush.ground < 0 && this.strokeAuto
+        ? autoPaintBrush(t, styleForBiome(this.doc.biome), p.x, p.z, r, this.strokeAuto.levels, this.strokeAuto.dist, t.seed)
+        : t.paintAt(Math.max(0, this.brush.ground), p.x, p.z, r);
+    } else rect = t.sculpt(tool, p.x, p.z, r, this.brush.strength * dt * 16, this.flattenTo);
     t.rebuild(rect);
     if (this.brush.tool === 'paint') return;
     this.water?.sync();
@@ -740,10 +824,51 @@ export class Engine {
   }
   endStroke() {
     if (!this.terrain) return;
+    this.strokeAuto = null;
     this.bounds.bottom = this.terrain.bottomY;
+    this.growFrame();
     this.rebuildGroundcover();
     for (const a of this.actors.values()) this.commitTransform(a);
     this.changed();
+  }
+
+  /**
+   * After a stamp, an area generation or a repaint: refresh the changed part of the land (or all
+   * of it), the water, the groundcover and anything standing on the ground there.
+   */
+  afterTerrainEdit(rect: GridRect | null, waterChanged: boolean) {
+    const t = this.terrain;
+    if (!t) return;
+    if (waterChanged) {
+      t.setWaterLevel(t.waterLevel);
+      this.seaLevel = t.waterLevel;
+      this.buildFrame();
+    } else t.rebuild(rect);
+    this.water?.sync();
+    this.bounds.bottom = t.bottomY;
+    this.growFrame();
+    const x0 = rect ? t.xOf(rect.i0) - 0.5 : -Infinity, x1 = rect ? t.xOf(rect.i1) + 0.5 : Infinity;
+    const z0 = rect ? t.zOf(rect.j0) - 0.5 : -Infinity, z1 = rect ? t.zOf(rect.j1) + 0.5 : Infinity;
+    for (const a of this.actors.values()) {
+      const p = a.root.position;
+      if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
+      a.followGround(this.worldQuery);
+      this.commitTransform(a);
+    }
+    this.rebuildGroundcover();
+    this.changed();
+  }
+
+  /** tall new landforms raise the box's walls (and the room the weather falls through) */
+  private growFrame() {
+    const t = this.terrain;
+    if (!t) return;
+    const top = t.maxHeight() + 12;
+    if (top > this.bounds.top + 0.5) {
+      this.bounds.top = top;
+      this.buildFrame();
+      this.buildWeather();
+    }
   }
   setWaterLevel(v: number | null) {
     if (!this.terrain) return;
@@ -768,7 +893,9 @@ export class Engine {
   pushUndo() {
     if (this.loading || this.playing) return;
     this.undoStack.push(this.snapshot());
-    if (this.undoStack.length > 40) this.undoStack.shift();
+    // every step stores the whole land: keep fewer of them for huge dioramas
+    const keep = (this.terrain?.heights.length ?? 0) > 60000 ? 20 : 40;
+    while (this.undoStack.length > keep) this.undoStack.shift();
     this.redoStack = [];
   }
   get canUndo() { return this.undoStack.length > 0; }
@@ -783,12 +910,18 @@ export class Engine {
     // terrain
     if (s.terrain && this.terrain && this.doc.base.kind === 'terrain') {
       const t = Terrain.fromDoc(s.terrain);
-      this.terrain.heights.set(t.heights);
-      this.terrain.paint.set(t.paint);
-      this.terrain.waterLevel = t.waterLevel;
-      this.terrain.rebuild();
-      this.water?.sync();
-      t.dispose();
+      if (t.nx !== this.terrain.nx || t.nz !== this.terrain.nz || t.width !== this.terrain.width || t.depth !== this.terrain.depth) {
+        // a resize is being undone: swap in the whole terrain
+        this.swapTerrain(t);
+      } else {
+        this.terrain.heights.set(t.heights);
+        this.terrain.paint.set(t.paint);
+        this.terrain.setWaterLevel(t.waterLevel);
+        this.seaLevel = t.waterLevel;
+        this.water?.sync();
+        this.bounds.bottom = this.terrain.bottomY;
+        t.dispose();
+      }
     }
     // env
     const envChanged = JSON.stringify(s.env) !== JSON.stringify(this.doc.env);
@@ -813,6 +946,7 @@ export class Engine {
 
   /* ================= camera ================= */
   frameCamera(instant = false) {
+    if (this.topView) { this.frameTop(instant); return; }
     const b = this.bounds;
     const w = b.maxX - b.minX, d = b.maxZ - b.minZ;
     const target = new THREE.Vector3((b.minX + b.maxX) / 2, Math.max(0, (this.terrain?.maxHeight() ?? 2) * 0.25), (b.minZ + b.maxZ) / 2 + d * 0.05);
@@ -857,6 +991,99 @@ export class Engine {
 
   follow(id: string | null) { this.followId = id; }
 
+  /* ================= top view ================= */
+  private beforeTop: { pos: THREE.Vector3; target: THREE.Vector3; fov: number; minPolar: number; maxPolar: number } | null = null;
+  /** Build mode's map view: straight down, drag to pan, pinch or scroll to zoom */
+  setTopView(on: boolean) {
+    if (on === this.topView) return;
+    const c = this.controls;
+    if (on) {
+      if (this.walk?.active) return;
+      this.beforeTop = { pos: this.camera.position.clone(), target: c.target.clone(), fov: this.camera.fov, minPolar: c.minPolarAngle, maxPolar: c.maxPolarAngle };
+      this.topView = true;
+      this.camera.fov = 30;
+      this.camera.updateProjectionMatrix();
+      c.enableRotate = false;
+      c.minPolarAngle = 0;
+      c.maxPolarAngle = 0;
+      c.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+      c.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+      this.frameTop(true);
+      this.labels.domElement.style.visibility = 'hidden';
+      GROUND_UNIFORMS.uGridOn.value = 1;
+    } else {
+      this.topView = false;
+      c.enableRotate = true;
+      c.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+      c.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+      const b = this.beforeTop;
+      c.minPolarAngle = b?.minPolar ?? 0;
+      c.maxPolarAngle = b?.maxPolar ?? Math.PI * 0.495;
+      if (b) {
+        this.camera.fov = b.fov;
+        this.camera.updateProjectionMatrix();
+        this.flyTo(b.pos, b.target, 0.7);
+      }
+      this.beforeTop = null;
+      this.labels.domElement.style.visibility = '';
+      GROUND_UNIFORMS.uGridOn.value = 0;
+    }
+    this.changed(false);
+  }
+  /** look straight down at the whole diorama */
+  frameTop(instant = false) {
+    const b = this.bounds;
+    const w = b.maxX - b.minX, d = b.maxZ - b.minZ;
+    const t = 2 * Math.tan((this.camera.fov * Math.PI) / 360);
+    const dist = Math.max(d * 1.12 / t, (w * 1.08) / t / Math.max(0.4, this.camera.aspect)) + Math.max(0, this.terrain?.maxHeight() ?? 0);
+    const target = new THREE.Vector3((b.minX + b.maxX) / 2, 0, (b.minZ + b.maxZ) / 2);
+    // a hair off vertical keeps "up" on screen pointing to the back of the box
+    const pos = target.clone().add(new THREE.Vector3(0, dist, dist * 1e-4));
+    this.controls.maxDistance = Math.max(this.controls.maxDistance, dist * 2.5);
+    if (instant) { this.camera.position.copy(pos); this.controls.target.copy(target); this.controls.update(); }
+    else this.flyTo(pos, target, 0.9);
+    this.atOverview = true;
+  }
+
+  /* ================= diorama size ================= */
+  /** grid spacing for a terrain of this size: fine for small boxes, coarser for huge ones */
+  static cellFor(width: number, depth: number) { return cellFor(width, depth); }
+  /** actors that a smaller size would leave outside the box */
+  actorsOutside(width: number, depth: number) {
+    return this.actorList.filter((a) => !a.isClone && (Math.abs(a.root.position.x) > width / 2 - 0.3 || Math.abs(a.root.position.z) > depth / 2 - 0.3));
+  }
+  /** change the size of the diorama, keeping the land centred: growing extends the edges naturally, shrinking crops */
+  resizeTerrain(width: number, depth: number) {
+    const old = this.terrain;
+    if (!old) return;
+    this.pushUndo();
+    for (const a of this.actorsOutside(width, depth)) this.removeActor(a.id, false);
+    const nt = resampleTerrain(old, width, depth, Engine.cellFor(width, depth));
+    this.swapTerrain(nt);
+    this.land.setAreaRect(null);
+    if (this.topView) this.frameTop(); else this.frameCamera();
+    this.emit({ type: 'actors' });
+    this.changed();
+  }
+  /** replace the terrain object (resize, or undoing one) and everything sized to it */
+  private swapTerrain(nt: Terrain) {
+    const old = this.terrain;
+    if (old) { this.world.remove(old.group); old.dispose(); }
+    if (this.water) { this.world.remove(this.water.mesh); this.water.dispose(); }
+    this.terrain = nt;
+    this.world.add(nt.group);
+    this.water = new Water(nt);
+    this.world.add(this.water.mesh);
+    this.seaLevel = nt.waterLevel;
+    this.bounds = { minX: -nt.width / 2, maxX: nt.width / 2, minZ: -nt.depth / 2, maxZ: nt.depth / 2, bottom: nt.bottomY, top: nt.maxHeight() + 12 };
+    if (this.doc.base.kind === 'terrain') this.doc.base.terrain = nt.toDoc();
+    this.buildFrame();
+    this.applyEnv();
+    this.buildWeather();
+    for (const a of this.actors.values()) { a.followGround(this.worldQuery); this.commitTransform(a); }
+    this.rebuildGroundcover(true);
+  }
+
   /* ================= play mode hooks ================= */
   startPlay() {
     this.playing = true;
@@ -883,11 +1110,18 @@ export class Engine {
         this.applyEnv();
       } else if (this.weather.flash > 0 || (Math.floor(t * 4) !== Math.floor((t - dt) * 4))) this.applyEnv();
       WIND.uTime.value = t;
+      this.land.tick(t);
       this.water?.update(t);
       this.weather.update(t, dt);
       const live = (this.mode === 'explore' || this.playing) && !this.ambientOff;
       const q = this.worldQuery;
       this.runtime?.tick(dt);
+      if (this.endless?.active) {
+        const c = this.camera.position;
+        this.endless.update(dt, c);
+        this.placeSun(c);
+        this.weather.follow(c.x, c.z, this.groundAt(c.x, c.z));
+      }
       for (const a of this.actors.values()) a.update(dt, t, q, live);
       this.base?.update(dt, t, q, false);
       for (const fn of this.onTick) fn(dt, t);
@@ -910,6 +1144,8 @@ export class Engine {
     }
     if (this.walk?.active) this.walk.update(dt);
     else if (!this.xr?.active) this.controls.update();
+    // the sky dome is centred on the eye, so it surrounds you however far you roam
+    this.sky.mesh.position.copy(this.camera.position);
     this.updateInset(dt);
     this.renderer.render(this.scene, this.camera);
     if (!this.xr?.active) { this.labels.render(this.scene, this.camera); this.declutterLabels(); this.adaptResolution(dt); }
@@ -970,7 +1206,9 @@ export class Engine {
     this.renderer.setAnimationLoop(null);
     window.removeEventListener('resize', this.resize);
     this.resizeObs?.disconnect();
+    this.endless?.stop();
     this.clearWorld();
+    this.land.dispose();
     this.frame.dispose();
     this.controls.dispose();
     this.renderer.dispose();
