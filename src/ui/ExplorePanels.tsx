@@ -16,7 +16,7 @@ import { discover, isDiscovered, awardBadge } from '../game/progress';
 import { flag, quests, starsFor } from '../game/ecology';
 import { haptic, uiSound } from './feedback';
 
-export function ExploreLayer({ wide, onJournal }: { wide: boolean; playing?: boolean; onJournal?: () => void }) {
+export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; landscape?: boolean; playing?: boolean; onJournal?: () => void }) {
   const engine = useEngine();
   useEngineVersion();
   const [card, setCard] = useState<string | null>(null);
@@ -74,7 +74,7 @@ export function ExploreLayer({ wide, onJournal }: { wide: boolean; playing?: boo
   ];
   return (
     <>
-      {actor && !walking && <InfoCard actor={actor} wide={wide} onClose={() => { setCard(null); engine.select(null); }} onWalk={walkIn} />}
+      {actor && !walking && <InfoCard actor={actor} wide={wide} side={wide || !!landscape} onClose={() => { setCard(null); engine.select(null); }} onWalk={walkIn} />}
       {!walking && !(actor && !wide) && (
         <div className={clsx('pointer-events-none absolute inset-x-0 z-20 flex justify-center px-2', wide ? 'bottom-4' : 'bottom-2')}>
           <div className="dd-hotbar dd-scroll-x pointer-events-auto relative flex max-w-full items-center gap-1 overflow-x-auto rounded-[22px] p-1.5">
@@ -134,7 +134,7 @@ function factText(a: Actor) {
   const d = a.def;
   return [a.doc.note, d.info.fact ?? d.info.blurb].filter(Boolean).join(' ');
 }
-function InfoCard({ actor, wide, onClose, onWalk }: { actor: Actor; wide: boolean; onClose: () => void; onWalk: (eye: number) => void }) {
+function InfoCard({ actor, wide, side, onClose, onWalk }: { actor: Actor; wide: boolean; side: boolean; onClose: () => void; onWalk: (eye: number) => void }) {
   const engine = useEngine();
   const d = actor.def;
   const role = roleOf(d);
@@ -147,10 +147,31 @@ function InfoCard({ actor, wide, onClose, onWalk }: { actor: Actor; wide: boolea
   const [isNew] = useState(() => d.living !== false && !isDiscovered(d.id));
   useEffect(() => { if (d.living !== false) discover(d.id, d.name, d.emoji); }, [d]);
   useEffect(() => () => { engine.follow(null); stopSpeech(); }, [engine, actor.id]);
+  // phones: the card covers a big part of the view (below in portrait, beside in landscape), so
+  // centre the scene in the space that is left and glide the camera (no zoom) to bring the tapped
+  // organism into it. On a desktop the card covers little: only glide if it hides the organism.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const p = actor.root.position.clone().setY(actor.root.position.y + actor.height * 0.5);
+    if (wide) {
+      const v = p.clone().project(engine.camera);
+      const w = engine.container.clientWidth, x = (v.x * 0.5 + 0.5) * w;
+      if (x > w - el.offsetWidth - 40 || v.z > 1) engine.centerOn(p);
+      return;
+    }
+    const apply = () => (side ? engine.setViewInset(0, el.offsetWidth + 16) : engine.setViewInset(el.offsetHeight + 8, 0));
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    engine.centerOn(p);
+    return () => { ro.disconnect(); engine.setViewInset(0, 0); };
+  }, [engine, actor, wide, side]);
   const eatsList = useMemo(() => speciesList(engine.actorList.filter((o) => o !== actor && !o.isClone && o.def.living !== false && webEats(engine, actor, o))), [engine, actor]);
   const eatenBy = useMemo(() => speciesList(engine.actorList.filter((o) => o !== actor && !o.isClone && webEats(engine, o, actor))), [engine, actor]);
   return (
-    <div className={clsx('dd-species-card dd-pop absolute z-30 flex flex-col overflow-hidden rounded-[28px]', wide ? 'right-4 top-4 max-h-[calc(100%-32px)] w-[370px]' : 'inset-x-2 bottom-2 max-h-[64%]')} style={{ ['--role' as string]: rm.color }}>
+    <div ref={cardRef} className={clsx('dd-species-card dd-pop absolute z-30 flex flex-col overflow-hidden rounded-[28px]', wide ? 'right-4 top-4 max-h-[calc(100%-32px)] w-[370px]' : side ? 'bottom-2 right-2 top-2 w-[min(370px,50%)]' : 'inset-x-2 bottom-2 max-h-[64%]')} style={{ ['--role' as string]: rm.color }}>
       <div className="dd-species-hero relative flex items-end gap-3 px-4 pb-3 pt-3">
         <div className="grid h-[92px] w-[92px] shrink-0 place-items-center rounded-3xl bg-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,.5)]"><AssetThumb id={d.id} emoji={d.emoji} size={88} /></div>
         <div className="min-w-0 flex-1 pb-1 text-white [text-shadow:0_1px_3px_rgba(0,0,0,.35)]">

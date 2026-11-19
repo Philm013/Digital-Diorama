@@ -31,6 +31,7 @@ export type EngineEvent =
 export interface BrushState { tool: SculptTool | 'paint' | null; radius: number; strength: number; ground: number }
 
 const tmpV = new THREE.Vector3();
+const tmpInset = new THREE.Vector2();
 
 export class Engine {
   renderer: THREE.WebGLRenderer;
@@ -118,6 +119,7 @@ export class Engine {
     this.controls.maxDistance = 160;
     this.controls.screenSpacePanning = true;
     this.controls.zoomToCursor = true;
+    this.controls.addEventListener('start', () => { this.atOverview = false; });
 
     this.sun = new THREE.DirectionalLight('#fff4e0', 2.6);
     this.sun.castShadow = true;
@@ -163,33 +165,40 @@ export class Engine {
   /* ================= sizing & quality ================= */
   resize = () => {
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
+    const prevAspect = this.camera.aspect;
     this.renderer.setSize(w, h, false);
     this.labels.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.applyViewOffset();
     this.weather.setPixelRatio(h * this.pixelRatio);
+    // the view changed shape (phone panel opened, device rotated): keep the whole diorama in
+    // view — but only while the camera is still at the overview the user hasn't moved away from
+    if (this.atOverview && this.doc && Math.abs(this.camera.aspect - prevAspect) > 0.02 && !this.walk?.active && !this.xr?.active) this.frameCamera(!this.flight);
   };
+  /** true from frameCamera() until the user (or a flight elsewhere) moves the camera */
+  private atOverview = false;
 
   /**
-   * Screen pixels covered by UI along the bottom of the view (the phone's build/code sheet).
-   * The view's centre slides up into the part that is still visible, so whatever the camera
-   * looks at — a focused animal, the middle of the diorama — isn't hidden under the sheet.
+   * Screen pixels covered by UI along the bottom and right of the view (a phone's species card).
+   * The view's centre slides into the part that is still visible, so whatever the camera looks
+   * at — the animal you just tapped, a focused object — isn't hidden under the card.
    */
-  setBottomInset(px: number) { this.insetTarget = Math.max(0, px); }
-  private insetTarget = 0;
-  private insetNow = 0;
+  setViewInset(bottom = 0, right = 0) { this.insetTarget.set(Math.max(0, right), Math.max(0, bottom)); }
+  private insetTarget = new THREE.Vector2();
+  private insetNow = new THREE.Vector2();
   private updateInset(dt: number) {
-    const want = this.walk?.active || this.xr?.active ? 0 : this.insetTarget;
-    if (want === this.insetNow) return;
-    const next = this.insetNow + (want - this.insetNow) * Math.min(1, dt * 12);
-    this.insetNow = Math.abs(want - next) < 0.5 || this.walk?.active ? want : next;
+    const want = this.walk?.active || this.xr?.active ? tmpInset.set(0, 0) : this.insetTarget;
+    if (want.equals(this.insetNow)) return;
+    this.insetNow.lerp(want, Math.min(1, dt * 12));
+    if (this.insetNow.distanceTo(want) < 0.5 || this.walk?.active) this.insetNow.copy(want);
     this.applyViewOffset();
   }
   private applyViewOffset() {
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
-    if (this.insetNow < 0.5) { if (this.camera.view?.enabled) this.camera.clearViewOffset(); }
-    else this.camera.setViewOffset(w, h, 0, Math.min(h * 0.45, this.insetNow / 2), w, h);
+    const { x, y } = this.insetNow;
+    if (x < 0.5 && y < 0.5) { if (this.camera.view?.enabled) this.camera.clearViewOffset(); }
+    else this.camera.setViewOffset(w, h, Math.min(w * 0.45, x / 2), Math.min(h * 0.45, y / 2), w, h);
   }
 
   setQuality(q: Quality) {
@@ -709,14 +718,25 @@ export class Engine {
     this.pushUndo();
     this.flattenTo = p.y;
   }
+  /**
+   * Apply the brush for `dt` seconds at a point. The viewport calls this every frame while the
+   * pointer is held down, so holding still keeps building (or digging) — like an airbrush.
+   */
   strokeAt(p: THREE.Vector3, dt: number) {
     const t = this.terrain;
     if (!t || !this.brush.tool) return;
-    if (this.brush.tool === 'paint') t.paintAt(this.brush.ground, p.x, p.z, this.brush.radius);
-    else t.sculpt(this.brush.tool, p.x, p.z, this.brush.radius, this.brush.strength * dt * 10, this.flattenTo);
-    t.rebuild();
+    const r = this.brush.radius;
+    const rect = this.brush.tool === 'paint'
+      ? t.paintAt(this.brush.ground, p.x, p.z, r)
+      : t.sculpt(this.brush.tool, p.x, p.z, r, this.brush.strength * dt * 16, this.flattenTo);
+    t.rebuild(rect);
+    if (this.brush.tool === 'paint') return;
     this.water?.sync();
-    for (const a of this.actors.values()) if (a.doc.grounded !== false) { a.followGround(this.worldQuery); }
+    this.groundcover.follow(t, p.x - r, p.x + r, p.z - r, p.z + r);
+    for (const a of this.actors.values()) {
+      if (a.doc.grounded === false || Math.abs(a.root.position.x - p.x) > r + 0.5 || Math.abs(a.root.position.z - p.z) > r + 0.5) continue;
+      a.followGround(this.worldQuery);
+    }
   }
   endStroke() {
     if (!this.terrain) return;
@@ -799,15 +819,21 @@ export class Engine {
     const fov = this.camera.fov * Math.PI / 180;
     // in portrait we let the sides crop a little so the diorama fills the screen
     const aspect = Math.max(0.72, this.camera.aspect);
-    const dist = Math.max(w / aspect, d * 1.15) / (2 * Math.tan(fov / 2)) * 0.98 + d * 0.12;
+    const t = 2 * Math.tan(fov / 2);
+    // the front corners are nearer the camera than the centre; in square-ish and landscape views
+    // (a phone's viewer beside its panel) back off far enough to keep them in frame as well
+    const nearEdge = clamp((aspect - 0.85) / 0.35, 0, 1) * (d / 2) * Math.cos(0.5) * 0.8;
+    const dist = Math.max(w / aspect / t + nearEdge, (d * 1.15) / t) * 0.98 + d * 0.12;
     const pos = target.clone().add(new THREE.Vector3(0, Math.sin(0.5) * dist, Math.cos(0.5) * dist));
     this.controls.maxDistance = dist * 3;
     if (instant) { this.camera.position.copy(pos); this.controls.target.copy(target); this.controls.update(); }
     else this.flyTo(pos, target, 1.2);
+    this.atOverview = true;
   }
 
   flyTo(pos: THREE.Vector3, target: THREE.Vector3, dur = 1.2, done?: () => void) {
     this.flight = { from: this.camera.position.clone(), to: pos.clone(), tFrom: this.controls.target.clone(), tTo: target.clone(), t: 0, dur, done };
+    this.atOverview = false;
   }
 
   focusActor(id: string, dur = 1.1, done?: () => void) {
@@ -820,6 +846,13 @@ export class Engine {
     dir.normalize();
     const dist = clamp(r * 4.2 + 1.5, 2.5, 40);
     this.flyTo(target.clone().addScaledVector(dir, dist), target, dur, done);
+  }
+
+  /** glide the camera sideways (same distance and angle, no zoom) so a point sits at the centre of the view */
+  centerOn(p: THREE.Vector3, dur = 0.6) {
+    const delta = p.clone().sub(this.controls.target);
+    if (delta.lengthSq() < 1e-4) return;
+    this.flyTo(this.camera.position.clone().add(delta), p.clone(), dur);
   }
 
   follow(id: string | null) { this.followId = id; }

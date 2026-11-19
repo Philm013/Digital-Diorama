@@ -6,10 +6,11 @@ import { useEngine, useEngineVersion } from './store';
 import { haptic, uiSound } from './feedback';
 
 /**
- * Quick actions for the selected object, floating just above it (desktop) or
- * docked above the bottom sheet (phones): turn, resize, copy, delete, focus, code.
+ * Quick actions for the selected object: turn, resize, copy, focus, delete, code.
+ * Floats just above the object on desktop; `inline` renders it as a toolbar row
+ * at the top of the phone panel, so it never covers the small 3D viewer.
  */
-export function ContextBar({ docked, bottom = 0, onCode }: { docked?: boolean; bottom?: number; onCode: () => void }) {
+export function ContextBar({ onCode, inline }: { onCode: () => void; inline?: boolean }) {
   const engine = useEngine();
   useEngineVersion();
   const ref = useRef<HTMLDivElement>(null);
@@ -21,7 +22,7 @@ export function ContextBar({ docked, bottom = 0, onCode }: { docked?: boolean; b
     return () => document.removeEventListener('dd-drag', fn);
   }, []);
   useEffect(() => {
-    if (docked || !a) return;
+    if (inline || !a) return;
     let raf = 0;
     const v = new THREE.Vector3();
     const tick = () => {
@@ -43,22 +44,43 @@ export function ContextBar({ docked, bottom = 0, onCode }: { docked?: boolean; b
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [a, docked, engine]);
+  }, [a, inline, engine]);
   if (!a || a.isClone) return null;
   const act = (fn: () => void, sound: 'tick' | 'pop' | 'trash' = 'tick') => () => { fn(); haptic(8); uiSound(sound); };
   const turn = (deg: number) => act(() => { engine.pushUndo(); a.root.rotation.y -= (deg * Math.PI) / 180; engine.commitTransform(a); engine.changed(); });
   const size = (k: number) => act(() => { engine.pushUndo(); const s = THREE.MathUtils.clamp(a.root.scale.x * k, 0.25, 4); a.root.scale.setScalar(s); a.syncLabel(); a.updateRing(); engine.commitTransform(a); engine.changed(); });
   const B = ({ onClick, label, children, danger, solid }: { onClick: () => void; label: string; children: React.ReactNode; danger?: boolean; solid?: boolean }) => (
-    <button onClick={onClick} title={label} aria-label={label} className={clsx('grid h-11 w-11 place-items-center rounded-2xl transition active:scale-90', danger ? 'text-[#ff8a8a] hover:bg-red-500/20' : solid ? 'bg-[#7c5cff] text-white hover:brightness-110' : 'text-white hover:bg-white/15')}>{children}</button>
+    <button onClick={onClick} title={label} aria-label={label} className={clsx('grid place-items-center transition active:scale-90',
+      inline ? 'h-10 min-w-0 flex-1 rounded-xl' : 'h-11 w-11 rounded-2xl',
+      danger ? (inline ? 'text-red-600 active:bg-red-500/10' : 'text-[#ff8a8a] hover:bg-red-500/20')
+        : solid ? 'bg-[#7c5cff] text-white hover:brightness-110'
+          : inline ? 'text-ink/75 active:bg-black/10' : 'text-white hover:bg-white/15')}>{children}</button>
   );
+  const sep = <span className={clsx('mx-0.5 h-6 w-px shrink-0', inline ? 'bg-black/10' : 'bg-white/15')} />;
+  if (inline) {
+    return (
+      <div className="flex shrink-0 items-center gap-0.5 border-b border-black/5 bg-white/60 px-2 py-1">
+        <B onClick={turn(-45)} label="Turn left"><RotateCcw size={18} /></B>
+        <B onClick={turn(45)} label="Turn right"><RotateCw size={18} /></B>
+        {sep}
+        <B onClick={size(1 / 1.15)} label="Smaller"><Minus size={18} /></B>
+        <B onClick={size(1.15)} label="Bigger"><Plus size={18} /></B>
+        {sep}
+        <B onClick={act(() => void engine.duplicateActor(a.id), 'pop')} label="Duplicate (D)"><Copy size={17} /></B>
+        <B onClick={act(() => engine.focusActor(a.id))} label="Focus (F)"><Crosshair size={17} /></B>
+        <B onClick={act(() => engine.removeActor(a.id), 'trash')} label="Delete" danger><Trash2 size={17} /></B>
+        <B onClick={() => { haptic(8); onCode(); }} label="Code it" solid><Blocks size={17} /></B>
+      </div>
+    );
+  }
   return (
-    <div ref={ref} className={clsx('dd-glass pointer-events-auto z-30 flex items-center gap-0.5 rounded-[22px] p-1 transition-opacity', docked ? 'absolute left-1/2 -translate-x-1/2' : 'absolute left-0 top-0', dragging && 'pointer-events-none opacity-0')} style={docked ? { bottom: bottom + 10 } : undefined}>
+    <div ref={ref} className={clsx('dd-glass pointer-events-auto absolute left-0 top-0 z-30 flex items-center gap-0.5 rounded-[22px] p-1 transition-opacity', dragging && 'pointer-events-none opacity-0')}>
       <B onClick={turn(-45)} label="Turn left"><RotateCcw size={19} /></B>
       <B onClick={turn(45)} label="Turn right"><RotateCw size={19} /></B>
-      <span className="mx-0.5 h-6 w-px bg-white/15" />
+      {sep}
       <B onClick={size(1 / 1.15)} label="Smaller"><Minus size={19} /></B>
       <B onClick={size(1.15)} label="Bigger"><Plus size={19} /></B>
-      <span className="mx-0.5 h-6 w-px bg-white/15" />
+      {sep}
       <B onClick={act(() => void engine.duplicateActor(a.id), 'pop')} label="Duplicate (D)"><Copy size={18} /></B>
       <B onClick={act(() => engine.focusActor(a.id))} label="Focus (F)"><Crosshair size={18} /></B>
       <B onClick={act(() => engine.removeActor(a.id), 'trash')} label="Delete" danger><Trash2 size={18} /></B>

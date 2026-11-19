@@ -47,6 +47,8 @@ export const STRATA: Record<string, StrataStyle> = {
 const tmpA = new THREE.Color(), tmpB = new THREE.Color(), tmpC = new THREE.Color();
 
 export type SculptTool = 'raise' | 'lower' | 'smooth' | 'flatten' | 'roughen';
+/** inclusive rectangle of grid vertices */
+export interface GridRect { i0: number; i1: number; j0: number; j1: number }
 
 export class Terrain {
   width: number;
@@ -185,22 +187,36 @@ export class Terrain {
   setSnow(v: number) { this.snow = v; this.snowUniform.value = v; }
 
   /* ---------- rebuild ---------- */
-  rebuild() {
-    this.updateSurface();
-    this.updateSides();
-    this.updateDepthTexture();
+  /**
+   * Refresh meshes and textures from the height/paint grids. With `rect` (from sculpt/paint)
+   * only that part of the surface is recomputed, so brushes stay smooth on phones; the side
+   * walls are rebuilt only when the edit reaches the edge or changes the base depth.
+   */
+  rebuild(rect?: GridRect | null) {
+    if (!rect) {
+      this.updateSurface();
+      this.updateSides();
+      this.updateDepthTexture();
+    } else {
+      const { nx, nz } = this;
+      const r = { i0: Math.max(0, rect.i0 - 1), i1: Math.min(nx - 1, rect.i1 + 1), j0: Math.max(0, rect.j0 - 1), j1: Math.min(nz - 1, rect.j1 + 1) };
+      this.updateSurface(r);
+      if (r.i0 === 0 || r.j0 === 0 || r.i1 === nx - 1 || r.j1 === nz - 1 || this.bottomY !== this.sidesBottom) this.updateSides();
+      this.updateDepthTexture(r);
+    }
     this.version++;
   }
 
-  private updateSurface() {
+  private updateSurface(rect?: GridRect) {
     const g = this.surface.geometry;
     const pos = g.attributes.position as THREE.BufferAttribute;
     const nor = g.attributes.normal as THREE.BufferAttribute;
     const col = g.attributes.color as THREE.BufferAttribute;
     const { nx, nz, dx, dz } = this;
     const wl = this.waterLevel;
-    for (let j = 0; j < nz; j++) {
-      for (let i = 0; i < nx; i++) {
+    const r = rect ?? { i0: 0, i1: nx - 1, j0: 0, j1: nz - 1 };
+    for (let j = r.j0; j <= r.j1; j++) {
+      for (let i = r.i0; i <= r.i1; i++) {
         const k = j * nx + i;
         const y = this.heights[k];
         pos.setY(k, y);
@@ -238,9 +254,12 @@ export class Terrain {
         col.setXYZ(k, tmpC.r, tmpC.g, tmpC.b);
       }
     }
-    pos.needsUpdate = true;
-    nor.needsUpdate = true;
-    col.needsUpdate = true;
+    // upload only the touched rows
+    for (const a of [pos, nor, col]) {
+      a.clearUpdateRanges();
+      if (rect) a.addUpdateRange(r.j0 * nx * 3, (r.j1 - r.j0 + 1) * nx * 3);
+      a.needsUpdate = true;
+    }
     g.computeBoundingSphere();
     g.computeBoundingBox();
   }
@@ -266,9 +285,11 @@ export class Terrain {
     return out;
   }
 
+  private sidesBottom = NaN;
   private updateSides() {
     const { nx, nz } = this;
     const bottom = this.bottomY;
+    this.sidesBottom = bottom;
     const ROWS = 22;
     const pos: number[] = [], col: number[] = [], nor: number[] = [], idx: number[] = [];
     const wpos: number[] = [], widx: number[] = [], wcol: number[] = [];
@@ -327,10 +348,13 @@ export class Terrain {
     this.bottom.position.y = bottom;
   }
 
-  updateDepthTexture() {
+  updateDepthTexture(rect?: GridRect) {
     const data = this.depthTexture.image.data as Uint8Array;
     const wl = this.waterLevel ?? -1e9;
-    for (let k = 0; k < this.heights.length; k++) {
+    const { nx, nz } = this;
+    const r = rect ?? { i0: 0, i1: nx - 1, j0: 0, j1: nz - 1 };
+    for (let j = r.j0; j <= r.j1; j++) for (let i = r.i0; i <= r.i1; i++) {
+      const k = j * nx + i;
       const d = clamp((wl - this.heights[k]) / Terrain.DEPTH_RANGE, 0, 1);
       data[k * 4] = Math.round(d * 255);
       data[k * 4 + 1] = 0; data[k * 4 + 2] = 0; data[k * 4 + 3] = 255;
@@ -344,7 +368,7 @@ export class Terrain {
   }
 
   /* ---------- editing ---------- */
-  sculpt(tool: SculptTool, x: number, z: number, radius: number, strength: number, flattenTo?: number) {
+  sculpt(tool: SculptTool, x: number, z: number, radius: number, strength: number, flattenTo?: number): GridRect {
     const { nx, nz } = this;
     const i0 = Math.max(0, Math.floor((x - radius + this.width / 2) / this.dx));
     const i1 = Math.min(nx - 1, Math.ceil((x + radius + this.width / 2) / this.dx));
@@ -375,9 +399,10 @@ export class Terrain {
       }
       this.heights[k] = clamp(v, -8, 14);
     }
+    return { i0, i1, j0, j1 };
   }
 
-  paintAt(typeIndex: number, x: number, z: number, radius: number) {
+  paintAt(typeIndex: number, x: number, z: number, radius: number): GridRect {
     const { nx, nz } = this;
     const i0 = Math.max(0, Math.floor((x - radius + this.width / 2) / this.dx));
     const i1 = Math.min(nx - 1, Math.ceil((x + radius + this.width / 2) / this.dx));
@@ -391,6 +416,7 @@ export class Terrain {
       if (edge > 0.7 && this.noise.noise(this.xOf(i) * 2.1, this.zOf(j) * 2.1) * 0.5 + 0.5 < (edge - 0.7) * 3.3) continue;
       this.paint[j * nx + i] = typeIndex;
     }
+    return { i0, i1, j0, j1 };
   }
 
   /* ---------- persistence ---------- */

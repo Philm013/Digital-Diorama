@@ -113,7 +113,8 @@ button.dd-card:hover { transform: translateY(-3px) rotate(-0.3deg); box-shadow: 
   background: #fbf8f1;
   box-shadow: 0 -14px 44px -12px rgba(0, 0, 0, 0.5), 0 -1px 0 rgba(255, 255, 255, 0.6) inset;
 }
-.dd-sheet-anim { transition: height 0.32s cubic-bezier(0.2, 0.9, 0.25, 1.08); }
+.dd-sheet-anim { transition: height 0.32s cubic-bezier(0.2, 0.9, 0.25, 1); }
+.dd-sheet-side { box-shadow: -14px 0 40px -14px rgba(0, 0, 0, 0.45), inset 1px 0 0 rgba(0, 0, 0, 0.06); }
 .dd-dock { background: rgba(255, 253, 246, 0.95); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.06); }
 .dd-dock::-webkit-scrollbar, .dd-scroll-x::-webkit-scrollbar { display: none; }
 .dd-dock, .dd-scroll-x { scrollbar-width: none; }

@@ -1,6 +1,7 @@
 // Interaction smoke test for the studio UI (dev tool): taps an animal (discovery +
-// field card), selects in Build mode (context bar), drags the phone bottom sheet,
-// and saves screenshots.   node tools/ui-check.mjs --out shots/ui-check
+// field card), selects in Build mode (quick actions, resize), twists and pinches it,
+// resizes the phone panel by its header and taps a panel tab, and saves screenshots.
+//   node tools/ui-check.mjs --out shots/ui-check
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -79,6 +80,12 @@ async function run(name, ctxOpts, phone) {
     await pg.waitForTimeout(800);
     const h2 = await pg.evaluate(`document.querySelector('.dd-sheet').getBoundingClientRect().height`);
     console.log(name, 'sheet height', Math.round(h.h), '→', Math.round(h2));
+    // the header doubles as a drag handle, but a plain tap on a tab must still switch tabs
+    const tab = await pg.evaluate(`(() => { const b = [...document.querySelectorAll('.dd-sheet button')].find((x) => x.textContent.includes('Add things')); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await touch('touchStart', tab.x, tab.y);
+    await touch('touchEnd', tab.x, tab.y);
+    await pg.waitForTimeout(600);
+    console.log(name, 'tab tap opens the inventory:', await pg.evaluate(`!!document.querySelector('.dd-sheet input[placeholder^="Search species"]')`));
     await pg.screenshot({ path: path.join(OUT, `${name}-sheet.png`) });
   }
   await browser.close();
