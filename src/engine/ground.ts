@@ -169,7 +169,19 @@ export function dominantGround(g: PaintGrid, x: number, z: number) {
 }
 
 /* ======================= shared uniforms ======================= */
+/** (stands in while no free-form area is selected) */
+export const EMPTY_SELECTION = createSelectionTexture(new Float32Array([1e3]), 1, 1);
 const pal = (k: 'color' | 'color2') => Array.from({ length: MAX_GROUND }, (_, i) => new THREE.Color(GROUND_TYPES[i]?.[k] ?? '#808080'));
+/** distance to a free-form selection's outline, one texel per terrain vertex (read with texelFetch, so no float filtering is needed) */
+export function createSelectionTexture(sdf: Float32Array, nx: number, nz: number) {
+  const t = new THREE.DataTexture(sdf, nx, nz, THREE.RedFormat, THREE.FloatType);
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  t.unpackAlignment = 1;
+  t.needsUpdate = true;
+  return t;
+}
 /** palette, noise, weather and the editor overlays — shared by every ground mesh */
 export const GROUND_UNIFORMS = {
   uPalA: { value: pal('color') },
@@ -179,9 +191,14 @@ export const GROUND_UNIFORMS = {
   uSnow: { value: 0 },
   uRockTint: { value: new THREE.Color('#7d7466') },
   uUnderTint: { value: new THREE.Color('#3d5a52') },
-  // editor overlays: a selected area, a brush / stamp footprint and a top-view grid
+  // editor overlays: a selected area, a brush / stamp footprint and a top-view grid.
+  // uSelOpt: (on, shape: 0 box · 1 oval · 2 free, soft-edge width, time for the marching ants)
   uSelRect: { value: new THREE.Vector4() },
   uSelOpt: { value: new THREE.Vector4() },
+  // a free shape's distance field over the terrain grid: (x0, z0, 1/dx, 1/dz) and (nx, nz)
+  uSelTex: { value: EMPTY_SELECTION as THREE.Texture },
+  uSelMap: { value: new THREE.Vector4(0, 0, 1, 1) },
+  uSelN: { value: new THREE.Vector2(1, 1) },
   uCursor: { value: new THREE.Vector4() },
   uCursorOpt: { value: new THREE.Vector4(0, 1, 0, 0) },
   uCursorCol: { value: new THREE.Color('#ffffff') },
@@ -203,6 +220,9 @@ uniform vec3 uRockTint;
 uniform vec3 uUnderTint;
 uniform vec4 uSelRect;
 uniform vec4 uSelOpt;
+uniform sampler2D uSelTex;
+uniform vec4 uSelMap;
+uniform vec2 uSelN;
 uniform vec4 uCursor;
 uniform vec4 uCursorOpt;
 uniform vec3 uCursorCol;
@@ -212,6 +232,18 @@ varying float vUp;
 float ddType(ivec2 c) { c = clamp(c, ivec2(0), ivec2(uGridN) - 1); return texelFetch(uPaint, c, 0).r * 255.0; }
 vec3 ddPal(float t, float tone) { int i = int(t + 0.5); return mix(uPalA[i], uPalB[i], tone); }
 float ddGrainOf(float t) { return uGrain[int(t + 0.5)]; }
+// distance to a free-form selection's outline (negative inside), bilinear between grid vertices
+float ddSelSd(vec2 p) {
+  vec2 g = (p - uSelMap.xy) * uSelMap.zw;
+  vec2 b = floor(g);
+  vec2 f = g - b;
+  ivec2 c = ivec2(b), hi = ivec2(uSelN) - 1;
+  float s00 = texelFetch(uSelTex, clamp(c, ivec2(0), hi), 0).r;
+  float s10 = texelFetch(uSelTex, clamp(c + ivec2(1, 0), ivec2(0), hi), 0).r;
+  float s01 = texelFetch(uSelTex, clamp(c + ivec2(0, 1), ivec2(0), hi), 0).r;
+  float s11 = texelFetch(uSelTex, clamp(c + ivec2(1, 1), ivec2(0), hi), 0).r;
+  return mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
+}
 `;
 
 const FRAG_COLOR = /* glsl */ `
@@ -288,7 +320,8 @@ vec3 ddLineCol = vec3(0.0);
       vec2 sc = (uSelRect.xy + uSelRect.zw) * 0.5;
       vec2 hs = max((uSelRect.zw - uSelRect.xy) * 0.5, vec2(0.01));
       float d;
-      if (uSelOpt.y > 0.5) { d = (length((p - sc) / hs) - 1.0) * min(hs.x, hs.y); }
+      if (uSelOpt.y > 1.5) { d = ddSelSd(p); }
+      else if (uSelOpt.y > 0.5) { d = (length((p - sc) / hs) - 1.0) * min(hs.x, hs.y); }
       else { vec2 q = abs(p - sc) - hs; d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0); }
       float px = max(fwidth(d), 1e-4);
       float edge = 1.0 - smoothstep(px * 1.2, px * 2.8, abs(d));
@@ -356,7 +389,7 @@ export function createGroundMaterial(o: GroundMaterialOpts) {
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + FRAG_COLOR)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += ddLineCol * ddLine * 0.55;');
   };
-  mat.customProgramCacheKey = () => 'dd-ground-2';
+  mat.customProgramCacheKey = () => 'dd-ground-3';
   return mat;
 }
 

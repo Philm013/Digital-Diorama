@@ -714,7 +714,7 @@ export class Engine {
     const sel = this.getActor(this.selectedId);
     sel?.setSelected(m !== 'explore');
     this.setLandTool(null);
-    if (m !== 'build') { this.setTopView(false); this.land.setAreaRect(null); }
+    if (m !== 'build') { this.setTopView(false); this.land.clearArea(); }
     this.changed(false);
   }
 
@@ -723,7 +723,7 @@ export class Engine {
     this.brush.tool = tool;
     this.land.hidePreview();
     // a selected area belongs to the Area tool: putting it away clears the outline
-    if (tool !== 'area' && this.land.area.rect) this.land.setAreaRect(null);
+    if (tool !== 'area') this.land.clearArea();
     this.changed(false);
   }
 
@@ -905,6 +905,7 @@ export class Engine {
   private async restoreFrom(from: string[], to: string[]) {
     const snap = from.pop();
     if (!snap) return;
+    this.land.forgetLastGeneration();
     to.push(this.snapshot());
     const s = JSON.parse(snap) as { env: EnvDoc; actors: ActorDoc[]; terrain: import('./types').TerrainDoc | null };
     // terrain
@@ -1060,7 +1061,6 @@ export class Engine {
     for (const a of this.actorsOutside(width, depth)) this.removeActor(a.id, false);
     const nt = resampleTerrain(old, width, depth, Engine.cellFor(width, depth));
     this.swapTerrain(nt);
-    this.land.setAreaRect(null);
     if (this.topView) this.frameTop(); else this.frameCamera();
     this.emit({ type: 'actors' });
     this.changed();
@@ -1068,6 +1068,8 @@ export class Engine {
   /** replace the terrain object (resize, or undoing one) and everything sized to it */
   private swapTerrain(nt: Terrain) {
     const old = this.terrain;
+    // a selected area belongs to the old land's grid
+    this.land.clearArea();
     if (old) { this.world.remove(old.group); old.dispose(); }
     if (this.water) { this.world.remove(this.water.mesh); this.water.dispose(); }
     this.terrain = nt;

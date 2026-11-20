@@ -4,6 +4,7 @@ import { Mountain, ArrowDown, Waves, Eraser, Sparkles, Map as MapIcon, Box, Dice
 import { GROUND_TYPES } from '../engine/ground';
 import { AREA_KINDS, GROUND_STYLES, STAMPS, STAMP_BY_ID, styleForBiome } from '../engine/landforms';
 import type { LandTool } from '../engine/Engine';
+import type { AreaSelect } from '../engine/LandEditor';
 import { Engine } from '../engine/Engine';
 import { DIORAMA_SIZES, MAX_DEPTH, MAX_WIDTH, MIN_SIZE } from '../engine/sizes';
 import type { SculptTool } from '../engine/Terrain';
@@ -115,34 +116,66 @@ function StampTools() {
   );
 }
 
+/** how dragging on the land selects an area */
+const SELECT_TOOLS: { value: AreaSelect; label: React.ReactNode; title: string }[] = [
+  { value: 'box', label: '▭ Box', title: 'Drag a box across the land' },
+  { value: 'oval', label: '⬭ Oval', title: 'Drag an oval across the land' },
+  { value: 'lasso', label: '➰ Lasso', title: 'Draw a loop around the land you want' },
+  { value: 'brush', label: '🖌 Brush', title: 'Paint over the land you want' },
+];
+const HOW_TO: Record<AreaSelect, string> = {
+  box: 'Drag across the land to select a box',
+  oval: 'Drag across the land to select an oval',
+  lasso: 'Draw a loop around the land you want',
+  brush: 'Paint over the land you want',
+};
+
 function AreaTools() {
   const engine = useEngine();
   useEngineVersion();
-  const a = engine.land.area;
-  const r = a.rect;
+  const L = engine.land;
+  const a = L.area;
+  const size = L.areaSize;
+  const t = engine.terrain!;
   const [busy, setBusy] = useState(false);
   const kind = AREA_KINDS.find((k) => k.id === a.kind)!;
-  const set = (patch: Partial<typeof a>) => { Object.assign(a, patch); engine.land.syncArea(); engine.changed(false); };
+  const set = (patch: Partial<typeof a>) => { Object.assign(a, patch); L.syncArea(); engine.changed(false); };
   const run = async (again: boolean) => {
     if (busy) return;
     setBusy(true);
     haptic(12);
-    try { await engine.land.generate(again); uiSound('place'); } finally { setBusy(false); }
+    try { await L.generate(again); uiSound('place'); } finally { setBusy(false); }
   };
   const biomeStyle = styleForBiome(engine.doc.biome);
+  const armed = engine.brush.tool === 'area';
   return (
     <>
-      {engine.brush.tool !== 'area' ? (
+      {!armed ? (
         <Btn variant="solid" className="w-full" onClick={() => { engine.setLandTool('area'); uiSound('tick'); }}>⬚ Select an area</Btn>
-      ) : !r ? (
-        <div className="rounded-2xl bg-amber-50 p-3 text-[12.5px] text-ink/80 ring-1 ring-amber-200">
-          <b>Drag across the land</b> to select an area{engine.topView ? '' : ' — the Top view makes this easy'}. Then choose what grows there.
-        </div>
       ) : (
-        <div className="flex items-center gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-[12.5px] ring-1 ring-amber-200">
-          <span className="flex-1"><b>Selected:</b> {(r.maxX - r.minX).toFixed(1)} × {(r.maxZ - r.minZ).toFixed(1)} m</span>
-          <button className="rounded-lg px-2 py-1 font-semibold text-ink/60 hover:bg-black/5" onClick={() => engine.land.setAreaRect(null)}><X size={14} className="inline" /> Clear</button>
-        </div>
+        <>
+          <div>
+            <div className="mb-1 text-[13px] font-semibold text-ink/80">Select with</div>
+            <div data-select-tools><Segmented size="sm" value={a.select} onChange={(v) => { L.setSelectTool(v); uiSound('tick'); }} options={SELECT_TOOLS} /></div>
+          </div>
+          {a.select === 'brush' && (
+            <div className="space-y-2 rounded-2xl bg-black/[0.03] p-2.5 ring-1 ring-black/5">
+              <Segmented size="sm" value={a.erase ? 'erase' : 'add'} onChange={(v) => { set({ erase: v === 'erase' }); uiSound('tick'); }}
+                options={[{ value: 'add', label: '✚ Add land', title: 'Paint to add land to the area' }, { value: 'erase', label: '⌫ Take away', title: 'Paint to take land out of the area (or hold Alt)' }]} />
+              <Slider label="Brush size" value={a.brush} min={0.5} max={Math.max(6, Math.min(t.width, t.depth) / 4)} step={0.1} unit="m" onChange={(v) => set({ brush: v })} />
+            </div>
+          )}
+          {!size ? (
+            <div className="rounded-2xl bg-amber-50 p-3 text-[12.5px] text-ink/80 ring-1 ring-amber-200">
+              <b>{HOW_TO[a.select]}</b>{engine.topView ? '' : ' — the Top view makes this easy'}. Then choose what grows there.
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-[12.5px] ring-1 ring-amber-200">
+              <span className="flex-1"><b>Selected:</b> {size.free ? `${Math.max(1, Math.round(size.m2))} m²` : `${size.w.toFixed(1)} × ${size.d.toFixed(1)} m`}</span>
+              <button className="rounded-lg px-2 py-1 font-semibold text-ink/60 hover:bg-black/5" onClick={() => { L.clearArea(); uiSound('tick'); }}><X size={14} className="inline" /> Clear</button>
+            </div>
+          )}
+        </>
       )}
       <div className="grid grid-cols-4 gap-1.5">
         {AREA_KINDS.map((k) => (
@@ -160,18 +193,18 @@ function AreaTools() {
           {GROUND_STYLES.map((s) => <option key={s.id} value={s.id}>{s.emoji} {s.name}</option>)}
         </select>
       </label>
-      <Slider label="Height" value={a.relief} min={0.25} max={2.5} step={0.05} format={(v) => (r ? `${engine.land.areaRelief().toFixed(1)} m` : `×${v.toFixed(2)}`)} onChange={(v) => set({ relief: v })} />
+      <Slider label="Height" value={a.relief} min={0.25} max={2.5} step={0.05} format={(v) => (size ? `${L.areaRelief().toFixed(1)} m` : `×${v.toFixed(2)}`)} onChange={(v) => set({ relief: v })} />
       <Slider label="Rugged" value={a.rough} min={0} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ rough: v })} />
       <Slider label="Soft edge" value={a.feather} min={0.5} max={8} step={0.1} unit="m" onChange={(v) => set({ feather: v })} />
-      <div className="grid grid-cols-2 gap-2">
-        <div><div className="mb-1 text-[13px] font-semibold text-ink/80">Shape</div><Segmented size="sm" value={a.oval ? 'oval' : 'box'} onChange={(v) => set({ oval: v === 'oval' })} options={[{ value: 'box', label: '▭ Box' }, { value: 'oval', label: '⬭ Oval' }]} /></div>
-        <div><div className="mb-1 text-[13px] font-semibold text-ink/80">Plants</div><Segmented size="sm" value={a.plants} onChange={(v) => set({ plants: v })} options={[{ value: 'none', label: 'None' }, { value: 'some', label: 'Some' }, { value: 'lots', label: 'Lots' }]} /></div>
+      <div className="flex items-center gap-3">
+        <span className="text-[13px] font-semibold text-ink/80">Plants</span>
+        <div className="flex-1"><Segmented size="sm" value={a.plants} onChange={(v) => set({ plants: v })} options={[{ value: 'none', label: 'None' }, { value: 'some', label: 'Some' }, { value: 'lots', label: 'Lots' }]} /></div>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
-        <Btn variant="solid" data-act="generate" disabled={!r || busy} onClick={() => void run(false)}><Wand2 size={15} /> {busy ? 'Growing…' : 'Generate'}</Btn>
-        <Btn data-act="retry" disabled={!engine.land.canRetry || busy} onClick={() => void run(true)} title="Replace the last result with a different one"><Dices size={15} /> Try another</Btn>
+        <Btn variant="solid" data-act="generate" disabled={!size || busy} onClick={() => void run(false)}><Wand2 size={15} /> {busy ? 'Growing…' : 'Generate'}</Btn>
+        <Btn data-act="retry" disabled={!L.canRetry || busy} onClick={() => void run(true)} title="Replace the last result with a different one"><Dices size={15} /> Try another</Btn>
       </div>
-      <Btn size="sm" className="w-full" disabled={!r} onClick={() => { engine.land.repaintArea(); uiSound('tick'); }}><Paintbrush size={14} /> Repaint the ground only</Btn>
+      <Btn size="sm" className="w-full" disabled={!size} onClick={() => { L.repaintArea(); uiSound('tick'); }}><Paintbrush size={14} /> Repaint the ground only</Btn>
     </>
   );
 }
