@@ -52,8 +52,8 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       x: number; y: number; t: number; id: number; touch: boolean; actor?: Actor; armed?: boolean; offset?: THREE.Vector3; dragging?: boolean; stroke?: boolean; sx?: number; sy?: number;
       /** placing a landform: where, and the size/direction dragged out so far */
       stamp?: { p: THREE.Vector3; radius: number; angle: number; sized: boolean };
-      /** selecting an area: the corner it started from */
-      area?: { a: THREE.Vector3 };
+      /** selecting an area (box, oval, lasso or brush): the height it started at, for drags off the land, and how far (px) the pointer has strayed */
+      area?: { y: number; far: number };
     };
     let down: Down | null = null;
     const pts = new Map<number, { x: number; y: number }>();
@@ -63,16 +63,13 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
     let lastStroke = 0;
     const dragEvent = (on: boolean) => document.dispatchEvent(new CustomEvent('dd-drag', { detail: on }));
     const RING: Record<string, string> = { raise: '#ffffff', lower: '#ffb4a8', smooth: '#c6ecff', flatten: '#e4dcff', roughen: '#d6ffc4', paint: '#ffe28a' };
-    /** the brush outline, drawn on the ground by the terrain shader */
-    const placeRing = (point: THREE.Vector3 | null) => {
+    /** the brush outline, drawn on the ground by the terrain shader (`flip`: Alt held, the selection brush takes away) */
+    const placeRing = (point: THREE.Vector3 | null, flip = false) => {
       const tool = engine.brush.tool;
-      if (!point || !tool || tool === 'stamp' || tool === 'area') { engine.land.setCursor(null); return; }
+      const area = engine.land.area;
+      if (!point || !tool || tool === 'stamp' || (tool === 'area' && area.select !== 'brush')) { engine.land.setCursor(null); return; }
+      if (tool === 'area') { engine.land.setCursor({ x: point.x, z: point.z, rx: area.brush, color: area.erase !== flip ? '#ff9a8a' : '#ffd84a' }); return; }
       engine.land.setCursor({ x: point.x, z: point.z, rx: engine.brush.radius, color: RING[tool] ?? '#ffffff' });
-    };
-    const areaFrom = (a: THREE.Vector3, b: THREE.Vector3) => {
-      const t = engine.terrain!;
-      const cl = (v: number, h: number) => THREE.MathUtils.clamp(v, -h, h);
-      return { minX: cl(Math.min(a.x, b.x), t.width / 2), maxX: cl(Math.max(a.x, b.x), t.width / 2), minZ: cl(Math.min(a.z, b.z), t.depth / 2), maxZ: cl(Math.max(a.z, b.z), t.depth / 2) };
     };
     /** a ground point under the pointer; off the land, the flat plane at a reference height */
     const groundOrPlane = (x: number, y: number, h: number) => {
@@ -114,7 +111,7 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
         clearTimeout(longTimer);
         if (down?.stroke) { engine.endStroke(); placeRing(null); }
         if (down?.stamp) engine.land.hidePreview();
-        if (down?.area) engine.land.setAreaRect(null);
+        if (down?.area) { engine.land.selectCancel(); placeRing(null); }
         if (down?.dragging) { engine.commitTransform(down.actor!); engine.changed(); dragEvent(false); }
         down = null;
         engine.controls.enabled = true;
@@ -136,7 +133,9 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
           }
           if (g && tool === 'area') {
             engine.controls.enabled = false;
-            d.area = { a: g.point.clone() };
+            d.area = { y: g.point.y, far: 0 };
+            engine.land.selectStart(g.point.x, g.point.z, e.altKey);
+            placeRing(g.point, e.altKey);
             return;
           }
           if (g) {
@@ -217,8 +216,9 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
           return;
         }
         if (down?.area && e.pointerId === down.id) {
-          const q = groundOrPlane(e.clientX, e.clientY, down.area.a.y);
-          if (q) { engine.land.area.rect = areaFrom(down.area.a, q); engine.land.syncArea(); }
+          down.area.far = Math.max(down.area.far, Math.hypot(e.clientX - down.x, e.clientY - down.y));
+          const q = groundOrPlane(e.clientX, e.clientY, down.area.y);
+          if (q) { engine.land.selectMove(q.x, q.z); placeRing(q, e.altKey); }
           return;
         }
         // while sculpting the frame loop applies the brush; moves only steer it
@@ -226,7 +226,7 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
         if (e.pointerType === 'mouse' && !e.buttons) {
           const g = engine.pickGround(e.clientX, e.clientY)?.point ?? null;
           if (tool === 'stamp') engine.land.showPreview(g);
-          else placeRing(g);
+          else placeRing(g, e.altKey);
         }
         return;
       }
@@ -276,10 +276,10 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
         return;
       }
       if (d.area) {
-        const r = engine.land.area.rect;
-        // a tap (or a sliver) clears the selection
-        engine.land.setAreaRect(r && r.maxX - r.minX > 0.8 && r.maxZ - r.minZ > 0.8 && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8 ? r : null);
-        if (engine.land.area.rect) { haptic(10); uiSound('tick'); }
+        // a tap clears the selection (the brush paints a dab instead); a lasso loop ends where it began, so it counts how far it went
+        engine.land.selectEnd(Math.max(d.area.far, Math.hypot(e.clientX - d.x, e.clientY - d.y)) <= 8);
+        if (engine.land.area.shape) { haptic(10); uiSound('tick'); }
+        if (d.touch) placeRing(null);
         return;
       }
       if (d.dragging && d.actor) { engine.commitTransform(d.actor); engine.changed(); dragEvent(false); haptic(10); uiSound('tick'); return; }
@@ -308,13 +308,13 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
       if (down && e.pointerId === down.id) {
         if (down.stroke) { engine.endStroke(); placeRing(null); }
         if (down.stamp) engine.land.hidePreview();
-        if (down.area) engine.land.setAreaRect(null);
+        if (down.area) { engine.land.selectCancel(); placeRing(null); }
         if (down.dragging && down.actor) { engine.commitTransform(down.actor); engine.changed(); dragEvent(false); }
         down = null;
       }
       engine.controls.enabled = true;
     };
-    const onLeave = () => { if (!down?.stroke && !down?.stamp) { engine.land.setCursor(null); engine.land.hidePreview(); } };
+    const onLeave = () => { if (!down?.stroke && !down?.stamp && !down?.area) { engine.land.setCursor(null); engine.land.hidePreview(); } };
     const onDragOver = (e: DragEvent) => { if (e.dataTransfer?.types.includes('text/x-dd-asset')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } };
     const onDrop = async (e: DragEvent) => {
       const id = e.dataTransfer?.getData('text/x-dd-asset');
@@ -388,6 +388,15 @@ export function Viewport({ mode, playing, toast }: { mode: Mode; playing: boolea
   );
 }
 
+/** what the Area tool's selection tool does */
+function areaHint(select: 'box' | 'oval' | 'lasso' | 'brush', selected: boolean, erase: boolean) {
+  // (Alt takes away only with a keyboard; on a touch screen the panel's Take away switch does)
+  const alt = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0 ? '' : ' · Alt takes away';
+  if (select === 'brush') return erase ? '🖌 Paint over land to take it out of the area' : selected ? `🖌 Paint to add land to the area${alt}` : '🖌 Paint over the land you want';
+  if (selected) return '⬚ Area selected — choose what grows there in the panel';
+  return select === 'lasso' ? '➰ Draw a loop around the land you want' : select === 'oval' ? '⬭ Drag across the land to select an oval' : '⬚ Drag across the land to select a box';
+}
+
 /** Build mode, over the 3D view: the top-view switch and what the armed land tool does */
 function BuildViewTools() {
   const { engine } = useStudio();
@@ -396,7 +405,7 @@ function BuildViewTools() {
   const st = STAMP_BY_ID[engine.land.stamp.id];
   const hint = !tool ? null
     : tool === 'stamp' ? `${st.emoji} ${st.name}: tap the land to place it · drag to size${st.aspect ? ' & point' : ''} it`
-      : tool === 'area' ? (engine.land.area.rect ? '⬚ Area selected — choose what grows there in the panel' : '⬚ Drag across the land to select an area')
+      : tool === 'area' ? areaHint(engine.land.area.select, !!engine.land.area.shape, engine.land.area.erase)
         : tool === 'paint' ? '🎨 Drag on the land to paint'
           : `✋ ${{ raise: 'Raise', lower: 'Dig', smooth: 'Smooth', flatten: 'Flatten', roughen: 'Rocky' }[tool]}: press and drag on the land`;
   return (

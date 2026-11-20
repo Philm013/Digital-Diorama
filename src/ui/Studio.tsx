@@ -218,6 +218,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         // [ and ] size the brush or the landform
         const k = e.key === ']' ? 1.15 : 1 / 1.15;
         if (engine.brush.tool === 'stamp') engine.land.stamp.radius = Math.min(40, Math.max(0.8, +(engine.land.stamp.radius * k).toFixed(1)));
+        else if (engine.brush.tool === 'area') engine.land.area.brush = Math.min(30, Math.max(0.5, +(engine.land.area.brush * k).toFixed(1)));
         else engine.brush.radius = Math.min(20, Math.max(0.5, +(engine.brush.radius * k).toFixed(1)));
         engine.changed(false);
       }
@@ -530,7 +531,7 @@ function HelpContent() {
     ['🏆', 'Quests & badges', 'Each diorama has 16 quests: finish 5, 10 and all 16 for one, two and three stars. Badges are earned across all your dioramas.'],
     ['🧩', 'Code', 'Choose an object, then snap blocks together like Scratch. Start scripts with “when ▶ clicked”, then press Play. Stop resets everything to how you built it.'],
     ['🎤', 'Present', 'Add notes to your organisms (Build → Edit → My notes). The Tour visits each one in food-chain order and can read your notes aloud.'],
-    ['🏔️', 'Land', 'In Build → World & land: stamp Landforms (tap the land, or press and drag to size and point them), select an Area and grow mountains, dunes, canyons, lakes, rivers or islands in it, sculpt with brushes and paint the ground. Top view (T) looks straight down for easy editing. Diorama size makes the box bigger or smaller.'],
+    ['🏔️', 'Land', 'In Build → World & land: stamp Landforms (tap the land, or press and drag to size and point them), select an Area (drag a box or oval, draw a loop with the lasso, or paint it with the brush) and grow mountains, dunes, a canyon, lakes, rivers or islands in it, sculpt with brushes and paint the ground. Top view (T) looks straight down for easy editing. Diorama size makes the box bigger or smaller.'],
     ['🌍', 'Roam', 'Explore → Roam walks you out of your diorama into an endless landscape of the same habitat. Fly with 🦅 to see far; 🏠 brings you back.'],
     ['⌨️', 'Shortcuts', '1 2 3 modes · J journal · Q quests · R / Shift+R turn · + − resize · D duplicate · Delete remove · F focus · L labels · O overview · T top view · [ ] brush / landform size · Ctrl+Z undo · Ctrl+Shift+Z redo · Esc stop/put tool away/deselect · WASD walk'],
   ];
