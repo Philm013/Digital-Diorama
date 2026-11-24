@@ -86,7 +86,7 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" data-tour="inventory">
       <div className={clsx('border-b border-black/5', compact ? 'space-y-1.5 px-2.5 pb-1.5 pt-1' : 'space-y-2 p-3 pb-2')}>
         {!compact && (
           <div className="flex items-center gap-2">
@@ -99,7 +99,7 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
         <div className="flex gap-1.5">
           <div className="relative min-w-0 flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search species & things…" className={clsx('dd-input pl-9 text-[15px]', compact ? 'h-10' : 'h-11')} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search species & things…" className={clsx('dd-input pl-9 text-[15px]', compact ? 'h-10' : 'h-11')} data-tour="inv-search" />
           </div>
           {compact && !q && biome !== 'blank' && ['animals', 'plants', 'fungi'].includes(cat) && (
             <button onClick={() => setFits(!fits)} title={fits ? `Showing only species from the ${BIOME_BY_ID[biome]?.name ?? biome}` : 'Showing everything'} className={clsx('flex h-10 shrink-0 items-center gap-1 rounded-2xl px-3 font-display text-[13px] font-semibold transition', fits ? 'bg-emerald-600 text-white' : 'bg-black/[0.06] text-ink/60')}>
@@ -110,7 +110,7 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
         {!q && (
           <div className="dd-scroll-x -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
             {CATS.map((c) => (
-              <button key={c} onClick={() => { if (c === 'habitats' && !tiles) { showLocked('tiles'); return; } setCat(c); uiSound('tick'); }} className={clsx('relative flex shrink-0 items-center gap-1.5 rounded-2xl px-3 font-display text-[13.5px] font-semibold transition', compact ? 'h-9' : 'h-10', cat === c ? 'dd-3d bg-ink text-white [--edge:#000]' : 'bg-white text-ink/75 ring-1 ring-black/10 hover:bg-black/5', c === 'habitats' && !tiles && 'opacity-55')}>
+              <button key={c} data-tour={`inv-cat-${c}`} aria-pressed={cat === c} onClick={() => { if (c === 'habitats' && !tiles) { showLocked('tiles'); return; } setCat(c); uiSound('tick'); }} className={clsx('relative flex shrink-0 items-center gap-1.5 rounded-2xl px-3 font-display text-[13.5px] font-semibold transition', compact ? 'h-9' : 'h-10', cat === c ? 'dd-3d bg-ink text-white [--edge:#000]' : 'bg-white text-ink/75 ring-1 ring-black/10 hover:bg-black/5', c === 'habitats' && !tiles && 'opacity-55')}>
                 <span className="text-base">{CAT_ICON[c]}</span>{CATEGORY_META[c].label}
                 {c === 'habitats' && !tiles ? <LockBadge /> : <span className={clsx('rounded-full px-1.5 text-[10.5px] tabular-nums', cat === c ? 'bg-white/20' : 'bg-black/5 text-ink/45')}>{counts[c]}</span>}
               </button>
@@ -135,7 +135,7 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
           }}><Mountain size={14} /> Use sculptable land instead</Btn>
         )}
       </div>
-      <div className={clsx('min-h-0 flex-1 overflow-y-auto overscroll-contain', compact ? 'px-2.5 pb-3 pt-2' : 'p-3')}>
+      <div className={clsx('min-h-0 flex-1 overflow-y-auto overscroll-contain', compact ? 'px-2.5 pb-3 pt-2' : 'p-3')} data-tour={q ? 'inv-grid-search' : `inv-grid-${cat}`}>
         {groups.length === 0 && <div className="py-10 text-center text-sm text-ink/55">Nothing here — try turning off the habitat filter or searching.</div>}
         {hidden > 0 && (!fits || biome === 'blank' || !!q) && ['animals', 'plants', 'fungi'].includes(cat) && (
           <button type="button" onClick={() => showLocked('lib-all')} className="mb-3 flex w-full items-center gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-left text-[12px] font-semibold text-amber-900 ring-1 ring-amber-200">
@@ -225,13 +225,13 @@ function ActorInspector({ id, onCollapse, compact }: { id: string; onCollapse?: 
   const tabRow = (
     <div className={clsx('flex gap-1 rounded-2xl bg-black/[0.05] p-1', !compact && 'mt-3')}>
       {([['place', '📍 Place'], ['label', '🏷️ Label'], ['look', '🎨 Look'], ['about', 'ℹ️ Info']] as const).map(([t, l]) => (
-        <button key={t} onClick={() => { setTab(t); uiSound('tick'); }} className={clsx('flex-1 rounded-xl font-display text-[12.5px] font-semibold transition', compact ? 'h-8' : 'h-9', tab === t ? 'bg-white text-ink shadow-sm' : 'text-ink/55 hover:text-ink')}>{l}</button>
+        <button key={t} data-tour={`insp-${t}`} onClick={() => { setTab(t); uiSound('tick'); }} className={clsx('flex-1 rounded-xl font-display text-[12.5px] font-semibold transition', compact ? 'h-8' : 'h-9', tab === t ? 'bg-white text-ink shadow-sm' : 'text-ink/55 hover:text-ink')}>{l}</button>
       ))}
     </div>
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" data-tour="inspector">
       {!compact && <div className="border-b border-black/5 p-3" style={heroBg}>{nameRow}{tabRow}</div>}
       {/* phones: the name scrolls away and the tabs stay pinned, so the content gets the room */}
       <div className={clsx('min-h-0 flex-1 overflow-y-auto overscroll-contain', compact ? 'pb-3' : 'px-3 py-3')}>
@@ -283,11 +283,11 @@ function ActorInspector({ id, onCollapse, compact }: { id: string; onCollapse?: 
             <Toggle label="Show toothpick label" checked={a.doc.label?.show !== false} onChange={(v) => { a.doc.label = { ...(a.doc.label ?? {}), show: v }; engine.syncActorLabel(a); engine.changed(); bump((x) => x + 1); }} />
             {!engine.env.labels && <p className="-mt-1 text-[11px] text-ink/50">Labels are hidden — turn on “Labels” in Explore or press L.</p>}
             <label className="block text-[13px]"><span className="font-semibold text-ink/80">Label text</span>
-              <input className="dd-input mt-1" placeholder={`e.g. “Producer: makes food from sunlight” (default: ${a.doc.name})`} value={a.doc.label?.text ?? ''}
+              <input className="dd-input mt-1" data-tour="label-text" placeholder={`e.g. “Producer: makes food from sunlight” (default: ${a.doc.name})`} value={a.doc.label?.text ?? ''}
                 onChange={(e) => { a.doc.label = { show: a.doc.label?.show !== false, text: e.target.value }; engine.syncActorLabel(a); engine.changed(); bump((x) => x + 1); }} />
             </label>
             <label className="block text-[13px]"><span className="font-semibold text-ink/80">My research notes</span>
-              <textarea className="dd-input mt-1 h-32" placeholder="What did you learn about it? Shown in the field card and read aloud on the tour." value={a.doc.note ?? ''}
+              <textarea className="dd-input mt-1 h-32" data-tour="notes" placeholder="What did you learn about it? Shown in the field card and read aloud on the tour." value={a.doc.note ?? ''}
                 onChange={(e) => { a.doc.note = e.target.value; engine.changed(false); bump((x) => x + 1); }} onBlur={() => engine.changed()} />
             </label>
           </div>
@@ -393,7 +393,7 @@ function DioramaPanel({ onCollapse, compact }: { onCollapse?: () => void; compac
   const env = engine.env;
   const t = engine.terrain;
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" data-tour="world-panel">
       {compact ? (
         <div className="flex items-baseline gap-2 border-b border-black/5 px-3 py-1.5">
           <div className="font-display text-[15px] font-bold">🌍 World & land</div>
@@ -409,7 +409,7 @@ function DioramaPanel({ onCollapse, compact }: { onCollapse?: () => void; compac
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-3">
-        {t && <Section title="Land tools"><LandTools /></Section>}
+        {t && <Section title="Land tools" tour="land-section"><LandTools /></Section>}
         {t && <SizeSection />}
         {engine.base && <BaseTileSection />}
         <Section title="Sky & weather"><EnvironmentControls /></Section>

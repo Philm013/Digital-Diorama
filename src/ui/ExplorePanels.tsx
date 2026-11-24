@@ -21,6 +21,7 @@ import { haptic, uiSound } from './feedback';
 import { isUnlocked, showLocked, type FeatureId } from '../game/unlocks';
 import { useProfile } from './game/useGame';
 import { LockBadge } from './game/Locked';
+import { learnSignal } from '../learn/signals';
 
 export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; landscape?: boolean; playing?: boolean; onJournal?: () => void }) {
   const engine = useEngine();
@@ -82,19 +83,19 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
     ...(engine.terrain ? [{ key: 'roam', icon: <Earth size={20} />, label: 'Roam', fn: roam, needs: 'roam' as const }] : []),
     ...(xrSupport.ar ? [{ key: 'ar', icon: <Smartphone size={20} />, label: 'AR table', fn: () => startXr('ar'), needs: 'xr' as const }] : []),
     ...(xrSupport.vr ? [{ key: 'vr', icon: <Glasses size={20} />, label: 'VR', fn: () => startXr('vr'), needs: 'xr' as const }] : []),
-    { key: 'home', icon: <Maximize2 size={20} />, label: 'Overview', fn: () => { engine.follow(null); engine.frameCamera(); } },
+    { key: 'home', icon: <Maximize2 size={20} />, label: 'Overview', fn: () => { engine.follow(null); engine.frameCamera(); learnSignal('overview'); } },
   ];
   return (
     <>
       {actor && !walking && <InfoCard actor={actor} wide={wide} side={wide || !!landscape} onClose={() => { setCard(null); engine.select(null); }} onWalk={walkIn} onWeb={() => setWeb(actor.id)} />}
       {!walking && !(actor && !wide) && (
         <div className={clsx('pointer-events-none absolute inset-x-0 z-20 flex justify-center px-2', wide ? 'bottom-4' : 'bottom-2')}>
-          <div className="dd-hotbar dd-scroll-x pointer-events-auto relative flex max-w-full items-center gap-1 overflow-x-auto rounded-[22px] p-1.5">
+          <div className="dd-hotbar dd-scroll-x pointer-events-auto relative flex max-w-full items-center gap-1 overflow-x-auto rounded-[22px] p-1.5" data-tour="hotbar">
             {tools.map((t) => (
               <span key={t.key} className="flex shrink-0 items-center gap-1">
                 <button onClick={() => { if (t.needs && !isUnlocked(t.needs)) { setPop(null); showLocked(t.needs); return; } uiSound('tick'); haptic(6); t.fn(); }}
                   className={clsx('dd-hotkey relative flex h-[54px] min-w-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl px-2 font-display text-[11px] font-semibold transition', t.on ? 'on' : 'text-white/85', t.needs && !isUnlocked(t.needs) && 'opacity-55')}
-                  aria-label={t.needs && !isUnlocked(t.needs) ? `${t.label} (locked)` : undefined}>
+                  aria-label={t.needs && !isUnlocked(t.needs) ? `${t.label} (locked)` : undefined} data-tour={`explore-${t.key}`}>
                   {t.icon}<span className="whitespace-nowrap">{t.label}</span>
                   {t.needs && !isUnlocked(t.needs) && <LockBadge className="absolute right-1 top-1" />}
                 </button>
@@ -104,8 +105,8 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
           </div>
           {pop && (
             <div className="dd-panel dd-pop pointer-events-auto absolute bottom-[calc(100%+10px)] w-[min(92vw,360px)] rounded-3xl p-3.5" onMouseLeave={() => setPop(null)}>
-              {pop === 'time' && <TimePop />}
-              {pop === 'weather' && <WeatherPop />}
+              {pop === 'time' && <div data-tour="time-pop"><TimePop /></div>}
+              {pop === 'weather' && <div data-tour="weather-pop"><WeatherPop /></div>}
             </div>
           )}
         </div>
@@ -139,7 +140,7 @@ function WeatherPop() {
     <div className="space-y-3">
       <Segmented value={engine.env.weather} onChange={(w) => engine.setEnv({ weather: w }, false)} options={W} />
       {isUnlocked('seasons')
-        ? <Segmented size="sm" value={engine.env.season} onChange={(s) => engine.setEnv({ season: s }, false)} options={[{ value: 'spring', label: '🌱' }, { value: 'summer', label: '☀️' }, { value: 'autumn', label: '🍂' }, { value: 'winter', label: '❄️' }]} />
+        ? <div data-tour="season-pick"><Segmented size="sm" value={engine.env.season} onChange={(s) => engine.setEnv({ season: s }, false)} options={[{ value: 'spring', label: '🌱' }, { value: 'summer', label: '☀️' }, { value: 'autumn', label: '🍂' }, { value: 'winter', label: '❄️' }]} /></div>
         : <button type="button" onClick={() => showLocked('seasons')} className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-black/[0.05] font-display text-[13px] font-semibold text-ink/55"><LockBadge /> Seasons unlock later on your ranger path</button>}
       <Slider label="Wind" value={engine.env.wind} min={0} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => engine.setEnv({ wind: v }, false)} />
     </div>
@@ -193,7 +194,7 @@ function InfoCard({ actor, wide, side, onClose, onWalk, onWeb }: { actor: Actor;
   const eatenBy = wnode ? web.eaters(wnode.id).map((e) => ({ n: web.byId.get(e.to)!, kind: e.kind })) : [];
   const partners = partnersOf(d.id).filter((p) => engine.actorList.some((o) => o.def.id === p.other));
   return (
-    <div ref={cardRef} className={clsx('dd-species-card dd-pop absolute z-30 flex flex-col overflow-hidden rounded-[28px]', wide ? 'right-4 top-4 max-h-[calc(100%-32px)] w-[370px]' : side ? 'bottom-2 right-2 top-2 w-[min(370px,50%)]' : 'inset-x-2 bottom-2 max-h-[64%]')} style={{ ['--role' as string]: rm.color }}>
+    <div ref={cardRef} data-tour="species-card" className={clsx('dd-species-card dd-pop absolute z-30 flex flex-col overflow-hidden rounded-[28px]', wide ? 'right-4 top-4 max-h-[calc(100%-32px)] w-[370px]' : side ? 'bottom-2 right-2 top-2 w-[min(370px,50%)]' : 'inset-x-2 bottom-2 max-h-[64%]')} style={{ ['--role' as string]: rm.color }}>
       <div className="dd-species-hero relative flex items-end gap-3 px-4 pb-3 pt-3">
         <div className="grid h-[92px] w-[92px] shrink-0 place-items-center rounded-3xl bg-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,.5)]"><AssetThumb id={d.id} emoji={d.emoji} size={88} /></div>
         <div className="min-w-0 flex-1 pb-1 text-white [text-shadow:0_1px_3px_rgba(0,0,0,.35)]">
@@ -272,7 +273,7 @@ function Guide() {
   const list = quests(engine);
   const done = list.filter((x) => x.done).length;
   return (
-    <div className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
+    <div className="grid gap-5 md:grid-cols-[1.2fr_1fr]" data-tour="guide">
       <div className="space-y-4 text-sm">
         <p className="text-base leading-relaxed">{g.summary}</p>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -344,11 +345,12 @@ function Tour({ onExit }: { onExit: () => void }) {
     if (stops.length && i === stops.length - 1) {
       if (flag(engine, 'tour')) engine.changed();
       awardBadge('tour-guide');
+      learnSignal('tour-end');
     }
   }, [i, stops.length, engine]);
   return (
     <div className="pointer-events-none absolute inset-0 z-30 flex flex-col justify-end p-3 sm:p-5">
-      <div className="dd-pop pointer-events-auto mx-auto w-full max-w-2xl rounded-[28px] bg-[#fffdf8] p-4 shadow-[0_24px_60px_-20px_rgba(0,0,0,.6)] ring-1 ring-black/5 sm:p-5">
+      <div className="dd-pop pointer-events-auto mx-auto w-full max-w-2xl rounded-[28px] bg-[#fffdf8] p-4 shadow-[0_24px_60px_-20px_rgba(0,0,0,.6)] ring-1 ring-black/5 sm:p-5" data-tour="tour-panel">
         <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-black/5"><div className="h-full rounded-full bg-gradient-to-r from-[#8f7bff] to-[#5ad1ff] transition-all duration-500" style={{ width: `${((i + 1) / (stops.length + 1)) * 100}%` }} /></div>
         <div className="flex items-start gap-3">
           <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white text-4xl shadow-sm">{stop ? stop.def.emoji : b?.emoji ?? '📦'}</div>
@@ -364,7 +366,7 @@ function Tour({ onExit }: { onExit: () => void }) {
           <Btn size="sm" active={auto} onClick={() => setAuto(!auto)}>{auto ? <Pause size={14} /> : <Play size={14} />} Auto</Btn>
           <Btn size="sm" active={narrate} onClick={() => { setNarrate(!narrate); stopSpeech(); }}><Volume2 size={14} /> Narrate</Btn>
           <div className="flex-1" />
-          <Btn size="sm" onClick={onExit}><X size={14} /> End tour</Btn>
+          <Btn size="sm" onClick={onExit} data-tour="tour-end"><X size={14} /> End tour</Btn>
         </div>
       </div>
     </div>

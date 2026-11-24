@@ -88,9 +88,9 @@ export function Segmented<T extends string>({ value, options, onChange, size = '
   );
 }
 
-export function Section({ title, children, right, defaultOpen = true }: { title: ReactNode; children: ReactNode; right?: ReactNode; defaultOpen?: boolean }) {
+export function Section({ title, children, right, defaultOpen = true, tour }: { title: ReactNode; children: ReactNode; right?: ReactNode; defaultOpen?: boolean; tour?: string }) {
   return (
-    <details open={defaultOpen} className="group border-b border-black/5 py-3 last:border-0">
+    <details open={defaultOpen} className="group border-b border-black/5 py-3 last:border-0" data-tour={tour}>
       <summary className="mb-2 flex cursor-pointer list-none items-center justify-between gap-2 font-display text-[13px] font-semibold uppercase tracking-wide text-ink/55">
         <span className="flex items-center gap-1.5"><span className="inline-block transition-transform group-open:rotate-90">▸</span>{title}</span>
         {right}

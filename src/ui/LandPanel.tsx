@@ -11,6 +11,7 @@ import type { SculptTool } from '../engine/Terrain';
 import { useEngine, useEngineVersion } from './store';
 import { Btn, Section, Segmented, Slider, Toggle } from './common';
 import { haptic, uiSound } from './feedback';
+import { learnSignal } from '../learn/signals';
 import { areaKindUnlocked, isUnlocked, showLocked, sizeUnlocked, stampFeature, stampUnlocked, type FeatureId } from '../game/unlocks';
 import { useProfile } from './game/useGame';
 import { LockBadge } from './game/Locked';
@@ -51,10 +52,10 @@ export function LandTools() {
   };
   const arm = (tool: LandTool) => { engine.setLandTool(brush.tool === tool ? null : tool); haptic(6); uiSound('tick'); };
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-tour="land-tools">
       <div className="grid grid-cols-4 gap-1 rounded-2xl bg-black/[0.05] p-1">
         {TABS.map((x) => (
-          <button key={x.id} data-landtab={x.id} onClick={() => setTab(x.id)} className={clsx('relative flex h-12 flex-col items-center justify-center rounded-xl font-display text-[11.5px] font-semibold leading-tight transition', tab === x.id ? 'bg-white text-ink shadow-sm' : 'text-ink/60 hover:text-ink', !open(x.id) && 'opacity-55')}>
+          <button key={x.id} data-landtab={x.id} data-tour={`landtab-${x.id}`} aria-pressed={tab === x.id} onClick={() => setTab(x.id)} className={clsx('relative flex h-12 flex-col items-center justify-center rounded-xl font-display text-[11.5px] font-semibold leading-tight transition', tab === x.id ? 'bg-white text-ink shadow-sm' : 'text-ink/60 hover:text-ink', !open(x.id) && 'opacity-55')}>
             <span className="text-[17px] leading-none">{x.emoji}</span>{x.label}
             {!open(x.id) && <LockBadge className="absolute right-1 top-1" />}
           </button>
@@ -64,8 +65,8 @@ export function LandTools() {
       {tab === 'area' && <AreaTools />}
       {tab === 'sculpt' && (
         <>
-          <div className="grid grid-cols-3 gap-1.5">
-            {SCULPT.map((x) => <Btn key={x.tool} size="sm" active={brush.tool === x.tool} onClick={() => arm(x.tool)}>{x.icon}{x.label}</Btn>)}
+          <div className="grid grid-cols-3 gap-1.5" data-tour="sculpt-tools">
+            {SCULPT.map((x) => <Btn key={x.tool} size="sm" active={brush.tool === x.tool} onClick={() => arm(x.tool)} data-tour={`sculpt-${x.tool}`}>{x.icon}{x.label}</Btn>)}
           </div>
           <p className="text-[11px] text-ink/55">{brush.tool && brush.tool !== 'paint' ? 'Press and hold on the land to keep working one spot, or drag to shape it. Tap the tool again to stop.' : 'Pick a brush, then press and drag on the land.'}</p>
           <Slider label="Brush size" value={brush.radius} min={0.5} max={Math.max(8, t.width / 5)} step={0.1} unit="m" onChange={(v) => { brush.radius = v; engine.changed(false); }} />
@@ -79,7 +80,7 @@ export function LandTools() {
         </Btn>
         {brush.tool && <Btn size="sm" onClick={() => engine.setLandTool(null)} title="Put the tool away (Esc)"><X size={15} /> Done</Btn>}
       </div>
-      <Toggle label="Water" checked={t.waterLevel !== null} onChange={(v) => engine.setWaterLevel(v ? -0.2 : null)} />
+      <div data-tour="water"><Toggle label="Water" checked={t.waterLevel !== null} onChange={(v) => engine.setWaterLevel(v ? -0.2 : null)} /></div>
       {t.waterLevel !== null && <Slider label="Water level" value={t.waterLevel} min={-6} max={6} step={0.05} unit="m" onChange={(v) => { t.setWaterLevel(v); engine.water?.sync(); engine.changed(false); }} onCommit={(v) => engine.setWaterLevel(v)} />}
       <Slider label="Grass" value={engine.env.grass} min={0} max={1.5} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => engine.setEnv({ grass: v }, false)} onCommit={(v) => engine.setEnv({ grass: v })} />
     </div>
@@ -106,7 +107,7 @@ function StampTools() {
     <>
       <div className="grid grid-cols-4 gap-1.5">
         {STAMPS.map((s) => (
-          <button key={s.id} data-stamp={s.id} onClick={() => pick(s.id)} title={s.hint}
+          <button key={s.id} data-stamp={s.id} data-tour={`stamp-${s.id}`} onClick={() => pick(s.id)} title={s.hint}
             className={clsx('relative flex flex-col items-center gap-0.5 rounded-xl px-1 pb-1.5 pt-1 text-[10.5px] font-bold leading-tight ring-1 transition', armed && st.id === s.id ? 'bg-amber-100 ring-amber-400' : 'bg-white ring-black/10 hover:bg-black/[0.03]', !stampUnlocked(s.id) && 'opacity-50 grayscale')}>
             <span className="text-[22px] leading-none">{s.emoji}</span>
             <span className="truncate">{s.name}</span>
@@ -188,7 +189,7 @@ function AreaTools() {
           )}
         </>
       )}
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-4 gap-1.5" data-tour="area-kinds">
         {AREA_KINDS.map((k) => (
           <button key={k.id} data-area={k.id} onClick={() => { if (!areaKindUnlocked(k.id)) { showLocked(k.id === 'volcanic' ? 'landforms-4' : ['dunes', 'canyons', 'mesas'].includes(k.id) ? 'landforms-3' : 'landforms-2'); return; } set({ kind: k.id }); uiSound('tick'); }} title={k.hint}
             className={clsx('relative flex flex-col items-center gap-0.5 rounded-xl px-1 pb-1.5 pt-1 text-[10.5px] font-bold leading-tight ring-1 transition', a.kind === k.id ? 'bg-amber-100 ring-amber-400' : 'bg-white ring-black/10 hover:bg-black/[0.03]', !areaKindUnlocked(k.id) && 'opacity-50 grayscale')}>
@@ -213,7 +214,7 @@ function AreaTools() {
         <div className="flex-1"><Segmented size="sm" value={a.plants} onChange={(v) => set({ plants: v })} options={[{ value: 'none', label: 'None' }, { value: 'some', label: 'Some' }, { value: 'lots', label: 'Lots' }]} /></div>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
-        <Btn variant="solid" data-act="generate" disabled={!size || busy} onClick={() => void run(false)}><Wand2 size={15} /> {busy ? 'Growing…' : 'Generate'}</Btn>
+        <Btn variant="solid" data-act="generate" data-tour="area-generate" disabled={!size || busy} onClick={() => void run(false)}><Wand2 size={15} /> {busy ? 'Growing…' : 'Generate'}</Btn>
         <Btn data-act="retry" disabled={!L.canRetry || busy} onClick={() => void run(true)} title="Replace the last result with a different one"><Dices size={15} /> Try another</Btn>
       </div>
       <Btn size="sm" className="w-full" disabled={!size} onClick={() => { L.repaintArea(); uiSound('tick'); }}><Paintbrush size={14} /> Repaint the ground only</Btn>
@@ -226,11 +227,11 @@ function PaintTools() {
   useEngineVersion();
   const brush = engine.brush;
   const t = engine.terrain!;
-  const choose = (i: number) => { brush.ground = i; if (brush.tool !== 'paint') engine.setLandTool('paint'); engine.changed(false); uiSound('tick'); };
+  const choose = (i: number) => { brush.ground = i; if (brush.tool !== 'paint') engine.setLandTool('paint'); engine.changed(false); uiSound('tick'); learnSignal('paint-ground'); };
   const style = styleForBiome(engine.doc.biome);
   return (
     <>
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-4 gap-1.5" data-tour="paint-tools">
         <button onClick={() => choose(-1)} title={`Picks the ground from the shape of the land (${style.name} style): rock on cliffs, sand or mud by water…`}
           className={clsx('flex flex-col items-center gap-0.5 rounded-xl p-1.5 text-[10.5px] font-bold ring-1', brush.ground < 0 ? 'bg-amber-100 ring-amber-400' : 'bg-white ring-black/10')}>
           <span className="grid h-6 w-6 place-items-center rounded-lg bg-gradient-to-br from-emerald-400 via-amber-300 to-slate-400 text-[13px]">✨</span>

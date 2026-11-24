@@ -298,9 +298,88 @@ textarea.dd-input { resize: vertical; line-height: 1.4; }
 .dd-cta:active { transform: translateY(4px); box-shadow: 0 2px 0 #1f7f35, 0 6px 14px -6px rgba(31, 127, 53, 0.7), inset 0 2px 0 rgba(255, 255, 255, 0.35); }
 }
 
+/* ======================================================================
+   Ranger training: the lesson coach (card, arrow, spotlight ring, gesture hands)
+   ====================================================================== */
+@layer components {
+.dd-coach-card {
+  background: linear-gradient(180deg, #26392e 0%, #1b2a22 60%, #17231c 100%);
+  box-shadow: 0 20px 46px -14px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  opacity: 0;
+}
+.dd-coach-card.dd-coach-placed { opacity: 1; transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.25, 1), opacity 0.2s ease; }
+.dd-coach-arrow { position: absolute; display: none; width: 16px; height: 16px; transform: rotate(45deg); border-radius: 3px; }
+.dd-coach-card[data-side='top'] .dd-coach-arrow { display: block; top: -7px; left: calc(var(--arrow) - 8px); background: #26392e; box-shadow: -1px -1px 0 rgba(255, 255, 255, 0.08); }
+.dd-coach-card[data-side='bottom'] .dd-coach-arrow { display: block; bottom: -7px; left: calc(var(--arrow) - 8px); background: #17231c; box-shadow: 1px 1px 0 rgba(255, 255, 255, 0.06); }
+.dd-coach-card[data-side='left'] .dd-coach-arrow { display: block; left: -7px; top: calc(var(--arrow) - 8px); background: #1f3027; box-shadow: -1px 1px 0 rgba(255, 255, 255, 0.07); }
+.dd-coach-card[data-side='right'] .dd-coach-arrow { display: block; right: -7px; top: calc(var(--arrow) - 8px); background: #1f3027; box-shadow: 1px -1px 0 rgba(255, 255, 255, 0.07); }
+.dd-coach-ring {
+  position: absolute; left: 0; top: 0; border-radius: 16px;
+  box-shadow: 0 0 0 3px #ffcf3d, 0 0 20px 4px rgba(255, 196, 40, 0.5);
+  transition: opacity 0.2s ease, box-shadow 0.3s ease;
+}
+.dd-coach-ring.dd-dim { box-shadow: 0 0 0 3px #ffcf3d, 0 0 20px 4px rgba(255, 196, 40, 0.5), 0 0 0 200vmax rgba(9, 15, 11, 0.4); }
+.dd-coach-ring.dd-ok { box-shadow: 0 0 0 3px #5ee08a, 0 0 24px 6px rgba(94, 224, 138, 0.5); }
+.dd-coach-ring::after { content: ''; position: absolute; inset: 0; border-radius: inherit; animation: dd-ring-pulse 1.7s ease-out infinite; }
+.dd-coach-ring.dd-ok::after { animation: none; }
+@keyframes dd-ring-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 207, 61, 0.75); } 100% { box-shadow: 0 0 0 18px rgba(255, 207, 61, 0); } }
+.dd-coach-go {
+  color: #3d2a00;
+  background: linear-gradient(180deg, #ffe680, #ffbf2e);
+  box-shadow: 0 3px 0 #c98a00, 0 8px 16px -8px rgba(0, 0, 0, 0.5);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+}
+.dd-coach-go:hover { filter: brightness(1.05); }
+.dd-coach-go:active { transform: translateY(2px); box-shadow: 0 1px 0 #c98a00; }
+.dd-coach-wait { display: inline-flex; gap: 3px; }
+.dd-coach-wait i { width: 5px; height: 5px; border-radius: 50%; background: #ffcf3d; animation: dd-wait 1.2s ease-in-out infinite; }
+.dd-coach-wait i:nth-child(2) { animation-delay: 0.15s; }
+.dd-coach-wait i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dd-wait { 0%, 60%, 100% { opacity: 0.25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+.dd-coach-yay { display: inline-block; animation: dd-pop 0.3s cubic-bezier(0.2, 1.4, 0.3, 1); }
+
+/* a hand (or mouse pointer) over the 3D view acting out the gesture */
+.dd-gesture { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: opacity 0.25s ease; }
+.dd-gdot {
+  position: absolute; left: -21px; top: -21px; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px;
+  color: #2b2620; background: rgba(255, 253, 246, 0.95);
+  box-shadow: 0 0 0 3px rgba(255, 207, 61, 0.95), 0 8px 18px -4px rgba(0, 0, 0, 0.5);
+}
+.dd-g-drag .dd-gdot { animation: dd-g-drag 2.2s ease-in-out infinite; }
+@keyframes dd-g-drag {
+  0% { transform: translateX(-60px) scale(1.15); opacity: 0; }
+  12% { transform: translateX(-60px) scale(1); opacity: 1; }
+  55% { transform: translateX(60px) scale(1); opacity: 1; }
+  70%, 100% { transform: translateX(60px) scale(1.12); opacity: 0; }
+}
+.dd-g-pinch .dd-gdot:first-child { animation: dd-g-pinch-a 2s ease-in-out infinite; }
+.dd-g-pinch .dd-gdot:last-child { animation: dd-g-pinch-b 2s ease-in-out infinite; }
+@keyframes dd-g-pinch-a { 0%, 100% { transform: translate(-16px, 16px); } 50% { transform: translate(-60px, 60px); } }
+@keyframes dd-g-pinch-b { 0%, 100% { transform: translate(16px, -16px); } 50% { transform: translate(60px, -60px); } }
+.dd-g-pan .dd-gdot:first-child { animation: dd-g-pan-a 2.2s ease-in-out infinite; }
+.dd-g-pan .dd-gdot:last-child { animation: dd-g-pan-b 2.2s ease-in-out infinite; }
+@keyframes dd-g-pan-a { 0%, 100% { transform: translate(-74px, 0); } 50% { transform: translate(26px, 0); } }
+@keyframes dd-g-pan-b { 0%, 100% { transform: translate(-26px, 0); } 50% { transform: translate(74px, 0); } }
+.dd-g-tap .dd-gdot, .dd-g-hold .dd-gdot { animation: dd-g-tap 1.5s ease-in-out infinite; }
+.dd-g-hold .dd-gdot { animation-duration: 2.4s; }
+.dd-g-tap .dd-gdot::after, .dd-g-hold .dd-gdot::after { content: ''; position: absolute; inset: -3px; border-radius: inherit; animation: dd-g-ripple 1.5s ease-out infinite; }
+.dd-g-hold .dd-gdot::after { animation-duration: 2.4s; }
+@keyframes dd-g-tap { 0%, 100% { transform: translateY(-12px) scale(1); } 30%, 48% { transform: translateY(0) scale(0.86); } 72% { transform: translateY(-12px) scale(1); } }
+@keyframes dd-g-ripple { 0%, 28% { box-shadow: 0 0 0 0 rgba(255, 207, 61, 0.85); } 100% { box-shadow: 0 0 0 28px rgba(255, 207, 61, 0); } }
+.dd-g-scroll .dd-gdot { animation: dd-g-scroll 1.6s ease-in-out infinite; }
+@keyframes dd-g-scroll { 0%, 100% { transform: translateY(-14px); } 50% { transform: translateY(14px); } }
+
+/* lesson cards in the Learn hub */
+.dd-lesson-card { background: #fffdf8; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 6px 16px -10px rgba(70, 48, 20, 0.45); outline: 1px solid rgba(0, 0, 0, 0.06); transition: transform 0.16s ease, box-shadow 0.16s ease; }
+button.dd-lesson-card:hover { transform: translateY(-2px); box-shadow: 0 14px 24px -14px rgba(60, 40, 10, 0.55); }
+button.dd-lesson-card:active { transform: scale(0.98); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dd-cloud, .dd-bob, .dd-beat, .dd-ribbon, .dd-medal, .dd-swap, .dd-slide-in { animation: none !important; }
   .dd-tray-anim, .dd-sheet-snap { transition-duration: 0.01s !important; }
+  .dd-gdot, .dd-gdot::after, .dd-coach-ring::after, .dd-coach-wait i, .dd-coach-yay { animation: none !important; }
+  .dd-coach-card.dd-coach-placed { transition: opacity 0.2s ease; }
 }
 .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 8px); }
 .pt-safe { padding-top: env(safe-area-inset-top); }

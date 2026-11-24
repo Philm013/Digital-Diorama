@@ -45,9 +45,28 @@ Every push to `main` builds the app and publishes it with GitHub Pages ([`.githu
 ## What students can do
 
 ### 🏠 Home
-- **One screen, like a phone app:** a top bar (with your level and Settings), the home itself in the middle and, on phones, a bottom tab bar: **Home · Expeditions · My dioramas · Journal**. The home picks up where you left off with a big *Continue* card, and shows your ranger profile. First-timers get a short introduction and a *Start your first expedition* button instead.
+- **One screen, like a phone app:** a top bar (with your level and Settings), the home itself in the middle and, on phones, a bottom tab bar: **Home · Expeditions · My dioramas · Journal**. The home picks up where you left off with a big *Continue* card, and shows your ranger profile and your **Ranger training** progress (the next lesson, or the one to carry on with). First-timers get a short introduction, *How it works* in three steps (pick a habitat → bring it to life → earn ⭐⭐ to unlock more) and a *Start your first expedition* button instead.
 - **Trays instead of long lists:** Expeditions, My dioramas and the Journal pull out from behind the tab bar over the home, to browse and load from. **Expeditions** is the *ranger path*: habitats grouped by the step that opens them, as small postcards (with *New*, *Done*, stars and how many of its species you've found); locked ones say how many more expeditions they need. Tap an open one for its briefing, name the diorama, choose the **size of the box** (Small, Medium, Large, Huge — or any size once unlocked) and **Start expedition!** **My dioramas** shows your saved dioramas newest first: tap to open, or use ⋯ to download or delete one; *Open file* loads a `.diorama.json`, and a search box appears once there are more than six. Tap the open tab again, tap the dimmed home, press Escape or drag the tray down to put it away.
 - On wide screens (and phones held sideways) the tabs sit in the top bar and the trays are wider, with bigger postcards.
+
+### 🎓 Ranger training: learning by doing
+New users learn the studio inside their own first diorama, one small step at a time, by doing each thing themselves rather than reading about it.
+- **A welcome, not a wall of text.** The first time a diorama opens, a welcome offers **Show me around** (about 8 minutes) or *I'll explore on my own*. Either way every lesson stays under **🎓 Learn** in the top bar (or `H`).
+- **20 short lessons in 6 units**, ordered like the ranger path:
+  1. 🌱 *Your first habitat*: Meet your studio · Look around · Bring it to life · Move, turn & resize · Discover species
+  2. 💚 *Keep it healthy*: Ecosystem health · Who eats whom? · Quests & stars
+  3. 🏔️ *Shape the land*: Landforms · Paint & water
+  4. 📝 *Tell its story*: Labels & notes · Day & night · Walk inside
+  5. 🧩 *Bring it to life*: Your first script · Weather · Sculpt by hand
+  6. 🔭 *Present and go further*: Give a guided tour · Seasons · The Area tool · Roam the wild
+
+  Lessons about tools further along the path unlock with those tools (Code and Weather at *Trail Scout*, tours at *Explorer*…).
+- **Each step points at the real control and waits for you to use it.** A lesson card says what to do; a glowing ring (dimming the rest of the screen) marks the button, panel or tab; a hand over the 3D view acts out gestures such as drag, pinch, two-finger slide, tap or press-and-hold, hovering over a real plant or animal when you need to tap one. The step moves on when the diorama shows it was done: the camera turned or zoomed, a producer or a plant-eater was added, something was moved, turned or resized, a hill was stamped, the ground painted, a label written, it became night, you walked in, a script ran… Read-only steps have *Next*.
+- **No dead ends.** If the control isn't on screen, the card shows the way there instead ("👉 First, switch to 🔨 Build" with a *Go* button, "Tap 🛠️ Edit to see its tools", "Pick 🌿 Plants", "Open Land tools"), and controls scrolled out of their panel are scrolled into view. A step that was already done when it began shows ✓ with *Next*. A lesson that needs something first (living things, land rather than a habitat tile) says so and offers the lesson that helps.
+- **Rewards and choice.** A finished lesson recaps what was learned, gives XP (once) and offers the next one. ✕ puts a lesson aside: the Learn button, the hub and the home screen offer to *carry on* from the same step, and a lesson in progress survives a reload.
+- **Help at the moment it's needed:** quests have a **Show me how** button that starts their lesson, a completed expedition's *unlocked* card offers **Learn how** for every new tool, and the first visit to an empty box, to Build and to Code each shows a one-time tip pointing at the right place.
+- **Learn & help** (the 🎓 Learn button, *More → Learn & help*, or the training card on the home screen) has the lessons by unit with progress, a searchable **How do I…?** (each answer can start its lesson), **Shortcuts** for the keyboard and touch gestures, and **Teachers**: a suggested first session, the ranger path, quests as a rubric, saving and sharing work, coding challenges, and the teacher-mode and tips switches.
+- *Settings → Tips and the guided start* turns the welcome and the one-time tips off (or back on) for the device; lessons are always available.
 
 ### 🧭 The ranger path
 - **Students build, not browse.** Every new diorama starts as the habitat's bare land, sky and climate — its creek, ponds and hills fitted to the chosen box size — and the student brings it to life with producers, plant-eaters, predators and decomposers.
@@ -115,7 +134,7 @@ A Blockly workspace with the Scratch-like *Zelos* renderer. Every object has its
 
 Food relations come from a species database, so *nearest food* for a lion finds a zebra, and *nearest predator* for a zebra finds the lion.
 
-Teachers will find ready-made **coding challenges** in *More → How to use* (predator–prey chase, nocturnal owl, chameleon camouflage, water-cycle story, quiz, population model).
+Teachers will find ready-made **coding challenges** in *🎓 Learn → Teachers* (predator–prey chase, nocturnal owl, chameleon camouflage, water-cycle story, quiz, population model).
 
 ### 🎤 Present
 **Tour** visits each species (the ones with research notes first) in food-chain order — producers, plant-eaters, predators, decomposers — flying the camera to each and optionally narrating the student's notes.
@@ -178,6 +197,11 @@ src/
                  functions), runtime (threads, events, clones, snapshot/restore, block API), recipes,
                  sound (WebAudio synth, speech, ambience)
   storage/       IndexedDB projects (localStorage fallback), export/import, settings
+  learn/         Ranger training: lessons (units, lessons and steps, each step's target and the check that
+                 notices it was done, from a snapshot of the diorama, camera motion and moments), store
+                 (lessons done, the one under way or put aside, tips seen; stored in localStorage), signals
+                 (moments that leave no trace in the diorama: an undo, the overview, a food-web pick…), help
+                 (How do I…?, shortcuts, gestures, notes for teachers)
   game/          progress (XP, levels, ranks, discoveries, badges, stars, completed expeditions; stored in
                  localStorage), ecology (ecosystem health score, quests, stars), unlocks (the ranger path)
   ui/            React UI: Welcome (the home screen) + home/ (Expeditions and My dioramas trays), shell (top bar,
@@ -187,7 +211,10 @@ src/
                  tools & diorama size), ExplorePanels,
                  CodePanel, BottomSheet (draggable phone sheet), ContextBar, AssetThumb + thumbs3d
                  (background 3D thumbnails cached in IndexedDB), feedback (haptics, UI sounds), game/
-                 (HUD chips, quest tracker, journal, celebrations)
+                 (HUD chips, quest tracker, journal, celebrations), learn/ (Coach: the welcome, the lesson
+                 card that follows its control every frame with a spotlight ring and gesture hands, one-time
+                 tips and the end of a lesson; place: where the card goes; LearnHub: lessons, How do I…?,
+                 shortcuts, teachers). Controls a lesson can point at carry `data-tour` names.
   review/        asset review harness (review.html)
 ```
 
@@ -207,6 +234,7 @@ Run these with `npm run dev` stopped (the review and UI scripts start their own 
 - **UI smoke test** — `node tools/ui-check.mjs --out shots/ui-check` taps an animal (field card + discovery), selects it in Build (context bar, resize), twists and pinches it with two fingers, resizes the phone panel by its header and taps a panel tab, on desktop and phone, and reports any page errors.
 - **Food-web check** — `node tools/foodweb-check.mjs` runs the who-eats-whom cases in `tools/foodweb-cases.js` (size limits, specialists, scavenging, eggs, parasites, partners) and lists every habitat's example diorama with its longest food chain and any animal with nothing to eat. It exits non-zero if a case fails.
 - **Home & Back-button check** — `node tools/home-check.mjs --out shots/home-check` opens each tray from the phone tab bar, steps back out of a habitat briefing, starts an expedition, opens and closes sheets in the studio, reloads, drags trays and sheets closed, and checks that Back always closes the top-most layer without leaving dead history entries. It exits non-zero if a check fails.
+- **Ranger training check** — `node tools/learn-check.mjs --out shots/learn-check` starts a fresh device's first expedition, takes the guided start and follows the first unit by really doing each step (dragging, pinching and sliding the camera, adding a plant and a plant-eater from the inventory, moving, turning and resizing one, undoing, tapping a species, opening the journal), then checks the Learn hub, a quest's *Show me how* and the home screen's progress, on a phone and a desktop. `--suite tips` declines the guided start and checks the one-time tips; `--suite more` (teacher mode, the Forest example) starts every other lesson from the hub and completes it — stamping, painting and sculpting the land, writing labels, walking with the keyboard or the joystick, running code, touring and roaming. `--only phone|desktop` and `--lessons a,b` narrow it down. It exits non-zero if a check fails.
 
 ---
 

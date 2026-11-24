@@ -16,6 +16,8 @@ import { useProfile } from '../game/useGame';
 import { useBiomeThumb } from '../thumbs';
 import { useBackLayer } from '../backStack';
 import { uiSound } from '../feedback';
+import { useLearn } from '../../learn/store';
+import { LESSON_BY_ID } from '../../learn/lessons';
 
 const LIVING = CATALOG.filter((d) => d.living !== false && d.category !== 'habitats');
 /** the cardboard edge along the bottom of a diorama postcard */
@@ -58,6 +60,7 @@ export function ExpeditionPicker({ settings, updateSettings, onStart, active, de
   return (
     <div className="absolute inset-0">
       <div className={clsx('absolute inset-0 overflow-y-auto overscroll-contain px-3 pb-[var(--tray-pb)] pt-1 sm:px-5', pick && 'invisible')} aria-hidden={!!pick || undefined}>
+        <LessonWaiting />
         <PathProgress />
         {STAGES.map((st) => {
           const open = stage >= st.n;
@@ -89,6 +92,19 @@ export function ExpeditionPicker({ settings, updateSettings, onStart, active, de
         <p className="mt-4 text-center text-[11.5px] font-semibold text-ink/45">Complete an expedition by earning ⭐⭐ on a diorama of your own. Each one unlocks the next step.</p>
       </div>
       {pick && <Briefing key={pick.id} b={pick} {...facts(pick)} settings={settings} updateSettings={updateSettings} onBack={() => { setPick(null); uiSound('tab'); }} onStart={onStart} />}
+    </div>
+  );
+}
+
+/** a lesson chosen before there was a diorama to practise in begins inside the next one */
+function LessonWaiting() {
+  const learn = useLearn();
+  const l = learn.active ? LESSON_BY_ID[learn.active.id] : null;
+  if (!l) return null;
+  return (
+    <div className="mb-2 flex items-center gap-2.5 rounded-2xl bg-amber-50 px-3 py-2 text-[12.5px] font-semibold leading-snug text-amber-900 ring-1 ring-amber-200" role="status">
+      <span className="text-[20px] leading-none">🎓</span>
+      <span>Your lesson <b>{l.emoji} {l.title}</b> begins as soon as your expedition opens.</span>
     </div>
   );
 }

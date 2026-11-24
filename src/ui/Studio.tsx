@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ArrowLeft, Play, Square, Undo2, Redo2, Compass, Hammer, Blocks, MoreHorizontal, Save, Download, Camera, Maximize, Volume2, VolumeX, HelpCircle, Settings2, FileImage, BookOpen, Plus, Trophy, Sparkles, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Play, Square, Undo2, Redo2, Compass, Hammer, Blocks, MoreHorizontal, Save, Download, Camera, Maximize, Volume2, VolumeX, Settings2, FileImage, BookOpen, Plus, Trophy, Sparkles, GraduationCap, type LucideIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Engine } from '../engine/Engine';
 import type { DioramaDoc, Mode } from '../engine/types';
@@ -7,7 +7,7 @@ import { ScriptRuntime } from '../code/runtime';
 import { Ambience, audio, playSound } from '../code/sound';
 import { exportProject, saveProject, makeThumb, downloadDataUrl, fileSafe, saveSettings, type Settings } from '../storage/projects';
 import { StudioContext, type StudioApi } from './store';
-import { Btn, IconBtn, Modal, Segmented, Toggle } from './common';
+import { IconBtn, Modal, Segmented, Toggle } from './common';
 import { isTypingTarget } from './hooks';
 import { AppBar, TabBar, TopTabs, useLayout, type ShellTab } from './shell';
 import { Viewport } from './Viewport';
@@ -19,7 +19,7 @@ import { BIOME_BY_ID } from '../biomes/templates';
 import { BottomSheet } from './BottomSheet';
 import { ContextBar } from './ContextBar';
 import { Celebrations } from './game/Celebrate';
-import { HealthChip, XpChip, QuestTracker, QuestLog, Stars } from './game/Hud';
+import { HealthChip, XpChip, QuestTracker, QuestLog, Stars, type QuestLearn } from './game/Hud';
 import { Journal } from './game/Journal';
 import { useGame, useProfile } from './game/useGame';
 import { awardBadge } from '../game/progress';
@@ -27,6 +27,11 @@ import { flag } from '../game/ecology';
 import { isUnlocked, showLocked } from '../game/unlocks';
 import { LockedNotice } from './game/Locked';
 import { haptic, uiSound, setUiSound } from './feedback';
+import { Coach } from './learn/Coach';
+import { LearnHub } from './learn/LearnHub';
+import { startLesson, useLearn } from '../learn/store';
+import { LESSON_BY_ID, QUEST_LESSON, lessonOpen, nextLesson } from '../learn/lessons';
+import { learnSignal } from '../learn/signals';
 
 // the engine carries on a habitat's land (resizing, roaming) from its biome's recipe
 Engine.recipeFor = (b) => BIOME_BY_ID[b]?.terrain;
@@ -47,7 +52,8 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   const [loading, setLoading] = useState<{ done: number; total: number; label: string } | null>({ done: 0, total: 1, label: 'Opening the box…' });
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [menu, setMenu] = useState(false);
-  const [help, setHelp] = useState(false);
+  /** Learn & help: Ranger training's lessons and the reference */
+  const [hub, setHub] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [journal, setJournal] = useState(false);
   const [questLog, setQuestLog] = useState(false);
@@ -199,7 +205,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
       if (isTypingTarget(e.target)) return;
       const mod = e.ctrlKey || e.metaKey;
       // (not while walking: the land under your feet would change)
-      if (mod && e.key.toLowerCase() === 'z' && !engine.walk?.active) { e.preventDefault(); void (e.shiftKey ? engine.redo() : engine.undo()); return; }
+      if (mod && e.key.toLowerCase() === 'z' && !engine.walk?.active) { e.preventDefault(); if (!e.shiftKey) learnSignal('undo'); void (e.shiftKey ? engine.redo() : engine.undo()); return; }
       if (mod && e.key.toLowerCase() === 'y' && !engine.walk?.active) { e.preventDefault(); void engine.redo(); return; }
       if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); void saveNow(); return; }
       if (engine.walk?.active) { if (e.key === 'Escape') { engine.walk.exit(); force((x) => x + 1); } return; }
@@ -230,7 +236,8 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         engine.changed(false);
       }
       else if (e.key.toLowerCase() === 'l' && !mod) engine.setEnv({ labels: !engine.env.labels }, false);
-      else if (e.key.toLowerCase() === 'o' && !mod) engine.frameCamera();
+      else if (e.key.toLowerCase() === 'o' && !mod) { engine.frameCamera(); learnSignal('overview'); }
+      else if (e.key.toLowerCase() === 'h' && !mod) setHub((v) => !v);
       else if (e.key.toLowerCase() === 'j' && !mod) setJournal((v) => !v);
       else if (e.key.toLowerCase() === 'q' && !mod && mode !== 'code') setQuestLog((v) => !v);
     };
@@ -254,25 +261,33 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   // roaming the endless world: nothing but the view and its own controls
   const immersive = !!engine?.walk?.active && !!engine.walk.endless;
   const goCode = useCallback(() => { if (engine && selected) { engine.select(selected.id); setMode('code'); } }, [engine, selected, setMode]);
+  const learn = useLearn();
+  const lessonOn = !!learn.active && !loading;
+  /** a quest's "Show me how": the lesson that teaches it, when it is open on the ranger path */
+  const learnable = useCallback((questId: string): QuestLearn => {
+    const l = LESSON_BY_ID[QUEST_LESSON[questId] ?? ''];
+    if (!l || !lessonOpen(l, profile) || learn.active?.id === l.id) return undefined;
+    return () => { uiSound('pop'); setQuestLog(false); startLesson(l.id); };
+  }, [profile, learn.active]);
   const menuItems: MenuEntry[] = !engine ? [] : [
+    { icon: GraduationCap, label: 'Learn & help', hint: 'H', run: () => setHub(true) },
     { icon: BookOpen, label: 'Field journal', hint: 'J', run: () => setJournal(true) },
     { icon: Trophy, label: 'Quests', hint: 'Q', run: () => setQuestLog(true) },
     'sep',
     { icon: Save, label: 'Save now', hint: 'Ctrl+S', run: () => void saveNow() },
     { icon: Download, label: 'Download project file', run: () => exportProject(engine.serialize()) },
     { icon: FileImage, label: 'Save a picture', run: () => downloadDataUrl(`${fileSafe(engine.doc.title)}.png`, engine.screenshot()) },
-    { icon: Camera, label: 'Reset camera', hint: 'O', run: () => engine.frameCamera() },
+    { icon: Camera, label: 'Reset camera', hint: 'O', run: () => { engine.frameCamera(); learnSignal('overview'); } },
     ...(document.fullscreenEnabled ? [{ icon: Maximize, label: document.fullscreenElement ? 'Exit full screen' : 'Full screen', run: () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.().catch(() => {}); } }] : []),
     { icon: api?.ambience.enabled ? VolumeX : Volume2, label: api?.ambience.enabled ? 'Turn off nature sounds' : 'Play nature sounds', run: () => { audio(); if (api?.ambience.enabled) api.ambience.stop(); else api?.ambience.start(); force((x) => x + 1); } },
     { icon: Settings2, label: 'Settings', run: () => setSettingsOpen(true) },
-    { icon: HelpCircle, label: 'How to play', run: () => setHelp(true) },
   ];
 
   return (
     <div className="dd-studio flex h-full flex-col" style={{ ['--accent' as string]: biome?.accent ?? '#3f7d3a', ['--dd-safe-top' as string]: immersive ? 'env(safe-area-inset-top)' : '0px' }}>
       {/* ---------------- top bar ---------------- */}
       <AppBar tall={wide} hidden={immersive}>
-        <IconBtn label="Back to all dioramas" onClick={() => void exit()} className="text-white hover:bg-white/10"><ArrowLeft size={21} /></IconBtn>
+        <IconBtn label="Back to all dioramas" onClick={() => void exit()} className="text-white hover:bg-white/10" data-tour="back"><ArrowLeft size={21} /></IconBtn>
         <div className={clsx('flex min-w-0 items-center gap-2', phone && 'flex-1')}>
           <span className="hidden h-10 w-10 shrink-0 place-items-center rounded-2xl text-2xl sm:grid [@media(max-height:540px)]:!hidden" style={{ background: 'color-mix(in srgb, var(--accent) 45%, transparent)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.15)' }}>{biome?.emoji ?? '📦'}</span>
           <div className={clsx('min-w-0 overflow-hidden', phone && 'flex-1')}>
@@ -283,24 +298,26 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
               onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
               className={clsx('block min-w-0 truncate rounded-lg bg-transparent px-1.5 font-display text-[15px] font-semibold leading-tight text-white outline-none hover:bg-white/10 focus:bg-white/15 sm:text-lg', phone ? 'w-full' : landscape ? 'w-[19vw]' : 'w-[30vw] max-w-[240px]')}
               aria-label="Diorama title"
+              data-tour="title"
             />
-            <button onClick={() => setQuestLog(true)} className="flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap px-1.5 text-[11px] font-bold text-white/55 hover:text-white/85" title="Quests (Q)">
+            <button onClick={() => setQuestLog(true)} className="flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap px-1.5 text-[11px] font-bold text-white/55 hover:text-white/85" title="Quests (Q)" data-tour="quests-link">
               <Stars n={game.stars} size={10} /> <span className="tabular-nums">{game.done}/{game.quests.length || 16} quests</span>
             </button>
           </div>
         </div>
-        {!phone && <TopTabs tabs={modeTabs} active={mode} onSelect={setMode} compact={landscape} />}
+        {!phone && <TopTabs tabs={modeTabs} active={mode} onSelect={setMode} compact={landscape} tour="modes" />}
         {!phone && <div className="flex-1" />}
         {engine && mode === 'build' && wide && <UndoRedo engine={engine} />}
         {engine && !loading && <HealthChip game={game} compact={!wide} />}
         {/* on phones the level is shown in the Journal instead, leaving room for the title */}
         {!phone && <XpChip profile={profile} compact={!wide} onClick={() => setJournal(true)} />}
-        {(!codeLocked || playing || hasScripts) && <button onClick={togglePlay} className={clsx('dd-3d flex h-11 min-w-[48px] shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3.5 font-display text-[15px] font-bold text-white', playing ? 'bg-[#e8453c] [--edge:#a5241e]' : 'bg-[#3bb34a] [--edge:#23802f]')} title={playing ? 'Stop and reset (Esc)' : 'Run all code'}>
+        <LearnButton active={hub} onClick={() => { uiSound('open'); setHub(true); }} labelled={wide} />
+        {(!codeLocked || playing || hasScripts) && <button onClick={togglePlay} data-tour="play" className={clsx('dd-3d flex h-11 min-w-[48px] shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3.5 font-display text-[15px] font-bold text-white', playing ? 'bg-[#e8453c] [--edge:#a5241e]' : 'bg-[#3bb34a] [--edge:#23802f]')} title={playing ? 'Stop and reset (Esc)' : 'Run all code'}>
           {playing ? <Square size={16} fill="currentColor" /> : <Play size={17} fill="currentColor" />}
           <span className="hidden sm:inline">{playing ? 'Stop' : 'Play'}</span>
         </button>}
         <div className="relative">
-          <IconBtn label="More" onClick={() => setMenu((v) => !v)} className="text-white hover:bg-white/10" aria-expanded={menu}><MoreHorizontal size={21} /></IconBtn>
+          <IconBtn label="More" onClick={() => setMenu((v) => !v)} className="text-white hover:bg-white/10" aria-expanded={menu} data-tour="more"><MoreHorizontal size={21} /></IconBtn>
           {menu && wide && engine && (
             <div className="dd-glass dd-pop absolute right-0 top-12 z-50 w-64 rounded-3xl p-2 text-sm text-white" onMouseLeave={() => setMenu(false)}>
               {menuItems.map((it, i) => it === 'sep' ? <div key={i} className="my-1 h-px bg-white/10" /> : <MenuItem key={it.label} icon={<it.icon size={16} />} label={it.label} hint={it.hint} onClick={() => { setMenu(false); it.run(); }} />)}
@@ -317,22 +334,23 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
             {wide && mode === 'code' && <aside className="dd-side z-20 w-[56%] min-w-[460px] max-w-[980px] shrink-0 overflow-hidden border-r border-black/10"><CodePanel /></aside>}
           </StudioContext.Provider>
         )}
-        <div className={clsx('relative min-w-0 flex-1', phonePanel && 'min-h-[96px]')}>
+        <div className={clsx('relative min-w-0 flex-1', phonePanel && 'min-h-[96px]')} data-tour="viewport">
           <div ref={hostRef} className="absolute inset-0 overflow-hidden bg-[#d8cfc2]" />
           {ctx && (
             <StudioContext.Provider value={ctx}>
               <Viewport mode={mode} playing={playing} toast={toast} />
               {mode === 'explore' && <ExploreLayer wide={wide} landscape={landscape} playing={playing} onJournal={() => setJournal(true)} />}
-              {!loading && mode !== 'code' && !(mode === 'build' && !wide) && !(mode === 'explore' && !wide && selected) && !engine?.walk?.active && (
+              {/* (on phones it makes way for the lesson card while a lesson runs) */}
+              {!loading && mode !== 'code' && !(mode === 'build' && !wide) && !(mode === 'explore' && !wide && selected) && !engine?.walk?.active && !(lessonOn && !wide) && (
                 <div className={clsx('pointer-events-none absolute z-20', wide ? 'left-3 top-3' : 'left-2 top-2')}>
-                  <QuestTracker game={game} mobile={!wide || mode === 'build'} onOpen={() => setQuestLog(true)} />
+                  <QuestTracker game={game} mobile={!wide || mode === 'build'} onOpen={() => setQuestLog(true)} learnable={learnable} />
                 </div>
               )}
               {wide && mode === 'build' && !libOpen && (
-                <button onClick={() => setLibOpen(true)} className="dd-3d absolute bottom-5 left-4 z-20 flex h-14 items-center gap-2 rounded-2xl bg-[#7c5cff] px-5 font-display text-base font-bold text-white [--edge:#4b33b8]"><Plus size={20} /> Add things</button>
+                <button onClick={() => setLibOpen(true)} data-tour="open-inventory" className="dd-3d absolute bottom-5 left-4 z-20 flex h-14 items-center gap-2 rounded-2xl bg-[#7c5cff] px-5 font-display text-base font-bold text-white [--edge:#4b33b8]"><Plus size={20} /> Add things</button>
               )}
               {wide && mode === 'build' && !inspOpen && (
-                <button onClick={() => setInspOpen(true)} className="dd-3d absolute bottom-5 right-4 z-20 flex h-12 items-center gap-2 rounded-2xl bg-white px-4 font-display text-sm font-bold text-ink [--edge:rgba(0,0,0,.2)]"><Settings2 size={18} /> {selected ? 'Edit' : 'Diorama'}</button>
+                <button onClick={() => setInspOpen(true)} data-tour="open-inspector" className="dd-3d absolute bottom-5 right-4 z-20 flex h-12 items-center gap-2 rounded-2xl bg-white px-4 font-display text-sm font-bold text-ink [--edge:rgba(0,0,0,.2)]"><Settings2 size={18} /> {selected ? 'Edit' : 'Diorama'}</button>
               )}
               {showContext && wide && <ContextBar onCode={goCode} />}
             </StudioContext.Provider>
@@ -353,7 +371,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
 
       {/* ---------------- phone tab bar ---------------- */}
       {phone && !immersive && (
-        <TabBar label="Modes" tabs={phoneTabs} active={mode} onSelect={(id) => {
+        <TabBar label="Modes" tour="modes" tabs={phoneTabs} active={mode} onSelect={(id) => {
           if (id === 'journal') { uiSound('open'); setJournal(true); return; }
           if (id === 'code' && codeLocked) { showLocked('code'); return; }
           setMode(id);
@@ -361,8 +379,14 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         }} />
       )}
 
-      <Celebrations sound={settings.sound} />
+      <Celebrations sound={settings.sound} onLearn={(id) => startLesson(id)} />
       <LockedNotice />
+      {ctx && (
+        <StudioContext.Provider value={ctx}>
+          <Coach mode={mode} setMode={setMode} game={game} wide={wide} ready={!loading} tips={settings.tips} sound={settings.sound}
+            model={doc.kind === 'model'} biome={{ name: biome?.name ?? 'diorama', emoji: biome?.emoji ?? '📦' }} onOpenHub={() => setHub(true)} />
+        </StudioContext.Provider>
+      )}
 
       {/* ---------------- toasts ---------------- */}
       <div className="pointer-events-none fixed left-1/2 top-[calc(72px+env(safe-area-inset-top))] z-50 flex w-[min(92vw,420px)] -translate-x-1/2 flex-col gap-2">
@@ -371,7 +395,6 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         ))}
       </div>
 
-      {settings.tips && !loading && <Briefing biome={biome?.name ?? 'diorama'} model={doc.kind === 'model'} onHelp={() => setHelp(true)} onDone={() => { const s = { ...settings, tips: false }; setSettings(s); saveSettings(s); uiSound('pop'); }} />}
       {/* phones: the More menu is a sheet of big buttons from the bottom */}
       <Modal open={menu && !wide && !!engine} onClose={() => setMenu(false)} title="More">
         <div className="grid grid-cols-3 gap-2 pb-1 sm:grid-cols-5">
@@ -384,14 +407,14 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
           ))}
         </div>
       </Modal>
-      <Modal open={help} onClose={() => setHelp(false)} title="How to play" wide>
-        <HelpContent />
+      <Modal open={hub} onClose={() => setHub(false)} title={<span className="flex items-center gap-2"><GraduationCap size={22} className="text-amber-600" /> Learn & help</span>} wide>
+        <LearnHub onStart={(id, step) => { setHub(false); startLesson(id, step); }} tips={settings.tips} onTips={(v) => { const s = { ...settings, tips: v }; setSettings(s); saveSettings(s); }} />
       </Modal>
       <Modal open={journal} onClose={() => setJournal(false)} title="📖 Field journal" wide>
         <Journal />
       </Modal>
       <Modal open={questLog} onClose={() => setQuestLog(false)} title={<span className="flex items-center gap-2"><Trophy size={20} className="text-amber-500" /> Quests for this diorama</span>} wide>
-        <QuestLog game={game} />
+        <QuestLog game={game} learnable={learnable} />
       </Modal>
       <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Settings">
         {engine && (
@@ -403,6 +426,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
             </div>
             <Toggle label="Show true sizes (no magnifying of small creatures)" checked={engine.env.trueScale} onChange={(v) => engine.setEnv({ trueScale: v })} />
             <Toggle label="Sound effects" checked={settings.sound} onChange={(v) => { const s = { ...settings, sound: v }; setSettings(s); saveSettings(s); }} />
+            <Toggle label="Tips and the guided start" checked={settings.tips} onChange={(v) => { const s = { ...settings, tips: v }; setSettings(s); saveSettings(s); }} />
             <label className="block">
               <span className="text-[13px] font-semibold text-ink/70">Made by</span>
               <input className="dd-input mt-1" defaultValue={engine.doc.author} onBlur={(e) => { engine.doc.author = e.target.value; engine.frame.setTitle(engine.doc.title, e.target.value ? `by ${e.target.value}` : ''); engine.changed(); }} />
@@ -427,7 +451,7 @@ function UndoRedo({ engine, light }: { engine: Engine; light?: boolean }) {
   const cls = light ? 'h-10 w-10 shrink-0 rounded-2xl bg-black/[0.05] text-ink/70 disabled:opacity-35' : 'text-white hover:bg-white/10';
   return (
     <>
-      <IconBtn label="Undo (Ctrl+Z)" disabled={!engine.canUndo} onClick={() => void engine.undo()} className={cls}><Undo2 size={light ? 18 : 19} /></IconBtn>
+      <IconBtn label="Undo (Ctrl+Z)" disabled={!engine.canUndo} onClick={() => { learnSignal('undo'); void engine.undo(); }} className={cls} data-tour="undo"><Undo2 size={light ? 18 : 19} /></IconBtn>
       <IconBtn label="Redo (Ctrl+Shift+Z)" disabled={!engine.canRedo} onClick={() => void engine.redo()} className={cls}><Redo2 size={light ? 18 : 19} /></IconBtn>
     </>
   );
@@ -463,37 +487,6 @@ function LoadingScreen({ biome, loading }: { biome?: { emoji: string; name: stri
   );
 }
 
-function Briefing({ biome, model, onHelp, onDone }: { biome: string; model?: boolean; onHelp: () => void; onDone: () => void }) {
-  const steps: [string, string, string][] = [
-    ['🔨', 'Build', model ? 'This finished example shows a healthy habitat. Look closely — then build your own on an expedition.' : 'Your box starts with bare land. Add plants, animals and decomposers from the inventory and shape the land.'],
-    ['🧭', 'Explore', 'Drag to look around. Tap any living thing to discover it and add it to your field journal.'],
-    isUnlocked('code')
-      ? ['🧩', 'Code', 'Snap blocks together, then press ▶ Play to bring your habitat to life.']
-      : ['💚', 'Keep it healthy', 'The heart in the top bar scores your ecosystem. Every animal needs something to eat!'],
-    ['🏆', 'Quests', 'Finish 10 quests (⭐⭐) to complete the expedition — and unlock new habitats and tools.'],
-  ];
-  return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-3 backdrop-blur-[2px]">
-      <div className="dd-card-dark dd-pop w-[min(94vw,560px)] rounded-[30px] p-5 text-white">
-        <div className="font-display text-[12px] font-bold uppercase tracking-[0.18em] text-amber-300">Ranger briefing</div>
-        <div className="mt-0.5 font-display text-2xl font-bold">Welcome to your {biome}!</div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {steps.map(([e, h, t]) => (
-            <div key={h} className="flex gap-3 rounded-2xl bg-white/[0.07] p-3 ring-1 ring-white/10">
-              <div className="text-3xl">{e}</div>
-              <div><div className="font-display font-semibold">{h}</div><div className="text-[13px] leading-snug text-white/75">{t}</div></div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 flex items-center justify-end gap-2">
-          <Btn variant="ghost" className="text-white/80 hover:bg-white/10" onClick={onHelp}>More help</Btn>
-          <button onClick={onDone} className="dd-cta h-12 rounded-2xl px-6 font-display text-lg font-bold text-white">Let’s go!</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Build/Code panel on phones: under a smaller 3D viewer in portrait (drag the grip to resize),
  * beside it in landscape. Edit shows the selected object's quick actions as a toolbar row.
@@ -520,7 +513,7 @@ function MobileSheet({ mode, index, setIndex, side, showActions, onCode }: { mod
       header={mode === 'build' ? (
         <div className="flex items-center gap-1 px-2.5 pb-1.5">
           {([['library', '➕ Add things'], ['inspector', '🛠️ Edit']] as const).map(([t, l]) => (
-            <button key={t} onClick={() => { setTab(t); if (index === 0) setIndex(1); uiSound('tab'); }} className={clsx('h-10 min-w-0 flex-1 rounded-2xl font-display text-[14.5px] font-semibold transition', tab === t ? 'bg-ink text-white shadow' : 'bg-black/[0.05] text-ink/70')}>{l}</button>
+            <button key={t} data-tour={t === 'library' ? 'sheet-add' : 'sheet-edit'} aria-pressed={tab === t} onClick={() => { setTab(t); if (index === 0) setIndex(1); uiSound('tab'); }} className={clsx('h-10 min-w-0 flex-1 rounded-2xl font-display text-[14.5px] font-semibold transition', tab === t ? 'bg-ink text-white shadow' : 'bg-black/[0.05] text-ink/70')}>{l}</button>
           ))}
           {api && <UndoRedo engine={api.engine} light />}
         </div>
@@ -539,40 +532,18 @@ function MobileSheet({ mode, index, setIndex, side, showActions, onCode }: { mod
 }
 function useContextSafe() { return useContext(StudioContext); }
 
-function HelpContent() {
-  const rows: [string, string, string][] = [
-    ['🧭', 'Explore', 'Drag to orbit, pinch or scroll to zoom, two fingers or right-drag to pan. Tap any plant or animal to discover it — every discovery goes into your field journal and earns XP.'],
-    ['🔨', 'Build', 'Open the inventory and tap (or drag) things onto the diorama. Tap an object to select it, then drag it to move. On a phone, twist two fingers to turn it and pinch to resize; long-press picks up anything. Use the Land tools to raise hills, dig ponds and paint the ground.'],
-    ['💚', 'Ecosystem health', 'The heart in the top bar scores how complete and balanced your food web is. Open it for tips — every animal needs food, and real food pyramids have fewer predators than prey.'],
-    ['🏆', 'Quests & badges', 'Each diorama has 16 quests: finish 5, 10 and all 16 for one, two and three stars. Badges are earned across all your dioramas.'],
-    ['🧩', 'Code', 'Choose an object, then snap blocks together like Scratch. Start scripts with “when ▶ clicked”, then press Play. Stop resets everything to how you built it.'],
-    ['🎤', 'Present', 'Add notes to your organisms (Build → Edit → My notes). The Tour visits each one in food-chain order and can read your notes aloud.'],
-    ['🏔️', 'Land', 'In Build → World & land: stamp Landforms (tap the land, or press and drag to size and point them), select an Area (drag a box or oval, draw a loop with the lasso, or paint it with the brush) and grow mountains, dunes, a canyon, lakes, rivers or islands in it, sculpt with brushes and paint the ground. Top view (T) looks straight down for easy editing. Diorama size makes the box bigger or smaller.'],
-    ['🌍', 'Roam', 'Explore → Roam walks you out of your diorama into an endless landscape of the same habitat. Fly with 🦅 to see far; 🏠 brings you back.'],
-    ['⌨️', 'Shortcuts', '1 2 3 modes · J journal · Q quests · R / Shift+R turn · + − resize · D duplicate · Delete remove · F focus · L labels · O overview · T top view · [ ] brush / landform size · Ctrl+Z undo · Ctrl+Shift+Z redo · Esc stop/put tool away/deselect · WASD walk'],
-  ];
-  const challenges = [
-    '🐝 Make a bee visit three different flowers, then fly home.',
-    '🦁 Code a predator–prey chase: the hunter uses “eat (nearest food)”, the prey uses “predator within 5 m?” and “run away”.',
-    '🌙 When it becomes night, make the owl hoot and fly; when it becomes day, make it sleep.',
-    '🦎 Use “set colour” to make a chameleon or octopus camouflage itself when tapped.',
-    '🌧️ Write a World script that tells the story of the water cycle with captions, rain and a rainbow.',
-    '❓ Add a quiz: tap an animal, ask “What do I eat?”, and check the answer.',
-    '👶 Population model: each time you tap a rabbit it “has a baby” — what happens to the grass?',
-  ];
+/** the top bar's way into Ranger training: a dot when there is a lesson to take or carry on with */
+function LearnButton({ active, onClick, labelled }: { active: boolean; onClick: () => void; labelled: boolean }) {
+  const learn = useLearn();
+  const profile = useProfile();
+  const running = !!learn.active;
+  const dot = !running && (!!learn.paused || !!nextLesson(learn.done, undefined, profile));
   return (
-    <div className="space-y-3">
-      {rows.map(([e, h, t]) => (
-        <div key={h} className="flex gap-3 rounded-2xl bg-black/[0.03] p-3">
-          <div className="text-2xl">{e}</div>
-          <div><div className="font-display font-semibold">{h}</div><div className="text-sm text-ink/75">{t}</div></div>
-        </div>
-      ))}
-      <div className="rounded-2xl bg-amber-50 p-3 ring-1 ring-amber-200">
-        <div className="font-display font-semibold">🧩 Coding challenges</div>
-        <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-ink/80">{challenges.map((c) => <li key={c}>{c}</li>)}</ul>
-      </div>
-    </div>
+    <button type="button" onClick={onClick} data-tour="learn" aria-label="Learn and help (H)" title={learn.paused && !running ? 'Carry on with your lesson (H)' : 'Learn & help (H)'}
+      className={clsx('relative flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-2xl font-display text-[14px] font-semibold text-white transition', labelled ? 'px-3' : 'w-11', active || running ? 'bg-amber-300/20 text-amber-100 ring-1 ring-amber-300/40' : 'dd-hudchip')}>
+      <GraduationCap size={20} className={running ? 'text-amber-300' : undefined} />
+      {labelled && <span>Learn</span>}
+      {dot && <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-[#ffbf2e] shadow-[0_0_0_2px_#1a261f]" aria-hidden />}
+    </button>
   );
 }
-
