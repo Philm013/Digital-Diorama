@@ -363,7 +363,15 @@ async function run(layout, ctxOpts, phone, suite) {
     const c = await coach();
     if (c?.step === 'pan' && c.phase !== 'done') { console.log('     (synthetic two-finger drag not delivered: sliding the camera directly)'); await pg.evaluate(async () => { const e = window.__engine; for (let k = 0; k < 20; k++) { e.camera.position.x += 0.15; e.controls.target.x += 0.15; await new Promise((r) => requestAnimationFrame(r)); } }); }
   }, 'camera/pan');
-  await step('camera', 'overview', async () => { await clickTour('explore-home'); }, 'camera/overview');
+  await step('camera', 'overview', async () => {
+    // (on a phone, Overview starts scrolled off the end of the Explore bar: the coach scrolls it into view)
+    await wait(900);
+    const c = await coach();
+    const onScreen = await pg.evaluate((sel) => { const r = document.querySelector(sel)?.getBoundingClientRect(); return !!r && r.left >= 0 && r.right <= innerWidth; }, T('explore-home'));
+    check('camera/overview points at Overview, scrolled into view', c?.aim === 'explore-home' && c.ring && onScreen, JSON.stringify({ c, onScreen }));
+    await shot('05b-camera-overview');
+    await clickTour('explore-home');
+  }, 'camera/overview');
   if (await finish('Look around')) await clickText('[role=dialog] button', 'Next:');
 
   /* ---------------- Bring it to life ---------------- */
