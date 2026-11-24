@@ -67,7 +67,7 @@ export function Journal({ initialTab = 'species' }: { initialTab?: 'species' | '
   }, [list]);
   const countIn = (c: string) => { const all = LIVING.filter((d) => d.category === c); return [all.filter((d) => p.discovered.includes(d.id)).length, all.length]; };
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-tour="journal">
       <RangerCard dark onOpenJournal={() => setTab('species')} />
       <div className="flex gap-1 rounded-2xl bg-black/[0.06] p-1">
         {(['species', 'badges'] as const).map((t) => (

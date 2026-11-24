@@ -32,7 +32,9 @@ export type EngineEvent =
   | { type: 'toast'; text: string; kind?: 'info' | 'error' | 'success' }
   | { type: 'key'; key: string; down: boolean }
   | { type: 'actors' }
-  | { type: 'thunder' };
+  | { type: 'thunder' }
+  /** the land was edited: a brush stroke (its tool), a landform stamp (`detail`: which), an area, a repaint or the water */
+  | { type: 'land'; tool: string; detail?: string };
 
 export type LandTool = SculptTool | 'paint' | 'stamp' | 'area';
 /** `ground` is a ground-type index, or −1 for ✨ Auto (chosen from the shape of the land) */
@@ -830,6 +832,7 @@ export class Engine {
     this.rebuildGroundcover();
     for (const a of this.actors.values()) this.commitTransform(a);
     this.changed();
+    this.emit({ type: 'land', tool: this.brush.tool ?? 'brush' });
   }
 
   /**
@@ -857,6 +860,7 @@ export class Engine {
     }
     this.rebuildGroundcover();
     this.changed();
+    if (waterChanged) this.emit({ type: 'land', tool: 'water' });
   }
 
   /** tall new landforms raise the box's walls (and the room the weather falls through) */
@@ -881,6 +885,7 @@ export class Engine {
     this.rebuildGroundcover();
     this.buildFrame();
     this.changed();
+    this.emit({ type: 'land', tool: 'water' });
   }
   get groundTypes() { return GROUND_TYPES; }
 

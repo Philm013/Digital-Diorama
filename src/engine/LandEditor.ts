@@ -339,6 +339,7 @@ export class LandEditor {
     const before = t.waterLevel;
     const res = applyStamp(t, this.stampOpts(p.x, p.z, radius, angle));
     this.e.afterTerrainEdit(res.rect, before !== t.waterLevel);
+    this.e.emit({ type: 'land', tool: 'stamp', detail: this.stamp.id });
     return true;
   }
 
@@ -381,6 +382,7 @@ export class LandEditor {
     if (this.area.plants !== 'none') snap.actors = await this.plant(F, this.area.plants);
     this.lastGen = snap;
     e.changed();
+    e.emit({ type: 'land', tool: 'area', detail: kind });
   }
 
   /** repaint the selected area from a ground style without changing its shape */
@@ -392,6 +394,7 @@ export class LandEditor {
     const rect = repaintArea(t, style, { field: F, feather: Math.min(this.area.feather, F.depth), seed: this.area.seed });
     t.paintChanged();
     e.afterTerrainEdit(rect, false);
+    e.emit({ type: 'land', tool: 'paint', detail: 'area' });
   }
 
   /** repaint the whole diorama to match its shape */
@@ -402,6 +405,7 @@ export class LandEditor {
     autoPaint(t, this.styleFor(styleId), t.seed);
     t.paintChanged();
     this.e.afterTerrainEdit(null, false);
+    this.e.emit({ type: 'land', tool: 'paint', detail: 'auto' });
   }
 
   /** plant the area with species of its habitat; returns the new actors' ids */

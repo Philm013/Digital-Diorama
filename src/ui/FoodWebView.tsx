@@ -11,6 +11,7 @@ import { habitatUnlocked, isUnlocked } from '../game/unlocks';
 import { notePlaced } from '../game/progress';
 import { useProfile } from './game/useGame';
 import { haptic, uiSound } from './feedback';
+import { learnSignal } from '../learn/signals';
 
 const R = 23;
 const ROW_H = 120;
@@ -131,14 +132,14 @@ export function FoodWebView({ onVisit, initial }: { onVisit: (actorId: string) =
     if (chainIds) { const i = chainIds.indexOf(e.from); return i >= 0 && chainIds[i + 1] === e.to; }
     return !!focus && (e.from === focus || e.to === focus);
   };
-  const pick = (id: string) => { setChain(null); setWhatIf(false); setSel(id === sel ? null : id); uiSound('tick'); haptic(5); };
+  const pick = (id: string) => { setChain(null); setWhatIf(false); setSel(id === sel ? null : id); uiSound('tick'); haptic(5); if (id !== sel && !isSourceId(id)) learnSignal('web-focus'); };
   const species = web.nodes.filter((n) => n.def);
   const hungry = species.filter((n) => n.hungry);
   const top = L.rows[0] ?? 1;
 
   if (!species.length) return <EmptyWeb />;
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_310px]">
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_310px]" data-tour="foodweb">
       <div className="min-w-0 space-y-2">
         <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
           <Stat>{species.length} species</Stat>
@@ -154,7 +155,7 @@ export function FoodWebView({ onVisit, initial }: { onVisit: (actorId: string) =
           )}
           <span className="ml-auto hidden text-ink/50 sm:inline">Arrows point from the food to the eater.</span>
         </div>
-        <div className="overflow-x-auto overscroll-x-contain rounded-2xl bg-[#fbf7ef] ring-1 ring-black/5" onClick={(e) => { if (e.target === e.currentTarget) setSel(null); }}>
+        <div className="overflow-x-auto overscroll-x-contain rounded-2xl bg-[#fbf7ef] ring-1 ring-black/5" data-tour="foodweb-diagram" onClick={(e) => { if (e.target === e.currentTarget) setSel(null); }}>
           <svg viewBox={`0 0 ${L.W} ${L.H}`} className="block select-none" style={{ width: '100%', minWidth: Math.round(L.W * 0.72), height: 'auto' }} role="img" aria-label="Food web diagram">
             <defs>
               {(Object.keys(LINK_META) as LinkKind[]).map((k) => (
@@ -338,7 +339,7 @@ function Details({ web, node, whatIf, setWhatIf, impact, onPick, onClose, onVisi
         {!node.source && (
           <div className="mt-2 grid grid-cols-2 gap-1.5">
             <button type="button" onClick={() => onVisit(node.ids[0])} className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-black/[0.05] font-display text-[13px] font-semibold text-ink/75 hover:bg-black/10"><Crosshair size={15} /> Show me</button>
-            <button type="button" onClick={() => setWhatIf(!whatIf)} className={clsx('flex h-10 items-center justify-center gap-1.5 rounded-xl font-display text-[13px] font-semibold transition', whatIf ? 'bg-ink text-white' : 'bg-black/[0.05] text-ink/75 hover:bg-black/10')}><Skull size={15} /> What if…?</button>
+            <button type="button" data-tour="web-whatif" onClick={() => { if (!whatIf) learnSignal('web-whatif'); setWhatIf(!whatIf); }} className={clsx('flex h-10 items-center justify-center gap-1.5 rounded-xl font-display text-[13px] font-semibold transition', whatIf ? 'bg-ink text-white' : 'bg-black/[0.05] text-ink/75 hover:bg-black/10')}><Skull size={15} /> What if…?</button>
           </div>
         )}
       </div>

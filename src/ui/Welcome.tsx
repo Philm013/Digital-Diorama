@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { BookOpen, Blocks, Boxes, Compass, Hammer, House, Map as MapIcon, Play, Settings2, Sparkles, Trophy, Upload } from 'lucide-react';
+import { BookOpen, Blocks, Boxes, ChevronRight, Compass, GraduationCap, Hammer, House, Map as MapIcon, Play, Settings2, Sparkles, Trophy, Upload } from 'lucide-react';
 import { clsx } from 'clsx';
 import { BIOMES, BIOME_BY_ID } from '../biomes/templates';
 import { importProjectFile, listProjects, loadProject, saveSettings, type ProjectMeta, type Settings } from '../storage/projects';
@@ -19,12 +19,16 @@ import { ExpeditionPicker, KRAFT_EDGE, PathProgress, QUALITY_OPTIONS } from './h
 import { LockedNotice } from './game/Locked';
 import { habitatUnlocked } from '../game/unlocks';
 import { DioramaLibrary, ago } from './home/Library';
+import { LearnHub } from './learn/LearnHub';
+import { startLesson, useLearn } from '../learn/store';
+import { LESSONS, LESSON_BY_ID, nextLesson } from '../learn/lessons';
 
 const LIVING = CATALOG.filter((d) => d.living !== false && d.category !== 'habitats');
 
-type TrayId = 'expeditions' | 'library' | 'journal';
+/** (Learn has no tab of its own: the Ranger training card opens it) */
+type TrayId = 'expeditions' | 'library' | 'journal' | 'learn';
 type TabId = 'home' | TrayId;
-const TABS: ShellTab<TabId>[] = [
+const TABS: ShellTab<Exclude<TabId, 'learn'>>[] = [
   { id: 'home', label: 'Home', icon: House },
   { id: 'expeditions', label: 'Expeditions', icon: MapIcon, title: 'Choose a habitat for a new diorama' },
   { id: 'library', label: 'My dioramas', icon: Boxes, title: 'Your saved dioramas' },
@@ -63,6 +67,15 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
   const openProject = async (id: string) => { uiSound('pop'); const d = await loadProject(id); if (d) onOpen(d); };
   const found = profile.discovered.filter((id) => LIVING.some((d) => d.id === id)).length;
   const explored = profile.biomesBuilt.length;
+  const learn = useLearn();
+  const lessonsDone = LESSONS.filter((l) => learn.done.includes(l.id)).length;
+  // lessons run inside a diorama: the latest one, or the expedition about to be started
+  const startFromHome = (id: string, step = 0) => {
+    startLesson(id, step);
+    const last = projects?.[0];
+    if (last) void openProject(last.id);
+    else setTray('expeditions');
+  };
 
   const header = {
     expeditions: <TrayHeader id="dd-tray-title" onClose={() => go('home')} icon="🧭" accent="#2fae4b" title="Choose your expedition"
@@ -72,11 +85,21 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
       actions={<Btn size="sm" onClick={() => fileRef.current?.click()} title="Open a .diorama.json file"><Upload size={15} /> Open file</Btn>} />,
     journal: <TrayHeader id="dd-tray-title" onClose={() => go('home')} icon="📖" accent="#c98a00" title="Field journal"
       subtitle={`${found}/${LIVING.length} species · ${profile.badges.length}/${BADGES.length} badges`} />,
+    learn: <TrayHeader id="dd-tray-title" onClose={() => go('home')} icon="🎓" accent="#c98a00" title="Learn & help"
+      subtitle={`Ranger training · ${lessonsDone}/${LESSONS.length} lessons`} />,
   }[shownTray];
   const content = {
     expeditions: <ExpeditionPicker settings={settings} updateSettings={updateSettings} onStart={onOpen} active={tray === 'expeditions'} dense={landscape} />,
     library: <DioramaLibrary projects={projects} onOpenProject={(id) => void openProject(id)} onChanged={() => void refresh()} onNew={() => go('expeditions')} onImport={() => fileRef.current?.click()} error={error} />,
     journal: <div className="absolute inset-0 overflow-y-auto overscroll-contain px-3 pb-[var(--tray-pb)] pt-1 sm:px-5"><Journal /></div>,
+    learn: (
+      <div className="absolute inset-0 overflow-y-auto overscroll-contain px-3 pb-[var(--tray-pb)] pt-1 sm:px-5">
+        <div className="mx-auto max-w-4xl">
+          <LearnHub onStart={startFromHome} tips={settings.tips} onTips={(v) => updateSettings({ ...settings, tips: v })}
+            note={projects?.length ? `Lessons open in your latest diorama, “${projects[0].title}”.` : 'Lessons happen inside a diorama: start an expedition and your lesson begins there.'} />
+        </div>
+      </div>
+    ),
   }[shownTray];
 
   return (
@@ -86,7 +109,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
           <img src="./favicon.svg" alt="" className="h-9 w-9 shrink-0 rounded-[11px] bg-white/10 p-1 shadow-[inset_0_0_0_1px_rgba(255,255,255,.12)]" />
           {!landscape && <span className={clsx('truncate font-display font-bold text-white', wide ? 'text-xl' : 'text-[17px]')}>Digital Diorama</span>}
         </button>
-        {!phone && <TopTabs tabs={TABS} active={tray ?? 'home'} onSelect={go} compact={landscape} width={136} compactWidth={104} />}
+        {!phone && <TopTabs tabs={TABS} active={tray === 'learn' ? null : tray ?? 'home'} onSelect={go} compact={landscape} width={136} compactWidth={104} />}
         <div className="flex-1" />
         <XpChip profile={profile} compact={!wide} onClick={() => go('journal')} />
         <IconBtn label="Settings" onClick={() => setSettingsOpen(true)} className="text-white hover:bg-white/10"><Settings2 size={20} /></IconBtn>
@@ -102,7 +125,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
         </Tray>
       </main>
 
-      {phone && <TabBar label="Main" tabs={TABS} active={tray ?? 'home'} onSelect={go} />}
+      {phone && <TabBar label="Main" tabs={TABS} active={tray === 'learn' ? null : tray ?? 'home'} onSelect={go} />}
 
       <input ref={fileRef} type="file" accept=".json,.diorama.json,application/json" className="hidden" onChange={async (e) => {
         const f = e.target.files?.[0];
@@ -120,6 +143,10 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
             <p className="mt-1 text-[11.5px] text-ink/50">Fast suits phones and Chromebooks; Detailed is for fast computers. Applies to dioramas you open next.</p>
           </div>
           <Toggle label="Sound effects" checked={settings.sound} onChange={(v) => updateSettings({ ...settings, sound: v })} />
+          <div>
+            <Toggle label="Tips and the guided start" checked={settings.tips} onChange={(v) => updateSettings({ ...settings, tips: v })} />
+            <p className="mt-1 text-[11.5px] text-ink/50">A welcome with a guided start in new dioramas, and one-time tips in Build and Code. Every lesson stays under 🎓 Learn.</p>
+          </div>
           <div>
             <Toggle label="Unlock everything (teacher mode)" checked={!!profile.unlockAll} onChange={(v) => updateProfile({ unlockAll: v })} />
             <p className="mt-1 text-[11.5px] text-ink/50">Normally habitats and tools open one step at a time as students complete expeditions (⭐⭐ on a diorama of their own). Switch this on to open every habitat, tool and example diorama on this device.</p>
@@ -160,11 +187,15 @@ function HomeCore({ projects, profile, wide, landscape, onTab, onContinue }: {
             : first ? <button type="button" onClick={() => onTab('expeditions')} className="dd-cta flex h-14 w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl px-4 font-display text-[clamp(15px,4.6vw,18px)] font-bold text-white sm:px-6 lg:w-auto lg:self-start lg:text-lg"><Sparkles size={21} className="shrink-0" /> Start your first expedition</button>
               : <div className="h-[104px] animate-pulse rounded-[24px] bg-white/45" />}
           {!first && <QuickActions count={projects?.length ?? 0} onTab={onTab} />}
-          {(first || wide) && !landscape && <FeatureTiles />}
+          {/* portrait phones: lessons right under the quick actions, where they are seen without scrolling */}
+          {!first && !wide && !landscape && <TrainingCard onOpen={() => onTab('learn')} />}
+          {first && !landscape && <HowItWorks />}
+          {!first && wide && <FeatureTiles />}
         </div>
         <div className="flex flex-col gap-3">
           <RangerCard dark onOpenJournal={() => onTab('journal')} />
           <button type="button" onClick={() => onTab('expeditions')} className="block w-full rounded-[20px] text-left transition active:scale-[0.99]" aria-label="Ranger path: see your expeditions"><PathProgress dark /></button>
+          {(first || wide || landscape) && <TrainingCard onOpen={() => onTab('learn')} />}
           {(wide || landscape) && <BadgeStrip profile={profile} onClick={() => onTab('journal')} />}
         </div>
       </div>
@@ -234,6 +265,50 @@ function ActionTile({ onClick, icon, title, detail, className, iconClass }: { on
         <span className="block truncate font-display text-[clamp(13px,3.7vw,14.5px)] font-bold leading-tight sm:text-[16px]">{title}</span>
         <span className="block truncate text-[12px] font-semibold opacity-65">{detail}</span>
       </span>
+    </button>
+  );
+}
+
+/** first-timers: the whole idea in three steps */
+function HowItWorks() {
+  const steps: [string, string, string][] = [
+    ['🗺️', 'Pick a habitat', 'Start an expedition: the Backyard, a Forest or the Prairie.'],
+    ['🌱', 'Bring it to life', 'Add plants, animals and decomposers, and keep the heart healthy.'],
+    ['⭐', 'Earn ⭐⭐, unlock more', '10 quests complete an expedition and open new habitats and tools.'],
+  ];
+  return (
+    <div className="rounded-[22px] bg-white/80 p-3 ring-1 ring-black/5 backdrop-blur-sm">
+      <div className="px-0.5 font-display text-[11.5px] font-bold uppercase tracking-[0.16em] text-[#1d4e7a]/70">How it works</div>
+      <ol className="mt-2 grid gap-2 sm:grid-cols-3">
+        {steps.map(([e, h, t], i) => (
+          <li key={h} className="flex items-start gap-2.5 rounded-2xl bg-white/80 p-2.5 ring-1 ring-black/5 sm:flex-col sm:gap-1.5">
+            <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-[12px] bg-amber-50 text-[20px] leading-none ring-1 ring-amber-200">{e}<span className="absolute -left-1.5 -top-1.5 grid h-[18px] w-[18px] place-items-center rounded-full bg-[#2fae4b] font-display text-[10.5px] font-bold text-white">{i + 1}</span></span>
+            <span className="min-w-0"><span className="block font-display text-[14px] font-bold leading-tight text-ink">{h}</span><span className="block text-[12px] leading-snug text-ink/65">{t}</span></span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-2 flex items-center gap-1.5 px-0.5 text-[12px] font-semibold text-ink/60"><GraduationCap size={15} className="shrink-0 text-amber-600" /> A ranger guide shows you around when you start.</p>
+    </div>
+  );
+}
+
+/** Ranger training on the home screen: how far through the lessons, and the next one */
+function TrainingCard({ onOpen }: { onOpen: () => void }) {
+  const learn = useLearn();
+  const profile = useProfile();
+  const done = LESSONS.filter((l) => learn.done.includes(l.id)).length;
+  const resume = learn.active ?? learn.paused;
+  const resumeLesson = resume ? LESSON_BY_ID[resume.id] : null;
+  const next = resumeLesson ?? nextLesson(learn.done, undefined, profile);
+  return (
+    <button type="button" onClick={() => { uiSound('open'); onOpen(); }} className="dd-card-dark flex w-full min-w-0 items-center gap-3 rounded-[20px] p-2.5 pr-3 text-left text-white transition active:scale-[0.99]" aria-label="Ranger training: lessons and help">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-b from-[#ffe680] to-[#ffbf2e] text-[#3d2a00] shadow-[0_3px_0_#c98a00]"><GraduationCap size={24} /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-display text-[11px] font-bold uppercase tracking-[0.14em] text-amber-300">Ranger training · {done}/{LESSONS.length} lessons</span>
+        <span className="block truncate font-display text-[15px] font-bold leading-tight">{next ? `${resumeLesson ? 'Carry on' : done ? 'Next' : 'Start'}: ${next.emoji} ${next.title}` : '🎉 Every open lesson done'}</span>
+        <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-white/15"><span className="block h-full rounded-full bg-gradient-to-r from-[#ffe066] to-[#ffb020] transition-all duration-700" style={{ width: `${(done / LESSONS.length) * 100}%` }} /></span>
+      </span>
+      <ChevronRight size={20} className="shrink-0 text-white/50" />
     </button>
   );
 }

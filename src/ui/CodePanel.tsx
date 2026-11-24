@@ -184,16 +184,16 @@ export function CodePanel({ compact }: { compact?: boolean }) {
   return (
     <div className="dd-code flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-black/5 px-2 py-1.5">
-        <div className="dd-scroll-x flex min-w-0 flex-1 gap-1 overflow-x-auto py-0.5">
+        <div className="dd-scroll-x flex min-w-0 flex-1 gap-1 overflow-x-auto py-0.5" data-tour="code-targets">
           <TargetChip active={!target} onClick={() => choose('')} emoji={<Globe2 size={16} />} label="World" coded={!!engine.doc.worldScripts} />
           {actors.map((a) => <TargetChip key={a.id} active={target === a.id} onClick={() => choose(a.id)} emoji={a.def.emoji} label={a.name} coded={!!a.doc.scripts} />)}
         </div>
       </div>
       <div className="relative min-h-0 flex-1">
-        <div ref={host} className="absolute inset-0" />
+        <div ref={host} className="absolute inset-0" data-tour="code-workspace" />
         {(empty || showRecipes) && (
           <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center pr-3" style={{ paddingLeft: compact ? 100 : 160 }}>
-            <div className="pointer-events-auto max-h-[70%] max-w-md overflow-y-auto rounded-2xl bg-white/95 p-3 shadow-lg ring-1 ring-black/10">
+            <div className="pointer-events-auto max-h-[70%] max-w-md overflow-y-auto rounded-2xl bg-white/95 p-3 shadow-lg ring-1 ring-black/10" data-tour="code-ideas">
               <div className="flex items-start gap-2 text-[13px] font-semibold leading-snug"><Lightbulb size={16} className="mt-0.5 shrink-0 text-amber-500" /><span>{empty ? <>Coding <b>{current ? current.name : 'the World'}</b>. Drag in a yellow <i>when ▶ clicked</i> block from Events — or start from an idea:</> : 'Add an idea:'}</span></div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {recipes.map((r) => <button key={r.id} onClick={() => addRecipe(r.id)} className="rounded-full bg-amber-50 px-2.5 py-1 text-[12px] font-bold text-ink/80 ring-1 ring-amber-200 hover:bg-amber-100">{r.emoji} {r.label}</button>)}
@@ -202,9 +202,9 @@ export function CodePanel({ compact }: { compact?: boolean }) {
           </div>
         )}
         <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 gap-2" style={{ marginLeft: compact ? 30 : 70 }}>
-          {!empty && <Btn size="sm" onClick={() => setShowRecipes((v) => !v)}><Lightbulb size={14} /> Ideas</Btn>}
+          {!empty && <Btn size="sm" onClick={() => setShowRecipes((v) => !v)} data-tour="code-ideas-btn"><Lightbulb size={14} /> Ideas</Btn>}
           {!empty && <Btn size="sm" variant="ghost" className="bg-white/80" title="Clear all blocks for this object" onClick={() => { if (confirm('Remove all blocks for this object?')) { ws.current?.clear(); persist(); } }}><Trash2 size={14} /></Btn>}
-          {compact && <Btn size="sm" variant={runtime.running ? 'stop' : 'go'} onClick={() => { audio(); if (runtime.running) runtime.stop(); else runtime.start(true); }}><Play size={14} /> {runtime.running ? 'Stop' : 'Play'}</Btn>}
+          {compact && <Btn size="sm" variant={runtime.running ? 'stop' : 'go'} data-tour="code-play" onClick={() => { audio(); if (runtime.running) runtime.stop(); else runtime.start(true); }}><Play size={14} /> {runtime.running ? 'Stop' : 'Play'}</Btn>}
         </div>
       </div>
     </div>

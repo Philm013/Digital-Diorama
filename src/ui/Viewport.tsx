@@ -10,6 +10,7 @@ import { Btn, Segmented } from './common';
 import { haptic, uiSound } from './feedback';
 import { confetti } from './game/Celebrate';
 import { notePlaced } from '../game/progress';
+import { learnSignal } from '../learn/signals';
 
 const EYE_LIST: [string, string, string][] = [['1.6', '🧍', 'Person'], ['0.6', '🦊', 'Fox'], ['0.15', '🐸', 'Frog'], ['0.03', '🐜', 'Ant'], ['12', '🦅', 'Bird']];
 // phones show just the animal; wider screens add its name
@@ -411,7 +412,7 @@ function BuildViewTools() {
   return (
     <>
       <div className="pointer-events-none absolute right-2 top-2 z-20 flex flex-col items-end gap-1.5">
-        <button onClick={() => { engine.setTopView(!engine.topView); uiSound('tick'); haptic(6); }} title="Top view (T)"
+        <button onClick={() => { engine.setTopView(!engine.topView); uiSound('tick'); haptic(6); }} title="Top view (T)" data-tour="top-view"
           className={clsx('dd-3d pointer-events-auto flex h-10 items-center gap-1.5 rounded-2xl px-3 font-display text-[13px] font-bold', engine.topView ? 'bg-amber-300 text-ink [--edge:#c98a00]' : 'bg-white/90 text-ink [--edge:rgba(0,0,0,.2)]')}>
           {engine.topView ? <Box size={16} /> : <MapIcon size={16} />}<span className="hidden min-[420px]:inline">{engine.topView ? '3D view' : 'Top view'}</span>
         </button>
@@ -491,10 +492,10 @@ function WalkOverlay({ touch, eye, setEye, onExit }: { touch: boolean; eye: stri
   return (
     <>
       <div className="absolute left-1/2 top-[calc(0.75rem+var(--dd-safe-top,0px))] z-30 flex w-[calc(100%-16px)] -translate-x-1/2 flex-wrap items-center justify-center gap-2">
-        <div className="dd-glass max-w-full overflow-x-auto rounded-2xl p-1"><Segmented size="sm" value={nearestEye(eye)} onChange={setEye} options={EYES} /></div>
-        {endless && <Btn size="sm" onClick={() => { engine.walk?.goHome(); haptic(8); }} title="Back to your diorama" aria-label="Home"><Home size={15} /><span className="hidden sm:inline">Home</span></Btn>}
+        <div className="dd-glass max-w-full overflow-x-auto rounded-2xl p-1" data-tour="walk-eyes"><Segmented size="sm" value={nearestEye(eye)} onChange={setEye} options={EYES} /></div>
+        {endless && <Btn size="sm" onClick={() => { engine.walk?.goHome(); haptic(8); learnSignal('roam-home'); }} title="Back to your diorama" aria-label="Home" data-tour="walk-home"><Home size={15} /><span className="hidden sm:inline">Home</span></Btn>}
         {endless && document.fullscreenEnabled && <Btn size="sm" onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.().catch(() => {}); }} title="Full screen" aria-label="Full screen"><Maximize size={15} /></Btn>}
-        <Btn size="sm" onClick={onExit} title="Leave (Esc)" aria-label="Leave"><LogOut size={15} /><span className="hidden sm:inline">Leave</span></Btn>
+        <Btn size="sm" onClick={onExit} title="Leave (Esc)" aria-label="Leave" data-tour="walk-leave"><LogOut size={15} /><span className="hidden sm:inline">Leave</span></Btn>
       </div>
       {endless && <Compass />}
       {!touch && (
@@ -505,7 +506,7 @@ function WalkOverlay({ touch, eye, setEye, onExit }: { touch: boolean; eye: stri
       {touch && (
         <>
           {/* left half: a joystick appears wherever your thumb lands */}
-          <div className="absolute bottom-0 left-0 top-[calc(4rem+var(--dd-safe-top,0px))] z-20 w-1/2 touch-none"
+          <div data-tour="walk-stick" className="absolute bottom-0 left-0 top-[calc(4rem+var(--dd-safe-top,0px))] z-20 w-1/2 touch-none"
             onPointerDown={(e) => { (e.target as HTMLElement).setPointerCapture(e.pointerId); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setStick(e.clientX - r.left, e.clientY - r.top, e.clientX - r.left, e.clientY - r.top, e.pointerId); haptic(6); }}
             onPointerMove={(e) => { if (joy && e.pointerId === joy.id) { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setStick(joy.cx, joy.cy, e.clientX - r.left, e.clientY - r.top, joy.id); } }}
             onPointerUp={endJoy} onPointerCancel={endJoy}>

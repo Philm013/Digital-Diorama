@@ -4,7 +4,7 @@ import { starGoals } from '../../game/ecology';
 import { FEATURES, needFor, nextStage, type Stage } from '../../game/unlocks';
 import { BIOME_BY_ID } from '../../biomes/templates';
 import { useProfile } from './useGame';
-import { ChevronDown, ChevronUp, Heart, Trophy, Lightbulb, CheckCircle2, Circle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Heart, Trophy, Lightbulb, CheckCircle2, Circle, GraduationCap } from 'lucide-react';
 import { levelOf, type Profile } from '../../game/progress';
 import type { GameState } from './useGame';
 import type { Quest } from '../../game/ecology';
@@ -43,7 +43,7 @@ export function LevelRing({ xp, size = 40, stroke = 4 }: { xp: number; size?: nu
 export function XpChip({ profile, onClick, compact }: { profile: Profile; onClick?: () => void; compact?: boolean }) {
   const L = levelOf(profile.xp);
   return (
-    <button onClick={onClick} className="dd-hudchip flex h-11 items-center gap-2 rounded-2xl pl-1 pr-3" title={`Level ${L.level} ${L.rank} — ${L.into}/${L.need} XP to the next level`} data-popover-anchor>
+    <button onClick={onClick} className="dd-hudchip flex h-11 items-center gap-2 rounded-2xl pl-1 pr-3" title={`Level ${L.level} ${L.rank} — ${L.into}/${L.need} XP to the next level`} data-popover-anchor data-tour="xp">
       <LevelRing xp={profile.xp} size={36} />
       {!compact && (
         <span className="flex flex-col items-start leading-none">
@@ -61,7 +61,7 @@ export function HealthChip({ game, compact }: { game: GameState; compact?: boole
   const h = game.health;
   return (
     <div className="relative">
-      <button onClick={() => setOpen((v) => !v)} className="dd-hudchip flex h-11 items-center gap-2 rounded-2xl px-2.5" title="Ecosystem health" data-popover-anchor>
+      <button onClick={() => setOpen((v) => !v)} className="dd-hudchip flex h-11 items-center gap-2 rounded-2xl px-2.5" title="Ecosystem health" data-popover-anchor data-tour="health">
         <span className="relative grid h-7 w-7 place-items-center rounded-full" style={{ background: h.color + '33' }}>
           <Heart size={16} fill={h.color} stroke={h.color} className={h.score >= 85 ? 'dd-beat' : ''} />
         </span>
@@ -71,7 +71,7 @@ export function HealthChip({ game, compact }: { game: GameState; compact?: boole
         </span>
       </button>
       <Popover open={open} onClose={() => setOpen(false)} className="w-[min(92vw,340px)]">
-        <div className="dd-card-dark rounded-3xl p-4 text-white">
+        <div className="dd-card-dark rounded-3xl p-4 text-white" data-tour="health-pop">
           <div className="flex items-center gap-3">
             <div className="grid h-14 w-14 place-items-center rounded-2xl" style={{ background: h.color + '2a', boxShadow: `inset 0 0 0 2px ${h.color}66` }}><Heart size={28} fill={h.color} stroke={h.color} /></div>
             <div>
@@ -108,7 +108,9 @@ export function Stars({ n, size = 14, className }: { n: number; size?: number; c
   );
 }
 
-function QuestRow({ q, compact }: { q: Quest; compact?: boolean }) {
+/** "Show me": starts the lesson for a quest (only offered for quests a lesson teaches) */
+export type QuestLearn = ((questId: string) => void) | undefined;
+function QuestRow({ q, compact, onLearn }: { q: Quest; compact?: boolean; onLearn?: QuestLearn }) {
   return (
     <div className={clsx('flex items-start gap-2.5 rounded-2xl px-2.5 py-2', q.done ? 'opacity-60' : 'bg-white/[0.06]')}>
       <span className="mt-0.5 text-lg leading-none">{q.emoji}</span>
@@ -118,6 +120,12 @@ function QuestRow({ q, compact }: { q: Quest; compact?: boolean }) {
           <span className="shrink-0 rounded-full bg-amber-300/20 px-1.5 text-[10.5px] font-bold text-amber-200">+{q.xp}</span>
         </div>
         {!q.done && !compact && <div className="mt-0.5 text-[12px] leading-snug text-white/60">{q.hint}</div>}
+        {!q.done && onLearn && (
+          <button type="button" onClick={() => onLearn(q.id)} data-tour={`quest-learn-${q.id}`}
+            className="mt-1 flex h-7 items-center gap-1 rounded-lg bg-amber-300/15 px-2 font-display text-[11.5px] font-bold text-amber-200 ring-1 ring-amber-300/30 transition hover:bg-amber-300/25 [@media(pointer:coarse)]:h-8">
+            <GraduationCap size={13} /> Show me how
+          </button>
+        )}
         {!q.done && q.need > 1 && (
           <div className="mt-1 flex items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#8f7bff] to-[#5ad1ff] transition-all duration-700" style={{ width: `${(q.cur / q.need) * 100}%` }} /></div>
@@ -131,13 +139,13 @@ function QuestRow({ q, compact }: { q: Quest; compact?: boolean }) {
 }
 
 /** compact floating quest tracker shown over the viewport */
-export function QuestTracker({ game, onOpen, mobile }: { game: GameState; onOpen: () => void; mobile?: boolean }) {
+export function QuestTracker({ game, onOpen, mobile, learnable }: { game: GameState; onOpen: () => void; mobile?: boolean; learnable?: (questId: string) => QuestLearn }) {
   const [open, setOpen] = useState(() => { try { return localStorage.getItem('dd-quests-open') !== '0'; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem('dd-quests-open', open ? '1' : '0'); } catch { /* ignore */ } }, [open]);
   const next = game.quests.filter((q) => !q.done).slice(0, mobile ? 1 : 3);
   if (!game.quests.length) return null;
   return (
-    <div className={clsx('dd-glass pointer-events-auto rounded-3xl text-white', mobile ? 'w-[min(78vw,320px)]' : 'w-[300px]')}>
+    <div className={clsx('dd-glass pointer-events-auto rounded-3xl text-white', mobile ? 'w-[min(78vw,320px)]' : 'w-[300px]')} data-tour="quest-tracker">
       <button className="flex w-full items-center gap-2 px-3.5 py-2.5" onClick={() => setOpen((v) => !v)}>
         <Trophy size={16} className="text-amber-300" />
         <span className="font-display text-[13px] font-bold uppercase tracking-wider">Quests</span>
@@ -149,7 +157,7 @@ export function QuestTracker({ game, onOpen, mobile }: { game: GameState; onOpen
       {open && (
         <div className="space-y-1.5 px-2 pb-2">
           <ExpeditionStrip game={game} />
-          {next.length === 0 ? <div className="px-2 pb-1 text-sm text-white/75">🎉 Every quest complete — superstar habitat!</div> : next.map((q) => <QuestRow key={q.id} q={q} compact={mobile} />)}
+          {next.length === 0 ? <div className="px-2 pb-1 text-sm text-white/75">🎉 Every quest complete — superstar habitat!</div> : next.map((q, i) => <QuestRow key={q.id} q={q} compact={mobile} onLearn={i === 0 ? learnable?.(q.id) : undefined} />)}
           <button onClick={onOpen} className="w-full rounded-2xl py-1.5 text-center font-display text-[12px] font-bold uppercase tracking-wider text-white/60 hover:bg-white/5 hover:text-white">All quests →</button>
         </div>
       )}
@@ -157,10 +165,10 @@ export function QuestTracker({ game, onOpen, mobile }: { game: GameState; onOpen
   );
 }
 
-export function QuestLog({ game }: { game: GameState }) {
+export function QuestLog({ game, learnable }: { game: GameState; learnable?: (questId: string) => QuestLearn }) {
   const nextStar = game.stars >= 3 ? null : game.stars === 2 ? game.quests.length : game.stars === 1 ? 10 : 5;
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-tour="quest-log">
       <div className="dd-card-dark flex items-center gap-4 rounded-3xl p-4 text-white">
         <div className="grid h-16 w-16 place-items-center rounded-2xl bg-amber-300/15 text-4xl">🏆</div>
         <div className="flex-1">
@@ -171,7 +179,7 @@ export function QuestLog({ game }: { game: GameState }) {
       </div>
       <ExpeditionStrip game={game} big />
       <div className="dd-card-dark grid gap-1.5 rounded-3xl p-2 sm:grid-cols-2">
-        {game.quests.map((q) => <QuestRow key={q.id} q={q} />)}
+        {game.quests.map((q) => <QuestRow key={q.id} q={q} onLearn={learnable?.(q.id)} />)}
       </div>
     </div>
   );

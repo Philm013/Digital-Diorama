@@ -4,6 +4,7 @@ import { BADGE_BY_ID, onProgress, type ProgressEvent } from '../../game/progress
 import { playSound, audio } from '../../code/sound';
 import { FEATURES, STAGES, type Stage } from '../../game/unlocks';
 import { BIOME_BY_ID } from '../../biomes/templates';
+import { FEATURE_LESSON, LESSON_BY_ID } from '../../learn/lessons';
 
 /* ---------------- confetti ---------------- */
 let fire: ((x: number, y: number, n?: number) => void) | null = null;
@@ -61,7 +62,7 @@ function ConfettiCanvas() {
 type Banner = { key: number; kind: 'discover' | 'quest' | 'badge' | 'level' | 'stars'; title: string; sub: string; emoji: string; color: string };
 type Floater = { key: number; text: string };
 
-export function Celebrations({ sound }: { sound: boolean }) {
+export function Celebrations({ sound, onLearn }: { sound: boolean; /** start a lesson (a newly unlocked tool's "Learn how") */ onLearn?: (lessonId: string) => void }) {
   const [queue, setQueue] = useState<Banner[]>([]);
   const [current, setCurrent] = useState<Banner | null>(null);
   const [floaters, setFloaters] = useState<Floater[]>([]);
@@ -118,7 +119,7 @@ export function Celebrations({ sound }: { sound: boolean }) {
       <div className="pointer-events-none fixed right-3 top-[calc(4rem+env(safe-area-inset-top))] z-[75] flex flex-col items-end gap-1 sm:right-5">
         {floaters.map((f) => <div key={f.key} className="dd-xp-floater rounded-full px-2.5 py-0.5 font-display text-sm font-bold">{f.text}</div>)}
       </div>
-      {opened && <Unlocked stage={opened} onClose={() => setOpened(null)} />}
+      {opened && <Unlocked stage={opened} onClose={() => setOpened(null)} onLearn={onLearn ? (id) => { setOpened(null); onLearn(id); } : undefined} />}
       {current && (
         <div className="pointer-events-none fixed inset-x-0 top-[calc(70px+env(safe-area-inset-top))] z-[78] flex justify-center px-3">
           <div key={current.key} onClick={() => setCurrent(null)} className={clsx('dd-banner pointer-events-auto flex max-w-[min(94vw,460px)] cursor-pointer items-center gap-3 rounded-[22px] py-2.5 pl-2.5 pr-5', current.kind === 'badge' || current.kind === 'level' ? 'dd-banner-big' : '')} style={{ ['--b' as string]: current.color }}>
@@ -134,8 +135,8 @@ export function Celebrations({ sound }: { sound: boolean }) {
   );
 }
 
-/** the next step of the ranger path, opened by a completed expedition */
-function Unlocked({ stage, onClose }: { stage: Stage; onClose: () => void }) {
+/** the next step of the ranger path, opened by a completed expedition (new tools offer their lesson) */
+function Unlocked({ stage, onClose, onLearn }: { stage: Stage; onClose: () => void; onLearn?: (lessonId: string) => void }) {
   const habitats = stage.habitats.map((h) => BIOME_BY_ID[h]).filter(Boolean);
   return (
     <div className="fixed inset-0 z-[81] grid place-items-center bg-black/50 p-3 backdrop-blur-[2px]" onClick={onClose} role="dialog" aria-modal="true" aria-label="New things unlocked">
@@ -152,12 +153,18 @@ function Unlocked({ stage, onClose }: { stage: Stage; onClose: () => void }) {
               <div className="min-w-0"><div className="font-display font-semibold">{b.name}</div><div className="truncate text-[12px] text-white/60">New habitat · {b.tagline}</div></div>
             </div>
           ))}
-          {stage.features.map((f) => (
-            <div key={f} className="flex items-center gap-3 rounded-2xl bg-white/[0.07] px-3 py-2 ring-1 ring-white/10">
-              <span className="text-2xl">{FEATURES[f].emoji}</span>
-              <div className="min-w-0"><div className="font-display font-semibold">{FEATURES[f].name}</div><div className="text-[12px] leading-snug text-white/60">{FEATURES[f].what}</div></div>
-            </div>
-          ))}
+          {stage.features.map((f) => {
+            const lesson = LESSON_BY_ID[FEATURE_LESSON[f] ?? ''];
+            return (
+              <div key={f} className="flex items-center gap-3 rounded-2xl bg-white/[0.07] px-3 py-2 ring-1 ring-white/10">
+                <span className="text-2xl">{FEATURES[f].emoji}</span>
+                <div className="min-w-0 flex-1"><div className="font-display font-semibold">{FEATURES[f].name}</div><div className="text-[12px] leading-snug text-white/60">{FEATURES[f].what}</div></div>
+                {lesson && onLearn && (
+                  <button type="button" onClick={() => onLearn(lesson.id)} className="shrink-0 rounded-xl bg-amber-300/20 px-2.5 py-1.5 font-display text-[12.5px] font-bold text-amber-200 ring-1 ring-amber-300/40 transition hover:bg-amber-300/30" title={`Lesson: ${lesson.title}`}>🎓 Learn how</button>
+                )}
+              </div>
+            );
+          })}
         </div>
         </div>
         <button type="button" onClick={onClose} autoFocus className="dd-cta mt-4 h-12 w-full shrink-0 rounded-2xl font-display text-lg font-bold text-white">Awesome!</button>
