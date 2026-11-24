@@ -398,7 +398,8 @@ function HowItWorks({ compact }: { compact?: boolean }) {
   );
 }
 
-/** Ranger training on the home screen: how far through the lessons, and the next one */
+/** Ranger training on the home screen: how far through the lessons, and the next one. `compact` (short phone
+ * screens) has a smaller badge and no progress bar or arrow, and keeps the lesson count. */
 function TrainingCard({ onOpen, compact }: { onOpen: () => void; compact?: boolean }) {
   const learn = useLearn();
   const profile = useProfile();
@@ -410,11 +411,11 @@ function TrainingCard({ onOpen, compact }: { onOpen: () => void; compact?: boole
     <button type="button" onClick={() => { uiSound('open'); onOpen(); }} className={clsx('dd-card-dark flex w-full min-w-0 items-center gap-3 rounded-[20px] pr-3 text-left text-white transition active:scale-[0.99]', compact ? 'p-2' : 'p-2.5')} aria-label="Ranger training: lessons and help">
       <span className={clsx('grid shrink-0 place-items-center bg-gradient-to-b from-[#ffe680] to-[#ffbf2e] text-[#3d2a00] shadow-[0_3px_0_#c98a00]', compact ? 'h-9 w-9 rounded-[12px]' : 'h-11 w-11 rounded-[14px]')}><GraduationCap size={compact ? 20 : 24} /></span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-display text-[11px] font-bold uppercase tracking-[0.14em] text-amber-300">Ranger training · {done}/{LESSONS.length}{compact ? '' : ' lessons'}</span>
+        <span className={clsx('block truncate font-display text-[11px] font-bold uppercase text-amber-300', compact ? 'tracking-[0.06em]' : 'tracking-[0.14em]')}>Ranger training · {done}/{LESSONS.length} lessons</span>
         <span className="block truncate font-display text-[15px] font-bold leading-tight">{next ? `${resumeLesson ? 'Carry on' : done ? 'Next' : 'Start'}: ${next.emoji} ${next.title}` : '🎉 Every open lesson done'}</span>
         {!compact && <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-white/15"><span className="block h-full rounded-full bg-gradient-to-r from-[#ffe066] to-[#ffb020] transition-all duration-700" style={{ width: `${(done / LESSONS.length) * 100}%` }} /></span>}
       </span>
-      <ChevronRight size={20} className="shrink-0 text-white/50" />
+      {!compact && <ChevronRight size={20} className="shrink-0 text-white/50" />}
     </button>
   );
 }
