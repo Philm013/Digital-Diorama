@@ -15,10 +15,14 @@ import { AssetThumb } from './AssetThumb';
 import { discover, isDiscovered, awardBadge } from '../game/progress';
 import { flag, quests, starsFor } from '../game/ecology';
 import { haptic, uiSound } from './feedback';
+import { isUnlocked, showLocked, type FeatureId } from '../game/unlocks';
+import { useProfile } from './game/useGame';
+import { LockBadge } from './game/Locked';
 
 export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; landscape?: boolean; playing?: boolean; onJournal?: () => void }) {
   const engine = useEngine();
   useEngineVersion();
+  useProfile();
   const [card, setCard] = useState<string | null>(null);
   const [web, setWeb] = useState(false);
   const [guide, setGuide] = useState(false);
@@ -61,19 +65,19 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
   );
   if (tour) return <Tour onExit={() => setTour(false)} />;
   const actor = engine.getActor(card);
-  const tools: { key: string; icon: React.ReactNode; label: string; on?: boolean; fn: () => void; sep?: boolean }[] = [
+  const tools: { key: string; icon: React.ReactNode; label: string; on?: boolean; fn: () => void; sep?: boolean; needs?: FeatureId }[] = [
     { key: 'labels', icon: <Tag size={20} />, label: 'Labels', on: engine.env.labels, fn: () => engine.setEnv({ labels: !engine.env.labels }, false) },
     { key: 'time', icon: <Clock size={20} />, label: timeLabel(engine.env.time), on: pop === 'time', fn: () => setPop(pop === 'time' ? null : 'time') },
-    { key: 'weather', icon: <CloudSun size={20} />, label: 'Weather', on: pop === 'weather', fn: () => setPop(pop === 'weather' ? null : 'weather'), sep: true },
+    { key: 'weather', icon: <CloudSun size={20} />, label: 'Weather', on: pop === 'weather', fn: () => setPop(pop === 'weather' ? null : 'weather'), sep: true, needs: 'weather' },
     { key: 'web', icon: <Network size={20} />, label: 'Food web', fn: () => setWeb(true) },
     { key: 'guide', icon: <BookOpen size={20} />, label: 'Guide', fn: () => setGuide(true) },
     // on phones the Journal is in the tab bar
     ...(wide || landscape ? [{ key: 'journal', icon: <Library size={20} />, label: 'Journal', fn: () => onJournal?.() }] : []),
-    { key: 'tour', icon: <Presentation size={20} />, label: 'Tour', fn: () => { audio(); engine.select(null); setTour(true); } },
+    { key: 'tour', icon: <Presentation size={20} />, label: 'Tour', fn: () => { audio(); engine.select(null); setTour(true); }, needs: 'tour' },
     { key: 'walk', icon: <Footprints size={20} />, label: 'Walk in', fn: () => walkIn(1.6) },
-    ...(engine.terrain ? [{ key: 'roam', icon: <Earth size={20} />, label: 'Roam', fn: roam }] : []),
-    ...(xrSupport.ar ? [{ key: 'ar', icon: <Smartphone size={20} />, label: 'AR table', fn: () => startXr('ar') }] : []),
-    ...(xrSupport.vr ? [{ key: 'vr', icon: <Glasses size={20} />, label: 'VR', fn: () => startXr('vr') }] : []),
+    ...(engine.terrain ? [{ key: 'roam', icon: <Earth size={20} />, label: 'Roam', fn: roam, needs: 'roam' as const }] : []),
+    ...(xrSupport.ar ? [{ key: 'ar', icon: <Smartphone size={20} />, label: 'AR table', fn: () => startXr('ar'), needs: 'xr' as const }] : []),
+    ...(xrSupport.vr ? [{ key: 'vr', icon: <Glasses size={20} />, label: 'VR', fn: () => startXr('vr'), needs: 'xr' as const }] : []),
     { key: 'home', icon: <Maximize2 size={20} />, label: 'Overview', fn: () => { engine.follow(null); engine.frameCamera(); } },
   ];
   return (
@@ -84,8 +88,11 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
           <div className="dd-hotbar dd-scroll-x pointer-events-auto relative flex max-w-full items-center gap-1 overflow-x-auto rounded-[22px] p-1.5">
             {tools.map((t) => (
               <span key={t.key} className="flex shrink-0 items-center gap-1">
-                <button onClick={() => { uiSound('tick'); haptic(6); t.fn(); }} className={clsx('dd-hotkey flex h-[54px] min-w-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl px-2 font-display text-[11px] font-semibold transition', t.on ? 'on' : 'text-white/85')}>
+                <button onClick={() => { if (t.needs && !isUnlocked(t.needs)) { setPop(null); showLocked(t.needs); return; } uiSound('tick'); haptic(6); t.fn(); }}
+                  className={clsx('dd-hotkey relative flex h-[54px] min-w-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl px-2 font-display text-[11px] font-semibold transition', t.on ? 'on' : 'text-white/85', t.needs && !isUnlocked(t.needs) && 'opacity-55')}
+                  aria-label={t.needs && !isUnlocked(t.needs) ? `${t.label} (locked)` : undefined}>
                   {t.icon}<span className="whitespace-nowrap">{t.label}</span>
+                  {t.needs && !isUnlocked(t.needs) && <LockBadge className="absolute right-1 top-1" />}
                 </button>
                 {t.sep && <span className="mx-0.5 h-8 w-px bg-white/15" />}
               </span>
@@ -127,7 +134,9 @@ function WeatherPop() {
   return (
     <div className="space-y-3">
       <Segmented value={engine.env.weather} onChange={(w) => engine.setEnv({ weather: w }, false)} options={W} />
-      <Segmented size="sm" value={engine.env.season} onChange={(s) => engine.setEnv({ season: s }, false)} options={[{ value: 'spring', label: '🌱' }, { value: 'summer', label: '☀️' }, { value: 'autumn', label: '🍂' }, { value: 'winter', label: '❄️' }]} />
+      {isUnlocked('seasons')
+        ? <Segmented size="sm" value={engine.env.season} onChange={(s) => engine.setEnv({ season: s }, false)} options={[{ value: 'spring', label: '🌱' }, { value: 'summer', label: '☀️' }, { value: 'autumn', label: '🍂' }, { value: 'winter', label: '❄️' }]} />
+        : <button type="button" onClick={() => showLocked('seasons')} className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-black/[0.05] font-display text-[13px] font-semibold text-ink/55"><LockBadge /> Seasons unlock later on your ranger path</button>}
       <Slider label="Wind" value={engine.env.wind} min={0} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => engine.setEnv({ wind: v }, false)} />
     </div>
   );

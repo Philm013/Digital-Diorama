@@ -24,7 +24,12 @@ import { Journal } from './game/Journal';
 import { useGame, useProfile } from './game/useGame';
 import { awardBadge } from '../game/progress';
 import { flag } from '../game/ecology';
+import { isUnlocked, showLocked } from '../game/unlocks';
+import { LockedNotice } from './game/Locked';
 import { haptic, uiSound, setUiSound } from './feedback';
+
+// the engine carries on a habitat's land (resizing, roaming) from its biome's recipe
+Engine.recipeFor = (b) => BIOME_BY_ID[b]?.terrain;
 
 export interface Toast { id: number; text: string; kind: 'info' | 'error' | 'success' }
 interface MenuAction { icon: LucideIcon; label: string; hint?: string; run: () => void }
@@ -118,6 +123,8 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
 
   const setMode = useCallback((m: Mode) => {
     if (!engine) return;
+    // coding opens further along the ranger path
+    if (m === 'code' && !isUnlocked('code')) { showLocked('code'); return; }
     if (engine.walk?.active) engine.walk.exit();
     engine.setMode(m);
     setModeState(m);
@@ -235,6 +242,11 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
 
   const biome = BIOME_BY_ID[doc.biome];
   const ctx = useMemo(() => api, [api]);
+  const codeLocked = !isUnlocked('code', profile);
+  // (Play runs scripts: until coding is unlocked it only shows for dioramas that came with some)
+  const hasScripts = !!engine && (!!engine.doc?.worldScripts || engine.actorList.some((a) => !!a.doc.scripts));
+  const modeTabs = useMemo(() => MODE_TABS.map((t) => (t.id === 'code' ? { ...t, locked: codeLocked } : t)), [codeLocked]);
+  const phoneTabs = useMemo(() => PHONE_TABS.map((t) => (t.id === 'code' ? { ...t, locked: codeLocked } : t)), [codeLocked]);
   const [sheetIdx, setSheetIdx] = useState(1);
   const phonePanel = !wide && (mode === 'build' || mode === 'code');
   const selected = engine?.getActor(engine.selectedId);
@@ -277,16 +289,16 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
             </button>
           </div>
         </div>
-        {!phone && <TopTabs tabs={MODE_TABS} active={mode} onSelect={setMode} compact={landscape} />}
+        {!phone && <TopTabs tabs={modeTabs} active={mode} onSelect={setMode} compact={landscape} />}
         {!phone && <div className="flex-1" />}
         {engine && mode === 'build' && wide && <UndoRedo engine={engine} />}
         {engine && !loading && <HealthChip game={game} compact={!wide} />}
         {/* on phones the level is shown in the Journal instead, leaving room for the title */}
         {!phone && <XpChip profile={profile} compact={!wide} onClick={() => setJournal(true)} />}
-        <button onClick={togglePlay} className={clsx('dd-3d flex h-11 min-w-[48px] shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3.5 font-display text-[15px] font-bold text-white', playing ? 'bg-[#e8453c] [--edge:#a5241e]' : 'bg-[#3bb34a] [--edge:#23802f]')} title={playing ? 'Stop and reset (Esc)' : 'Run all code'}>
+        {(!codeLocked || playing || hasScripts) && <button onClick={togglePlay} className={clsx('dd-3d flex h-11 min-w-[48px] shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3.5 font-display text-[15px] font-bold text-white', playing ? 'bg-[#e8453c] [--edge:#a5241e]' : 'bg-[#3bb34a] [--edge:#23802f]')} title={playing ? 'Stop and reset (Esc)' : 'Run all code'}>
           {playing ? <Square size={16} fill="currentColor" /> : <Play size={17} fill="currentColor" />}
           <span className="hidden sm:inline">{playing ? 'Stop' : 'Play'}</span>
-        </button>
+        </button>}
         <div className="relative">
           <IconBtn label="More" onClick={() => setMenu((v) => !v)} className="text-white hover:bg-white/10" aria-expanded={menu}><MoreHorizontal size={21} /></IconBtn>
           {menu && wide && engine && (
@@ -341,14 +353,16 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
 
       {/* ---------------- phone tab bar ---------------- */}
       {phone && !immersive && (
-        <TabBar label="Modes" tabs={PHONE_TABS} active={mode} onSelect={(id) => {
+        <TabBar label="Modes" tabs={phoneTabs} active={mode} onSelect={(id) => {
           if (id === 'journal') { uiSound('open'); setJournal(true); return; }
+          if (id === 'code' && codeLocked) { showLocked('code'); return; }
           setMode(id);
           if (id !== 'explore') setSheetIdx(1);
         }} />
       )}
 
       <Celebrations sound={settings.sound} />
+      <LockedNotice />
 
       {/* ---------------- toasts ---------------- */}
       <div className="pointer-events-none fixed left-1/2 top-[calc(72px+env(safe-area-inset-top))] z-50 flex w-[min(92vw,420px)] -translate-x-1/2 flex-col gap-2">
@@ -357,7 +371,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         ))}
       </div>
 
-      {settings.tips && !loading && <Briefing biome={biome?.name ?? 'diorama'} onHelp={() => setHelp(true)} onDone={() => { const s = { ...settings, tips: false }; setSettings(s); saveSettings(s); uiSound('pop'); }} />}
+      {settings.tips && !loading && <Briefing biome={biome?.name ?? 'diorama'} model={doc.kind === 'model'} onHelp={() => setHelp(true)} onDone={() => { const s = { ...settings, tips: false }; setSettings(s); saveSettings(s); uiSound('pop'); }} />}
       {/* phones: the More menu is a sheet of big buttons from the bottom */}
       <Modal open={menu && !wide && !!engine} onClose={() => setMenu(false)} title="More">
         <div className="grid grid-cols-3 gap-2 pb-1 sm:grid-cols-5">
@@ -449,12 +463,14 @@ function LoadingScreen({ biome, loading }: { biome?: { emoji: string; name: stri
   );
 }
 
-function Briefing({ biome, onHelp, onDone }: { biome: string; onHelp: () => void; onDone: () => void }) {
+function Briefing({ biome, model, onHelp, onDone }: { biome: string; model?: boolean; onHelp: () => void; onDone: () => void }) {
   const steps: [string, string, string][] = [
+    ['🔨', 'Build', model ? 'This finished example shows a healthy habitat. Look closely — then build your own on an expedition.' : 'Your box starts with bare land. Add plants, animals and decomposers from the inventory and shape the land.'],
     ['🧭', 'Explore', 'Drag to look around. Tap any living thing to discover it and add it to your field journal.'],
-    ['🔨', 'Build', 'Add species from the inventory and sculpt the land. Keep the ecosystem-health heart green!'],
-    ['🧩', 'Code', 'Snap blocks together, then press ▶ Play to bring your habitat to life.'],
-    ['🏆', 'Quests', 'Complete quests to earn stars, XP and badges.'],
+    isUnlocked('code')
+      ? ['🧩', 'Code', 'Snap blocks together, then press ▶ Play to bring your habitat to life.']
+      : ['💚', 'Keep it healthy', 'The heart in the top bar scores your ecosystem. Every animal needs something to eat!'],
+    ['🏆', 'Quests', 'Finish 10 quests (⭐⭐) to complete the expedition — and unlock new habitats and tools.'],
   ];
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-3 backdrop-blur-[2px]">

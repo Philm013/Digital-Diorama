@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { BADGE_BY_ID, onProgress, type ProgressEvent } from '../../game/progress';
 import { playSound, audio } from '../../code/sound';
+import { FEATURES, STAGES, type Stage } from '../../game/unlocks';
+import { BIOME_BY_ID } from '../../biomes/templates';
 
 /* ---------------- confetti ---------------- */
 let fire: ((x: number, y: number, n?: number) => void) | null = null;
@@ -58,6 +60,8 @@ export function Celebrations({ sound }: { sound: boolean }) {
   const [queue, setQueue] = useState<Banner[]>([]);
   const [current, setCurrent] = useState<Banner | null>(null);
   const [floaters, setFloaters] = useState<Floater[]>([]);
+  // a completed expedition opens the next step of the ranger path: shown until dismissed
+  const [opened, setOpened] = useState<Stage | null>(null);
   const soundRef = useRef(sound);
   soundRef.current = sound;
   useEffect(() => onProgress((e: ProgressEvent) => {
@@ -77,6 +81,14 @@ export function Celebrations({ sound }: { sound: boolean }) {
     if (e.type === 'quest') b = { key, kind: 'quest', title: 'Quest complete!', sub: `${e.title}  ·  +${e.xp} XP`, emoji: '✅', color: '#7c5cff' };
     if (e.type === 'badge') { const d = BADGE_BY_ID[e.id]; b = { key, kind: 'badge', title: 'Badge unlocked!', sub: `${d.name} — ${d.how}`, emoji: d.emoji, color: d.color }; }
     if (e.type === 'level') b = { key, kind: 'level', title: `Level ${e.level}!`, sub: `You are now a ${e.rank}`, emoji: '🎉', color: '#e0a800' };
+    if (e.type === 'complete') {
+      const st = e.stage !== null ? STAGES[e.stage] : null;
+      if (st) {
+        setTimeout(() => { setOpened(st); confetti(innerWidth / 2, innerHeight * 0.3, 200); if (soundRef.current) { audio(); playSound('yay'); } }, 2600);
+        return;
+      }
+      b = { key, kind: 'badge', title: 'Expedition complete!', sub: `${BIOME_BY_ID[e.biome]?.name ?? 'Diorama'} · +100 XP`, emoji: '🧭', color: '#2fae4b' };
+    }
     if (e.type === 'stars') b = { key, kind: 'stars', title: `${'★'.repeat(e.stars)}${'☆'.repeat(3 - e.stars)}`, sub: `Your diorama earned ${e.stars} star${e.stars > 1 ? 's' : ''}!`, emoji: '🏆', color: '#e0a800' };
     if (b) setQueue((q) => [...q, b!]);
   }), []);
@@ -101,6 +113,7 @@ export function Celebrations({ sound }: { sound: boolean }) {
       <div className="pointer-events-none fixed right-3 top-[calc(4rem+env(safe-area-inset-top))] z-[75] flex flex-col items-end gap-1 sm:right-5">
         {floaters.map((f) => <div key={f.key} className="dd-xp-floater rounded-full px-2.5 py-0.5 font-display text-sm font-bold">{f.text}</div>)}
       </div>
+      {opened && <Unlocked stage={opened} onClose={() => setOpened(null)} />}
       {current && (
         <div className="pointer-events-none fixed inset-x-0 top-[calc(70px+env(safe-area-inset-top))] z-[78] flex justify-center px-3">
           <div key={current.key} onClick={() => setCurrent(null)} className={clsx('dd-banner pointer-events-auto flex max-w-[min(94vw,460px)] cursor-pointer items-center gap-3 rounded-[22px] py-2.5 pl-2.5 pr-5', current.kind === 'badge' || current.kind === 'level' ? 'dd-banner-big' : '')} style={{ ['--b' as string]: current.color }}>
@@ -113,5 +126,37 @@ export function Celebrations({ sound }: { sound: boolean }) {
         </div>
       )}
     </>
+  );
+}
+
+/** the next step of the ranger path, opened by a completed expedition */
+function Unlocked({ stage, onClose }: { stage: Stage; onClose: () => void }) {
+  const habitats = stage.habitats.map((h) => BIOME_BY_ID[h]).filter(Boolean);
+  return (
+    <div className="fixed inset-0 z-[81] grid place-items-center bg-black/50 p-3 backdrop-blur-[2px]" onClick={onClose} role="dialog" aria-modal="true" aria-label="New things unlocked">
+      <div className="dd-card-dark dd-pop flex max-h-[calc(100dvh-32px)] w-[min(94vw,480px)] flex-col rounded-[30px] p-5 text-center text-white" onClick={(e) => e.stopPropagation()}>
+        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">
+        <div className="font-display text-[12px] font-bold uppercase tracking-[0.18em] text-amber-300">Expedition complete!</div>
+        <div className="dd-bob mx-auto mt-3 grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-[26px] bg-white/10 text-5xl">{stage.emoji}</div>
+        <div className="mt-2 font-display text-2xl font-bold">You’re now {/^[AEIOU]/.test(stage.rank) ? 'an' : 'a'} {stage.rank}</div>
+        <p className="mt-1 text-[13.5px] text-white/70">Here’s what you unlocked:</p>
+        <div className="mt-3 grid gap-1.5 text-left">
+          {habitats.map((b) => (
+            <div key={b.id} className="flex items-center gap-3 rounded-2xl bg-white/[0.07] px-3 py-2 ring-1 ring-white/10">
+              <span className="text-2xl">{b.emoji}</span>
+              <div className="min-w-0"><div className="font-display font-semibold">{b.name}</div><div className="truncate text-[12px] text-white/60">New habitat · {b.tagline}</div></div>
+            </div>
+          ))}
+          {stage.features.map((f) => (
+            <div key={f} className="flex items-center gap-3 rounded-2xl bg-white/[0.07] px-3 py-2 ring-1 ring-white/10">
+              <span className="text-2xl">{FEATURES[f].emoji}</span>
+              <div className="min-w-0"><div className="font-display font-semibold">{FEATURES[f].name}</div><div className="text-[12px] leading-snug text-white/60">{FEATURES[f].what}</div></div>
+            </div>
+          ))}
+        </div>
+        </div>
+        <button type="button" onClick={onClose} autoFocus className="dd-cta mt-4 h-12 w-full shrink-0 rounded-2xl font-display text-lg font-bold text-white">Awesome!</button>
+      </div>
+    </div>
   );
 }

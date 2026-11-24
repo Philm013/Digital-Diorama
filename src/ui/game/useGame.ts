@@ -4,7 +4,11 @@ import { ecosystemHealth, quests, starsFor, flag, type Health, type Quest } from
 import { awardBadge, noteBiome, questDone, recordStars, getProfile, subscribeProfile, profileVersion } from '../../game/progress';
 import { roleOf } from '../../assets/foodweb';
 
-export interface GameState { health: Health; quests: Quest[]; stars: number; done: number }
+export interface GameState {
+  health: Health; quests: Quest[]; stars: number; done: number;
+  /** this diorama on the ranger path: whether it can complete an expedition, and whether it has */
+  expedition: { counts: boolean; complete: boolean };
+}
 
 /** re-render on profile changes (XP, discoveries, badges) */
 export function useProfile() {
@@ -21,10 +25,11 @@ export function useProfile() {
 export function useGame(engine: Engine | undefined, version: number, loaded: boolean): GameState {
   const profileV = useSyncExternalStore(subscribeProfile, profileVersion);
   const state = useMemo<GameState>(() => {
-    if (!loaded || !engine?.doc) return { health: ecosystemHealthEmpty(), quests: [], stars: 0, done: 0 };
+    if (!loaded || !engine?.doc) return { health: ecosystemHealthEmpty(), quests: [], stars: 0, done: 0, expedition: { counts: false, complete: false } };
     const health = ecosystemHealth(engine);
     const list = quests(engine, health);
-    return { health, quests: list, stars: starsFor(list), done: list.filter((q) => q.done).length };
+    const counts = engine.doc.kind !== 'model';
+    return { health, quests: list, stars: starsFor(list), done: list.filter((q) => q.done).length, expedition: { counts, complete: counts && getProfile().completed.includes(engine.doc.id) } };
   }, [engine, version, loaded, profileV]); // eslint-disable-line react-hooks/exhaustive-deps
   const baselined = useRef(false);
   useEffect(() => {
@@ -40,14 +45,14 @@ export function useGame(engine: Engine | undefined, version: number, loaded: boo
         for (const q of state.quests) if (q.done && !doneIds.includes(q.id)) doneIds.push(q.id);
         engine.doc.progress.flags = [];
         engine.doc.progress.given = Object.entries(ecoBadges(engine, state.health)).filter(([, met]) => met).map(([id]) => id);
-        recordStars(engine.doc.id, engine.doc.biome, state.stars, true);
+        recordStars(engine.doc.id, engine.doc.biome, state.stars, true, engine.doc.kind !== 'model');
         return;
       }
     }
     let any = false;
     for (const q of state.quests) if (q.done && !doneIds.includes(q.id)) { doneIds.push(q.id); questDone(q.id, q.title, q.xp); any = true; }
     if (any) engine.changed();
-    recordStars(engine.doc.id, engine.doc.biome, state.stars);
+    recordStars(engine.doc.id, engine.doc.biome, state.stars, false, engine.doc.kind !== 'model');
     // ecosystem badges are earned by the student's own changes: a condition the template already
     // met only counts once it has been lost and then reached again
     const given = (p.given ??= []);

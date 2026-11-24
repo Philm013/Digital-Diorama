@@ -1,4 +1,4 @@
-import { generateTerrain } from '../engine/terrainGen';
+import { generateTerrain, scaleRecipe } from '../engine/terrainGen';
 import { cellFor } from '../engine/sizes';
 import { DEFAULT_ENV, type ActorDoc, type DioramaDoc, type Quality } from '../engine/types';
 import { rng, uid, clamp } from '../engine/util';
@@ -7,7 +7,24 @@ import type { BiomeTemplate } from './types';
 import { BIOME_BY_ID } from './templates';
 import { scriptsFor } from '../code/recipes';
 
-export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: string; author?: string; size?: { width: number; depth: number } } = {}): DioramaDoc {
+/** the size a habitat's box is made at when none is chosen */
+export const DEFAULT_SIZE = { width: 40, depth: 28 };
+
+/** habitat tiles (reef, kelp, tide pools) take their size from their own parameters */
+function sizedTileParams(asset: string, p: Record<string, unknown>, size?: { width: number; depth: number }): Record<string, unknown> {
+  if (!size) return { ...p };
+  if ('size' in p) return { ...p, size: clamp(Math.round((size.width + size.depth) / 2 / 2) * 2, 16, 60) };
+  if ('width' in p) return { ...p, width: clamp(Math.round(size.width * 0.75), 12, 60), depth: clamp(Math.round(size.depth * 0.75), 10, 40) };
+  void asset;
+  return { ...p };
+}
+
+/**
+ * A new diorama of a habitat. By default it is a *starter*: the habitat's land, sky and climate,
+ * ready for the student to fill with living things. `model: true` makes the finished example
+ * diorama instead, with all its species, labels, notes and scripts.
+ */
+export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: string; author?: string; size?: { width: number; depth: number }; model?: boolean } = {}): DioramaDoc {
   const now = Date.now();
   const R = rng((biome.terrain?.seed ?? 5) * 101 + 7);
   let groundAt = (_x: number, _z: number) => 0;
@@ -16,20 +33,22 @@ export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: s
   let base: DioramaDoc['base'];
   if (biome.terrain) {
     // a chosen size (blank dioramas) also picks a grid fine enough to sculpt, coarse enough to stay smooth
-    const sized = opts.size ? { width: opts.size.width, depth: opts.size.depth, cell: cellFor(opts.size.width, opts.size.depth) } : {};
-    const t = generateTerrain({ ...biome.terrain, ...sized });
+    // the habitat's rivers, ponds and hills are fitted to the chosen box; the grid is fine
+    // enough to sculpt and coarse enough to stay smooth
+    const size = opts.size ?? DEFAULT_SIZE;
+    const t = generateTerrain({ ...scaleRecipe(biome.terrain, size.width, size.depth), cell: cellFor(size.width, size.depth) });
     groundAt = (x, z) => t.heightAt(x, z);
     wetAt = (x, z) => t.isUnderwater(x, z, 0.05);
     bounds = { minX: -t.width / 2, maxX: t.width / 2, minZ: -t.depth / 2, maxZ: t.depth / 2 };
     base = { kind: 'terrain', terrain: t.toDoc() };
     t.dispose();
   } else {
-    const p = biome.base!.params;
+    const p = sizedTileParams(biome.base!.asset, biome.base!.params, opts.size);
     const w = Number(p.size ?? p.width ?? 24), d = Number(p.size ?? p.depth ?? 24);
     bounds = { minX: -w / 2, maxX: w / 2, minZ: -d / 2, maxZ: d / 2 };
     const under = !!biome.env.underwater;
     wetAt = () => under;
-    base = { kind: 'asset', asset: biome.base!.asset, params: { ...p } };
+    base = { kind: 'asset', asset: biome.base!.asset, params: p };
   }
   const placed: { x: number; z: number; r: number }[] = [];
   const actors: ActorDoc[] = [];
@@ -40,7 +59,8 @@ export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: s
     names.set(n, c);
     return c === 1 ? n : `${n} ${c}`;
   };
-  for (const pl of biome.placements) {
+  // starters begin empty: the student brings the habitat to life
+  for (const pl of opts.model ? biome.placements : []) {
     if (pl.skipOnLow && quality === 'low') continue;
     const def = getDef(pl.asset);
     if (!def) { console.warn('Unknown asset in template', pl.asset); continue; }
@@ -87,14 +107,14 @@ export function newDoc(biome: BiomeTemplate, quality: Quality, opts: { title?: s
   }
   return {
     format: 'digital-diorama', version: 1, id: uid('d'),
-    title: opts.title ?? biome.name, author: opts.author ?? '', description: biome.tagline,
-    biome: biome.id, created: now, updated: now, base,
+    title: opts.title ?? biome.name, author: opts.author ?? '', description: opts.model ? biome.tagline : `A new ${biome.name.toLowerCase()} diorama.`,
+    biome: biome.id, kind: opts.model ? 'model' : 'starter', created: now, updated: now, base,
     env: { ...DEFAULT_ENV, ...biome.env, frame: biome.env.frame ?? 'shoebox' },
     actors,
-    worldScripts: biome.worldRecipes?.length ? scriptsFor(biome.worldRecipes, opts.title ?? biome.name) : undefined,
+    worldScripts: opts.model && biome.worldRecipes?.length ? scriptsFor(biome.worldRecipes, opts.title ?? biome.name) : undefined,
   };
 }
 
-export function newDocById(id: string, quality: Quality, opts?: { title?: string; author?: string }) {
+export function newDocById(id: string, quality: Quality, opts?: { title?: string; author?: string; model?: boolean; size?: { width: number; depth: number } }) {
   return newDoc(BIOME_BY_ID[id] ?? BIOME_BY_ID.blank, quality, opts);
 }

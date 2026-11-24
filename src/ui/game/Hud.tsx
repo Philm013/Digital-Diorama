@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { clsx } from 'clsx';
+import { starGoals } from '../../game/ecology';
+import { FEATURES, needFor, nextStage, type Stage } from '../../game/unlocks';
+import { BIOME_BY_ID } from '../../biomes/templates';
+import { useProfile } from './useGame';
 import { ChevronDown, ChevronUp, Heart, Trophy, Lightbulb, CheckCircle2, Circle } from 'lucide-react';
 import { levelOf, type Profile } from '../../game/progress';
 import type { GameState } from './useGame';
@@ -144,6 +148,7 @@ export function QuestTracker({ game, onOpen, mobile }: { game: GameState; onOpen
       </button>
       {open && (
         <div className="space-y-1.5 px-2 pb-2">
+          <ExpeditionStrip game={game} />
           {next.length === 0 ? <div className="px-2 pb-1 text-sm text-white/75">🎉 Every quest complete — superstar habitat!</div> : next.map((q) => <QuestRow key={q.id} q={q} compact={mobile} />)}
           <button onClick={onOpen} className="w-full rounded-2xl py-1.5 text-center font-display text-[12px] font-bold uppercase tracking-wider text-white/60 hover:bg-white/5 hover:text-white">All quests →</button>
         </div>
@@ -164,9 +169,43 @@ export function QuestLog({ game }: { game: GameState }) {
           <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#ffe066] to-[#ffb020] transition-all" style={{ width: `${(game.done / Math.max(1, game.quests.length)) * 100}%` }} /></div>
         </div>
       </div>
+      <ExpeditionStrip game={game} big />
       <div className="dd-card-dark grid gap-1.5 rounded-3xl p-2 sm:grid-cols-2">
         {game.quests.map((q) => <QuestRow key={q.id} q={q} />)}
       </div>
     </div>
   );
+}
+
+/** where this diorama stands on the ranger path: quests to go until the expedition is complete, and what that unlocks */
+export function ExpeditionStrip({ game, big }: { game: GameState; big?: boolean }) {
+  const profile = useProfile();
+  if (!game.quests.length) return null;
+  if (!game.expedition.counts) {
+    return <div className={clsx('rounded-2xl bg-white/[0.06] px-3 py-2 text-white/70', big ? 'text-[13px]' : 'text-[11.5px] leading-snug')}>📚 A finished example to explore and learn from. Start your own expedition to move along the ranger path.</div>;
+  }
+  const goal = starGoals(game.quests)[1];
+  const next = nextStage(profile);
+  if (game.expedition.complete) {
+    return <div className={clsx('rounded-2xl bg-[#3ccf6e]/15 px-3 py-2 font-semibold text-[#9df0b8] ring-1 ring-[#3ccf6e]/30', big ? 'text-[13px]' : 'text-[11.5px] leading-snug')}>✅ Expedition complete!{next ? ` Start a new one to unlock ${next.emoji} ${next.rank}.` : ''}</div>;
+  }
+  const left = Math.max(0, goal - game.done);
+  return (
+    <div className={clsx('rounded-2xl bg-amber-300/10 px-3 py-2 ring-1 ring-amber-300/25', big ? 'text-[13px]' : 'text-[11.5px] leading-snug')}>
+      <div className="flex items-center gap-2 font-display font-bold text-amber-200">
+        <span>🧭 Expedition</span>
+        <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><span className="block h-full rounded-full bg-gradient-to-r from-[#ffe066] to-[#ffb020] transition-all duration-700" style={{ width: `${Math.min(1, game.done / goal) * 100}%` }} /></span>
+        <span className="tabular-nums text-white/70">{Math.min(game.done, goal)}/{goal}</span>
+      </div>
+      <div className="mt-0.5 text-white/70">
+        {left} more quest{left === 1 ? '' : 's'} to complete it{next && !profile.unlockAll && needFor(next.n, profile) === 1 ? <> and unlock {unlockSummary(next)}</> : null}.
+      </div>
+    </div>
+  );
+}
+
+/** "🦩 Wetland, 🦁 Savanna, 🧩 Code and more" */
+export function unlockSummary(s: Stage, max = 3) {
+  const items = [...s.habitats.map((h) => BIOME_BY_ID[h]).filter(Boolean).map((b) => `${b.emoji} ${b.name.replace(/^(African|Tropical|Temperate|Prairie|Arctic|Boreal|Rocky|Coral|Wetland) /, '')}`), ...s.features.map((f) => `${FEATURES[f].emoji} ${FEATURES[f].name}`)];
+  return items.length > max ? `${items.slice(0, max).join(', ')} and more` : items.join(', ');
 }

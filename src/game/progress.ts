@@ -17,6 +17,12 @@ export interface Profile {
   /** stars per project id */
   projectStars: Record<string, number>;
   biomesBuilt: string[];
+  /** dioramas of the student's own that earned two stars: each unlocks the next step of the path */
+  completed: string[];
+  /** habitats with a completed expedition (unlocks their example diorama) */
+  completedBiomes: string[];
+  /** a teacher switched the ranger path off: everything is available */
+  unlockAll?: boolean;
   created: number;
 }
 
@@ -26,7 +32,11 @@ export type ProgressEvent =
   | { type: 'discover'; id: string; name: string; emoji: string }
   | { type: 'badge'; id: string }
   | { type: 'quest'; id: string; title: string; xp: number }
-  | { type: 'stars'; stars: number; projectId: string };
+  | { type: 'stars'; stars: number; projectId: string }
+  /** an expedition was completed: `stage` is the step of the path it opened (null at the end) */
+  | { type: 'complete'; projectId: string; biome: string; stage: number | null };
+
+import { LAST_STAGE } from './unlocks';
 
 const KEY = 'dd-profile';
 const AVATARS = ['🦊', '🦉', '🐢', '🦋', '🐸', '🦔', '🐼', '🦜', '🐬', '🦁', '🐝', '🦌'];
@@ -38,10 +48,18 @@ const subs = new Set<() => void>();
 let version = 0;
 
 function load(): Profile {
-  const dflt: Profile = { name: '', avatar: AVATARS[Math.floor(Math.random() * AVATARS.length)], xp: 0, discovered: [], placed: [], badges: [], biomeStars: {}, projectStars: {}, biomesBuilt: [], created: Date.now() };
+  const dflt: Profile = { name: '', avatar: AVATARS[Math.floor(Math.random() * AVATARS.length)], xp: 0, discovered: [], placed: [], badges: [], biomeStars: {}, projectStars: {}, biomesBuilt: [], completed: [], completedBiomes: [], created: Date.now() };
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(KEY) : null;
-    return raw ? { ...dflt, ...JSON.parse(raw) } : dflt;
+    if (!raw) return dflt;
+    const saved = JSON.parse(raw) as Partial<Profile>;
+    const p = { ...dflt, ...saved };
+    // profiles from before the ranger path: dioramas that already earned two stars count as completed
+    if (!saved.completed) {
+      p.completed = Object.entries(p.projectStars).filter(([, n]) => n >= 2).map(([id]) => id);
+      p.completedBiomes = Object.entries(p.biomeStars).filter(([, n]) => n >= 2).map(([id]) => id);
+    }
+    return p;
   } catch { return dflt; }
 }
 function save() {
@@ -143,12 +161,25 @@ export function questDone(id: string, title: string, xp: number) {
   emit({ type: 'quest', id, title, xp });
   addXp(xp, `Quest: ${title}`);
 }
-export function recordStars(projectId: string, biome: string, stars: number, silent = false) {
+/**
+ * Best stars for a diorama. `counts` says whether it is the student's own work (not a finished
+ * example): reaching two stars then completes the expedition and moves the ranger path on.
+ */
+export function recordStars(projectId: string, biome: string, stars: number, silent = false, counts = true) {
   const prev = profile.projectStars[projectId] ?? 0;
   if (stars <= prev) return;
   profile = { ...profile, projectStars: { ...profile.projectStars, [projectId]: stars }, biomeStars: { ...profile.biomeStars, [biome]: Math.max(profile.biomeStars[biome] ?? 0, stars) } };
+  const completes = counts && stars >= 2 && !profile.completed.includes(projectId);
+  if (completes) {
+    profile = { ...profile, completed: [...profile.completed, projectId], completedBiomes: profile.completedBiomes.includes(biome) ? profile.completedBiomes : [...profile.completedBiomes, biome] };
+  }
   save();
   if (silent) return;
   emit({ type: 'stars', stars, projectId });
+  if (completes) {
+    const n = profile.completed.length;
+    emit({ type: 'complete', projectId, biome, stage: !profile.unlockAll && n <= LAST_STAGE ? n : null });
+    addXp(100, 'Expedition complete');
+  }
   if (stars >= 3) awardBadge('three-stars');
 }

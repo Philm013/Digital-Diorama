@@ -17,6 +17,8 @@ import { useProfile } from './game/useGame';
 import { notePlaced } from '../game/progress';
 import { confetti } from './game/Celebrate';
 import { haptic, uiSound } from './feedback';
+import { habitatUnlocked, isUnlocked, showLocked, type FeatureId } from '../game/unlocks';
+import { LockBadge } from './game/Locked';
 
 const CATS = ['animals', 'plants', 'fungi', 'land', 'water', 'sky', 'finds', 'human', 'habitats'] as const;
 
@@ -27,26 +29,38 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
   useEngineVersion();
   const profile = useProfile();
   const [q, setQ] = useState('');
-  const [cat, setCat] = useState<string>(() => { try { return localStorage.getItem('dd-lib-cat') || 'animals'; } catch { return 'animals'; } });
+  const [cat, setCat] = useState<string>(() => {
+    let c = 'animals';
+    try { c = localStorage.getItem('dd-lib-cat') || 'animals'; } catch { /* ignore */ }
+    return c === 'habitats' && !isUnlocked('tiles') ? 'animals' : c;
+  });
   const [fits, setFits] = useState(true);
   useEffect(() => { try { localStorage.setItem('dd-lib-cat', cat); } catch { /* ignore */ } }, [cat]);
   const biome = engine.doc?.biome ?? 'blank';
   const inScene = useMemo(() => new Set(engine.actorList.map((a) => a.def.id)), [engine, engine.version]); // eslint-disable-line react-hooks/exhaustive-deps
+  // species of habitats further along the ranger path stay hidden until they are unlocked
+  const everywhere = isUnlocked('lib-all', profile), tiles = isUnlocked('tiles', profile);
+  const allowed = useMemo(() => {
+    const ok = (d: AssetDef) => (d.category === 'habitats' ? tiles : everywhere || !d.biomes.length || d.biomes.includes(biome) || d.biomes.some((b) => habitatUnlocked(b, profile)));
+    return ok;
+  }, [everywhere, tiles, biome, profile]);
+  const hidden = useMemo(() => CATALOG.filter((d) => d.category !== 'habitats' && !allowed(d)).length, [allowed]);
   const items = useMemo(() => {
     const s = q.trim().toLowerCase();
     return CATALOG.filter((d) => {
+      if (!allowed(d)) return false;
       if (s) return (d.name + ' ' + (d.info.scientific ?? '') + ' ' + d.group + ' ' + (d.info.class ?? '') + ' ' + (d.info.phylum ?? '')).toLowerCase().includes(s);
       if (d.category !== cat) return false;
       if (fits && biome !== 'blank' && d.biomes.length && !d.biomes.includes(biome)) return false;
       return true;
     });
-  }, [q, cat, fits, biome]);
+  }, [q, cat, fits, biome, allowed]);
   const groups = useMemo(() => {
     const m = new Map<string, AssetDef[]>();
     for (const d of items) { if (!m.has(d.group)) m.set(d.group, []); m.get(d.group)!.push(d); }
     return [...m.entries()];
   }, [items]);
-  const counts = useMemo(() => Object.fromEntries(CATS.map((c) => [c, CATALOG.filter((d) => d.category === c && (!fits || biome === 'blank' || !d.biomes.length || d.biomes.includes(biome))).length])), [fits, biome]);
+  const counts = useMemo(() => Object.fromEntries(CATS.map((c) => [c, CATALOG.filter((d) => d.category === c && allowed(d) && (!fits || biome === 'blank' || !d.biomes.length || d.biomes.includes(biome))).length])), [fits, biome, allowed]);
 
   const add = async (d: AssetDef, e?: React.MouseEvent) => {
     if (d.base) {
@@ -96,8 +110,9 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
         {!q && (
           <div className="dd-scroll-x -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
             {CATS.map((c) => (
-              <button key={c} onClick={() => { setCat(c); uiSound('tick'); }} className={clsx('flex shrink-0 items-center gap-1.5 rounded-2xl px-3 font-display text-[13.5px] font-semibold transition', compact ? 'h-9' : 'h-10', cat === c ? 'dd-3d bg-ink text-white [--edge:#000]' : 'bg-white text-ink/75 ring-1 ring-black/10 hover:bg-black/5')}>
-                <span className="text-base">{CAT_ICON[c]}</span>{CATEGORY_META[c].label}<span className={clsx('rounded-full px-1.5 text-[10.5px] tabular-nums', cat === c ? 'bg-white/20' : 'bg-black/5 text-ink/45')}>{counts[c]}</span>
+              <button key={c} onClick={() => { if (c === 'habitats' && !tiles) { showLocked('tiles'); return; } setCat(c); uiSound('tick'); }} className={clsx('relative flex shrink-0 items-center gap-1.5 rounded-2xl px-3 font-display text-[13.5px] font-semibold transition', compact ? 'h-9' : 'h-10', cat === c ? 'dd-3d bg-ink text-white [--edge:#000]' : 'bg-white text-ink/75 ring-1 ring-black/10 hover:bg-black/5', c === 'habitats' && !tiles && 'opacity-55')}>
+                <span className="text-base">{CAT_ICON[c]}</span>{CATEGORY_META[c].label}
+                {c === 'habitats' && !tiles ? <LockBadge /> : <span className={clsx('rounded-full px-1.5 text-[10.5px] tabular-nums', cat === c ? 'bg-white/20' : 'bg-black/5 text-ink/45')}>{counts[c]}</span>}
               </button>
             ))}
           </div>
@@ -122,6 +137,11 @@ export function LibraryPanel({ compact, onAdded, onCollapse }: { compact?: boole
       </div>
       <div className={clsx('min-h-0 flex-1 overflow-y-auto overscroll-contain', compact ? 'px-2.5 pb-3 pt-2' : 'p-3')}>
         {groups.length === 0 && <div className="py-10 text-center text-sm text-ink/55">Nothing here — try turning off the habitat filter or searching.</div>}
+        {hidden > 0 && (!fits || biome === 'blank' || !!q) && ['animals', 'plants', 'fungi'].includes(cat) && (
+          <button type="button" onClick={() => showLocked('lib-all')} className="mb-3 flex w-full items-center gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-left text-[12px] font-semibold text-amber-900 ring-1 ring-amber-200">
+            <LockBadge /> {hidden} more species live in habitats you haven’t unlocked yet.
+          </button>
+        )}
         {groups.map(([g, list]) => (
           <div key={g} className="mb-4">
             <div className="mb-1.5 flex items-center gap-1.5 text-[11.5px] font-bold uppercase tracking-wider text-ink/45">{g} <span className="font-semibold text-ink/30">{list.length}</span></div>
@@ -346,16 +366,21 @@ export function timeLabel(h: number) {
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
+function LockedRow({ what, text }: { what: FeatureId; text: string }) {
+  return <button type="button" onClick={() => showLocked(what)} className="flex h-10 w-full items-center gap-2 rounded-xl bg-black/[0.04] px-3 text-left text-[12px] font-semibold text-ink/55"><LockBadge /> {text}</button>;
+}
+
 export function EnvironmentControls() {
   const engine = useEngine();
   useEngineVersion();
+  const profile = useProfile();
   const env = engine.env;
   return (
     <>
       <Slider label={<span className="flex items-center gap-1">{env.time > 6 && env.time < 19 ? <Sun size={14} /> : <Moon size={14} />} Time of day</span>} value={env.time} min={0} max={23.99} step={0.05} format={timeLabel} onChange={(v) => engine.setEnv({ time: v }, false)} onCommit={() => engine.changed()} />
       <Slider label="Day–night cycle speed" value={env.daySpeed} min={0} max={12} step={0.5} format={(v) => (v === 0 ? 'paused' : `${v} h / min`)} onChange={(v) => engine.setEnv({ daySpeed: v }, false)} />
-      <div><div className="mb-1 text-[13px] font-semibold text-ink/80">Weather</div><Segmented value={env.weather} onChange={(w) => engine.setEnv({ weather: w })} options={WEATHERS} /></div>
-      <div><div className="mb-1 text-[13px] font-semibold text-ink/80">Season</div><Segmented size="sm" value={env.season} onChange={(s) => engine.setEnv({ season: s })} options={SEASONS} /></div>
+      <div><div className="mb-1 text-[13px] font-semibold text-ink/80">Weather</div>{isUnlocked('weather', profile) ? <Segmented value={env.weather} onChange={(w) => engine.setEnv({ weather: w })} options={WEATHERS} /> : <LockedRow what="weather" text="Weather unlocks with your next completed expedition" />}</div>
+      <div><div className="mb-1 text-[13px] font-semibold text-ink/80">Season</div>{isUnlocked('seasons', profile) ? <Segmented size="sm" value={env.season} onChange={(s) => engine.setEnv({ season: s })} options={SEASONS} /> : <LockedRow what="seasons" text="Seasons unlock later on your ranger path" />}</div>
       <Slider label="Wind" value={env.wind} min={0} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => engine.setEnv({ wind: v }, false)} onCommit={() => engine.changed()} />
       <Slider label="Mist" value={env.fog} min={0} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => engine.setEnv({ fog: v }, false)} onCommit={() => engine.changed()} />
     </>

@@ -1,3 +1,4 @@
+import type { TerrainGen } from './terrainGen';
 export type Quality = 'low' | 'medium' | 'high';
 export type FrameStyle = 'shoebox' | 'museum' | 'island' | 'open';
 export type Weather = 'clear' | 'cloudy' | 'rain' | 'storm' | 'snow' | 'fog';
@@ -16,6 +17,8 @@ export interface TerrainDoc {
   waterLevel: number | null;
   strata: string;
   seed: number;
+  /** the recipe the land was generated from, so new land around it can carry on in kind */
+  gen?: TerrainGen;
 }
 
 export type BaseDoc =
@@ -64,6 +67,8 @@ export interface DioramaDoc {
   author: string;
   description: string;
   biome: string;
+  /** a student's own diorama (starter) or a finished example of a habitat (model) */
+  kind?: 'starter' | 'model';
   created: number;
   updated: number;
   base: BaseDoc;

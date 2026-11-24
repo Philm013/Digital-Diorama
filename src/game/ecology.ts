@@ -3,6 +3,7 @@ import type { Actor } from '../engine/Actor';
 import { buildFoodWeb, eats, roleOf, type Role } from '../assets/foodweb';
 import { BIOME_BY_ID } from '../biomes/templates';
 import { isDiscovered } from './progress';
+import { isUnlocked } from './unlocks';
 
 /* ======================================================================== */
 /*  ecosystem health                                                        */
@@ -120,10 +121,13 @@ export function quests(e: Engine, health?: Health): Quest[] {
     Q('notes', '📝', 'Research notes on 3 organisms', 'Build → select → My notes. They’re read aloud on the tour.', notes, 3, 40),
     Q('night', '🌙', 'See your habitat at night', 'Set the time to after 21:00.', hasFlag(e, 'night') ? 1 : 0, 1, 20),
     Q('walk', '🥾', 'Walk inside', 'Explore → Walk in.', hasFlag(e, 'walk') ? 1 : 0, 1, 20),
-    Q('code', '🧩', 'Bring something to life with code', 'Code → “when ▶ clicked”, then press Play.', coded ? 1 : 0, 1, 50),
-    Q('tour', '🎤', 'Give a guided tour', 'Explore → Tour, and watch it to the end.', hasFlag(e, 'tour') ? 1 : 0, 1, 40),
+    // quests for tools further along the ranger path appear once they are unlocked
+    ...(isUnlocked('code') ? [Q('code', '🧩', 'Bring something to life with code', 'Code → “when ▶ clicked”, then press Play.', coded ? 1 : 0, 1, 50)] : []),
+    ...(isUnlocked('tour') ? [Q('tour', '🎤', 'Give a guided tour', 'Explore → Tour, and watch it to the end.', hasFlag(e, 'tour') ? 1 : 0, 1, 40)] : []),
   ];
 }
+/** quests for one, two (a completed expedition) and three stars */
+export function starGoals(list: Quest[]) { return [5, 10, list.length] as const; }
 export function starsFor(list: Quest[]) {
   const done = list.filter((q) => q.done).length;
   return done >= list.length ? 3 : done >= 10 ? 2 : done >= 5 ? 1 : 0;
