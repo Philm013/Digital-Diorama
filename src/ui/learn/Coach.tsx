@@ -30,9 +30,11 @@ type Probe = 'shown' | 'clipped' | 'hidden';
 function probe(el: HTMLElement): Probe {
   if (!el.isConnected) return 'hidden';
   const r = el.getBoundingClientRect();
-  if (r.width < 2 || r.height < 2 || r.bottom <= 0 || r.right <= 0 || r.top >= innerHeight || r.left >= innerWidth) return 'hidden';
+  if (r.width < 2 || r.height < 2) return 'hidden';
   const cv = (el as HTMLElement & { checkVisibility?: (o: object) => boolean }).checkVisibility;
   if (cv && !cv.call(el, { opacityProperty: true, visibilityProperty: true, checkOpacity: true, checkVisibilityCSS: true })) return 'hidden';
+  // off the screen inside a row or panel that scrolls (the Explore bar on a phone): it can be scrolled into view
+  if (r.bottom <= 0 || r.right <= 0 || r.top >= innerHeight || r.left >= innerWidth) return el.parentElement?.closest('.overflow-x-auto, .overflow-y-auto, .overflow-auto, .dd-scroll-x') ? 'clipped' : 'hidden';
   // look at points across the part of it that is on screen (a tall journal runs off the bottom)
   const x0 = Math.max(0, r.left), x1 = Math.min(innerWidth - 1, r.right), y0 = Math.max(0, r.top), y1 = Math.min(innerHeight - 1, r.bottom);
   let clipped = false;
@@ -457,6 +459,11 @@ export function Coach({ mode, setMode, game, wide, ready, tips, sound, model, bi
 /* =============================== welcome =============================== */
 function Welcome({ biome, model, onStart, onSkip }: { biome: { name: string; emoji: string }; model: boolean; onStart: () => void; onSkip: () => void }) {
   useBackLayer(true, onSkip);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onSkip(); };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onSkip]);
   const minutes = FIRST_STEPS.reduce((s, l) => s + l.minutes, 0);
   return (
     <div data-coach className="dd-modal-bg fixed inset-0 z-[70] flex items-end justify-center bg-black/40 p-2.5 pb-[calc(max(env(safe-area-inset-bottom),8px)+66px)] backdrop-blur-[2px] sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby="dd-welcome-title">

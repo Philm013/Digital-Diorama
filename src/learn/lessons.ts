@@ -388,7 +388,8 @@ export const LESSONS: Lesson[] = [
     id: 'roam', unit: 'far', emoji: '🌍', title: 'Roam the wild', blurb: 'Walk out of the box into an endless landscape.', minutes: 3, xp: 40, needs: 'roam', requires: needsLand,
     steps: [
       { id: 'start', title: 'Start roaming', body: 'Tap Roam in the Explore bar.', mode: 'explore', targets: [T('explore-roam')], done: (c) => c.now.walk.active && c.now.walk.endless },
-      { id: 'out', title: 'Head out', body: (c) => (c.touch ? 'Push the stick to its rim to run. The land goes on and on!' : 'Hold W to walk — add Shift to run. The land goes on and on!'), targets: [T('walk-stick')], dim: false, done: (c) => c.now.walk.endless && c.now.walk.home > c.start.walk.home + 15 },
+      // (roaming starts just in front of the box, facing it: any 25 m counts, whichever way)
+      { id: 'out', title: 'Head out', body: (c) => (c.touch ? 'Push the stick to its rim to run, any way you like. The land goes on and on!' : 'Hold W to walk — add Shift to run — any way you like. The land goes on and on!'), targets: [T('walk-stick')], dim: false, done: (c) => c.now.walk.endless && Math.hypot(c.now.walk.x - c.start.walk.x, c.now.walk.z - c.start.walk.z) > 25 },
       { id: 'home', title: 'Find your way home', body: 'The compass points back to your box. Tap 🏠 Home to jump straight back.', targets: [T('walk-home')], done: (c) => c.seen.has('roam-home') },
       { id: 'leave', title: 'Step back out', body: 'Tap Leave when you’re done exploring.', targets: [T('walk-leave')], done: (c) => !c.now.walk.active },
     ],

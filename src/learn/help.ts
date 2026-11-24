@@ -123,7 +123,7 @@ export const TEACHER_NOTES: TeacherNote[] = [
     ],
   },
   {
-    emoji: '🧭', title: 'The ranger path', text: 'Students start with three habitats and the basic tools. Each completed expedition (⭐⭐ on a diorama of their own) unlocks the next step: Wetland & Savanna and coding, then deserts and tours, rainforests and the Area tool, and so on. To open everything on this device at once, switch on teacher mode below.',
+    emoji: '🧭', title: 'The ranger path', text: 'Students start with three habitats and the basic tools. Each completed expedition (⭐⭐ on a diorama of their own) unlocks the next step: Wetland & Savanna and coding, then deserts and tours, rainforests and the Area tool, and so on. To open everything on this device at once, switch on teacher mode at the top of this page (or in Settings on the home screen).',
   },
   {
     emoji: '✅', title: 'Quests as a rubric', text: 'Each diorama’s 16 quests cover the ecology a habitat project should show: producers, consumers and decomposers, a three-link food chain, water and non-living features, a healthy score, labels and research notes. Explore → Guide shows the same checklist next to the habitat’s climate, adaptations, threats, vocabulary and discussion questions.',
