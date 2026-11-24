@@ -249,7 +249,7 @@ async function run(layout, ctxOpts, phone, suite) {
       },
       quests: { open: () => clickTour('quests-link'), name: async () => { await pg.keyboard.press('Escape'); await wait(400); await pg.click(T('title'), { clickCount: 3 }); await pg.keyboard.type('Our forest'); await pg.keyboard.press('Enter'); } },
       landforms: { pick: () => clickTour('stamp-hill'), stamp: tapLand, top: () => clickTour('top-view'), back: () => clickTour('top-view') },
-      paint: { open: () => clickTour('landtab-paint'), brush: () => dragLand(), water: async () => { await clickTour('landtab-landforms'); await clickTour('stamp-lake'); await tapLand(); } },
+      paint: { open: () => clickTour('landtab-paint'), ground: () => pg.evaluate(() => [...document.querySelectorAll('[data-tour="paint-tools"] button')].find((b) => /sand/i.test(b.title))?.click()), brush: () => dragLand(), water: async () => { await clickTour('landtab-landforms'); await clickTour('stamp-lake'); await tapLand(); } },
       labels: { select: tapLiving, tab: () => clickTour('insp-label'), label: async () => { await pg.fill(T('label-text'), 'Consumer: eats plants'); }, notes: async () => { await pg.fill(T('notes'), 'It hides in the bracken during the day.'); await pg.keyboard.press('Tab'); } },
       time: { open: () => clickTour('explore-time'), night: () => pressedIn('time-pop', '🌙'), cycle: () => setRange('time-pop', 1, 4) },
       walk: { enter: () => clickTour('explore-walk'), move: () => walkFor(20000), ant: () => pressedIn('walk-eyes', 'Ant'), leave: () => clickTour('walk-leave') },

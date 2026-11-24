@@ -11,6 +11,7 @@ import type { SculptTool } from '../engine/Terrain';
 import { useEngine, useEngineVersion } from './store';
 import { Btn, Section, Segmented, Slider, Toggle } from './common';
 import { haptic, uiSound } from './feedback';
+import { learnSignal } from '../learn/signals';
 import { areaKindUnlocked, isUnlocked, showLocked, sizeUnlocked, stampFeature, stampUnlocked, type FeatureId } from '../game/unlocks';
 import { useProfile } from './game/useGame';
 import { LockBadge } from './game/Locked';
@@ -226,7 +227,7 @@ function PaintTools() {
   useEngineVersion();
   const brush = engine.brush;
   const t = engine.terrain!;
-  const choose = (i: number) => { brush.ground = i; if (brush.tool !== 'paint') engine.setLandTool('paint'); engine.changed(false); uiSound('tick'); };
+  const choose = (i: number) => { brush.ground = i; if (brush.tool !== 'paint') engine.setLandTool('paint'); engine.changed(false); uiSound('tick'); learnSignal('paint-ground'); };
   const style = styleForBiome(engine.doc.biome);
   return (
     <>

@@ -286,7 +286,9 @@ export const LESSONS: Lesson[] = [
     id: 'paint', unit: 'land', emoji: '🎨', title: 'Paint & water', blurb: 'Paint the ground and dig a lake.', minutes: 3, xp: 30, requires: needsLand,
     steps: [
       { id: 'open', title: 'Open Paint', body: 'In the land tools, tap 🎨 Paint.', mode: 'build', enter: deselect, targets: [T('landtab-paint'), ...toLand], done: (c) => c.engine.brush.tool === 'paint' },
-      { id: 'brush', title: 'Paint the ground', body: 'Pick a ground, like Sand or Mud, then drag across the land to paint it.', mode: 'build', targets: [T('paint-tools'), T('landtab-paint', 'Tap 🎨 Paint'), ...toLand], gesture: 'drag', done: (c) => c.seen.has('land:paint') },
+      { id: 'ground', title: 'Pick a ground', body: 'Choose one, like Sand or Mud — or ✨ Auto, which picks the ground from the shape of the land.', mode: 'build', targets: [T('paint-tools'), T('landtab-paint', 'Tap 🎨 Paint'), ...toLand], done: (c) => c.seen.has('paint-ground') },
+      // (aimed at the 3D view, so on a phone the card moves over the panel and leaves the land free to paint)
+      { id: 'brush', title: 'Paint the land', body: (c) => `${c.touch ? 'Drag your finger' : 'Drag'} across the land to paint it. Neighbouring grounds blend at their edges.`, mode: 'build', targets: [T('viewport', undefined, (x) => x.engine.brush.tool === 'paint'), T('landtab-paint', 'Tap 🎨 Paint'), ...toLand], gesture: 'drag', dim: false, done: (c) => c.seen.has('land:paint') },
       { id: 'water', title: 'Add water', body: 'Every habitat needs water. Tap 🏔️ Landforms, pick 💧 Lake, then tap the land.', mode: 'build', targets: [T('viewport', undefined, (x) => x.engine.brush.tool === 'stamp' && x.engine.land.stamp.id === 'lake'), T('stamp-lake'), T('landtab-landforms', 'Tap 🏔️ Landforms'), ...toLand], done: (c) => c.seen.has('land:water') || c.seen.has('land:stamp:lake') || c.seen.has('land:stamp:island') },
     ],
     recap: ['🎨 Paint has 22 grounds — ✨ Auto picks one from the shape of the land', 'A 💧 Lake landform digs a lake and adds water', 'The Water switch and slider set the water level'],
