@@ -104,7 +104,7 @@ export function Section({ title, children, right, defaultOpen = true }: { title:
  * A dialog: centred on wide screens, a sheet from the bottom on phones that can be dragged down
  * by its header to close. Escape (when it is on top) and the phone's Back button close it too.
  */
-export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; wide?: boolean }) {
+export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; wide?: boolean | 'xl' }) {
   const isTop = useBackLayer(open, onClose);
   const close = useRef(onClose);
   close.current = onClose;
@@ -123,7 +123,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
   return (
     <div className={clsx('dd-modal-bg fixed inset-0 z-[65] flex items-end justify-center bg-black/45 p-0 backdrop-blur-[3px] transition-opacity duration-200 sm:items-center sm:p-6', leaving && 'opacity-0')} onClick={onClose}>
       <div data-sheet role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => e.stopPropagation()}
-        className={clsx('dd-panel dd-modal flex max-h-[92vh] max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px]', !drag.dragging && 'dd-sheet-snap', wide ? 'sm:max-w-4xl' : 'sm:max-w-lg')}
+        className={clsx('dd-panel dd-modal flex max-h-[92vh] max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px]', !drag.dragging && 'dd-sheet-snap', wide === 'xl' ? 'sm:max-w-6xl' : wide ? 'sm:max-w-4xl' : 'sm:max-w-lg')}
         style={leaving ? { transform: 'translateY(105%)' } : drag.dy ? { transform: `translateY(${drag.dy}px)` } : undefined}>
         <div className={clsx(sheet && 'touch-none select-none')} {...drag.handlers}>
           <div className="flex justify-center pt-2 sm:hidden"><span className="h-1.5 w-11 rounded-full bg-black/15" /></div>

@@ -6,6 +6,7 @@ import { BIRDS, GROUND_BIRDS } from './data-birds';
 import { REPTILES } from './data-reptiles';
 import { WILDFORM_AUG, WILDFORM_FACTS, WILDFORM_STATUS, wildformGroup } from './data-wildform';
 import { WILDFORM_REMAP } from './data-remap';
+import { DIET_FIX, MASS, massFromLength } from './data-diet';
 
 const defs: AssetDef[] = [];
 const add = (d: AssetDef) => { defs.push({ living: d.category === 'animals' || d.category === 'plants' || d.category === 'fungi', ...d }); };
@@ -70,7 +71,7 @@ for (const a of WILDFORM) {
 
 /* ---------------- water-world life (flocks, schools, families) ---------------- */
 add({ id: 'water/duck-family', name: 'Duck family', emoji: '🦆', category: 'animals', group: 'Birds', family: 'water', path: P.water('duck-family'), params: { waterPatch: false, mergeForProduction: true, pathRadius: 2.5 }, hidden: ['waterPatch', 'mergeForProduction'], loco: 'scenery', biomes: ['wetland', 'garden'], water: 'surface', info: { scientific: 'Anas platyrhynchos', kingdom: 'Animalia', phylum: 'Chordata', class: 'Aves', order: 'Anseriformes', family: 'Anatidae', diet: 'omnivore', status: 'Least Concern', fact: 'Ducklings follow the first moving thing they see after hatching — usually their mother.', eats: ['aquatic-plants', 'insect', 'seeds'], tags: ['bird'] } });
-add({ id: 'water/fish-school', name: 'School of fish', emoji: '🐟', category: 'animals', group: 'Fish', family: 'water', path: P.water('fish-school'), params: { tank: false, mergeForProduction: true, count: 40, radius: 3, depth: 1.5, species: 'sardine' }, hidden: ['tank', 'mergeForProduction'], loco: 'scenery', biomes: ['reef', 'kelp', 'shore', 'wetland'], water: 'column', info: { scientific: 'Sardina pilchardus', kingdom: 'Animalia', phylum: 'Chordata', class: 'Actinopterygii', diet: 'filter feeder', fact: 'Swimming in a school confuses predators and saves energy — like cyclists drafting.', eats: ['plankton'], tags: ['fish'] } });
+add({ id: 'water/fish-school', name: 'School of fish', emoji: '🐟', category: 'animals', group: 'Fish', family: 'water', path: P.water('fish-school'), params: { tank: false, mergeForProduction: true, count: 40, radius: 3, depth: 1.5, species: 'sardine' }, hidden: ['tank', 'mergeForProduction'], loco: 'scenery', biomes: ['reef', 'kelp', 'shore', 'wetland', 'tundra'], water: 'column', info: { scientific: 'Sardina pilchardus', kingdom: 'Animalia', phylum: 'Chordata', class: 'Actinopterygii', diet: 'filter feeder', fact: 'Swimming in a school confuses predators and saves energy — like cyclists drafting.', eats: ['plankton'], tags: ['fish'] } });
 add({ id: 'water/seagull-flock', name: 'Seagull flock', emoji: '🕊️', category: 'animals', group: 'Birds', family: 'water', path: P.water('seagull-flock'), params: { waterPatch: false, posts: 0, flying: 8, floating: 0, radius: 12, height: 9, mergeForProduction: true }, hidden: ['waterPatch', 'mergeForProduction'], loco: 'scenery', biomes: ['shore'], info: { scientific: 'Larus argentatus', kingdom: 'Animalia', phylum: 'Chordata', class: 'Aves', diet: 'omnivore', fact: 'Gulls can drink salt water — special glands near their eyes remove the salt.', eats: ['fish', 'shellfish', 'carrion'], tags: ['bird'] } });
 add({ id: 'water/whale', name: 'Whale (surfacing)', emoji: '🐋', category: 'animals', group: 'Mammals', family: 'water', path: P.water('whale'), params: { waterPatch: false, mergeForProduction: true, behaviour: 'cruise' }, hidden: ['waterPatch', 'mergeForProduction'], loco: 'scenery', biomes: ['tundra', 'shore', 'kelp'], water: 'surface', heavy: true, info: { scientific: 'Megaptera novaeangliae', kingdom: 'Animalia', phylum: 'Chordata', class: 'Mammalia', order: 'Artiodactyla', diet: 'filter feeder', status: 'Least Concern', fact: 'Whales breathe air through a blowhole on top of their head.', eats: ['plankton', 'fish'], tags: ['whale'] } });
 
@@ -287,6 +288,18 @@ BASE('frozen-lake', 'Frozen lake', '🧊', { size: 40 }, ['tundra', 'taiga'], 'A
 BASE('lake-pond', 'Lake & pond', '🏞️', { size: 40, jetty: false }, ['wetland', 'forest'], 'A freshwater lake with lilies, reeds and leaping fish.');
 BASE('cave-pool', 'Cave & drip pool', '🕳️', {}, ['mountain'], 'A limestone cave with stalactites, crystals and glow-worms.');
 BASE('groundwater-cutaway', 'Groundwater cut-away', '💧', {}, [], 'A cross-section showing how rain soaks into aquifers underground.');
+
+/* ---------------- diets: corrections, and body size for who can catch whom ---------------- */
+for (const d of defs) {
+  if (d.category !== 'animals') continue;
+  const fix = DIET_FIX[d.id];
+  if (fix) {
+    d.info = { ...d.info, ...(fix.diet ? { diet: fix.diet } : {}), ...(fix.tags ? { tags: fix.tags } : {}) };
+    if (fix.eats) d.info.eats = fix.eats;
+    if (fix.addEats) d.info.eats = [...new Set([...(d.info.eats ?? []), ...fix.addEats])];
+  }
+  d.mass = MASS[d.id] ?? massFromLength(d);
+}
 
 export const CATALOG: AssetDef[] = defs;
 export const CATALOG_BY_ID: Record<string, AssetDef> = Object.fromEntries(defs.map((d) => [d.id, d]));

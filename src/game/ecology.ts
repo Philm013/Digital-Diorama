@@ -1,6 +1,6 @@
 import type { Engine } from '../engine/Engine';
 import type { Actor } from '../engine/Actor';
-import { buildFoodWeb, eats, roleOf, type Role } from '../assets/foodweb';
+import { buildFoodWeb, dietText, roleOf, type FoodWeb, type Role } from '../assets/foodweb';
 import { BIOME_BY_ID } from '../biomes/templates';
 import { isDiscovered } from './progress';
 import { isUnlocked } from './unlocks';
@@ -25,6 +25,11 @@ export function hasWater(e: Engine) {
   return e.terrain ? e.terrain.waterLevel !== null && e.terrain.minHeight() < e.terrain.waterLevel : e.doc.base.kind === 'asset' || e.actorList.some((a) => a.def.category === 'water');
 }
 
+/** the food web of a diorama's living things (with plankton and algae when it has water) */
+export function dioramaWeb(e: Engine): FoodWeb {
+  return buildFoodWeb(e.actorList.filter((a) => !a.isClone).map((a) => ({ id: a.id, def: a.def, name: a.name })), { water: hasWater(e) || !!e.env.underwater });
+}
+
 /**
  * A 0–100 score for how complete and balanced the food web is. It rewards
  * variety, every trophic role, food for every consumer, a plausible pyramid
@@ -35,8 +40,9 @@ export function ecosystemHealth(e: Engine): Health {
   const roles: Record<Role, number> = { producer: 0, primary: 0, secondary: 0, tertiary: 0, decomposer: 0, abiotic: 0 };
   for (const a of acts) roles[roleOf(a.def)]++;
   const species = new Set(acts.map((a) => a.def.id)).size;
-  const web = buildFoodWeb(acts.map((a) => ({ id: a.id, def: a.def, name: a.name })));
-  const maxLevel = Math.max(0, ...web.nodes.map((n) => n.level));
+  const web = dioramaWeb(e);
+  // the longest food chain, in organisms: 3 = plant → plant-eater → predator
+  const maxLevel = web.maxChain;
   const tips: string[] = [];
   const parts: Health['parts'] = [];
   // variety
@@ -51,15 +57,12 @@ export function ecosystemHealth(e: Engine): Health {
   if (roles.decomposer) rolePts += 5; else tips.push('Add a decomposer — mushrooms, a rotting log or earthworms recycle nutrients.');
   parts.push({ name: 'Producers, consumers & decomposers', got: rolePts, max: 25 });
   // food for every consumer
-  const consumers = acts.filter((a) => { const r = roleOf(a.def); return r === 'primary' || r === 'secondary' || r === 'tertiary'; });
-  const fed = consumers.filter((c) => acts.some((o) => o !== c && eats(c.def, o.def)));
-  const hungry = consumers.filter((c) => !fed.includes(c));
-  const fedPts = consumers.length ? Math.round((fed.length / consumers.length) * 20) : 0;
+  // every consumer needs something it can really eat here (the right food, small enough to catch)
+  const consumers = web.nodes.filter((n) => n.def && n.def.category === 'animals' && n.role !== 'decomposer');
+  const hungry = consumers.filter((n) => n.hungry);
+  const fedPts = consumers.length ? Math.round(((consumers.length - hungry.length) / consumers.length) * 20) : 0;
   parts.push({ name: 'Food for every animal', got: fedPts, max: 20 });
-  if (hungry.length) {
-    const names = [...new Set(hungry.map((h) => h.def.name))].slice(0, 2).join(' and ');
-    tips.push(`${names} ${hungry.length === 1 ? 'has' : 'have'} nothing to eat here. Check the info card to see what ${hungry.length === 1 ? 'it eats' : 'they eat'}.`);
-  }
+  for (const h of hungry.slice(0, 2)) tips.push(`${h.def!.name} has nothing to eat here — it eats ${dietText(h.def!)}. The food web suggests what to add.`);
   // pyramid balance
   let bal = 15;
   const plantEaters = roles.primary, predators = roles.secondary + roles.tertiary;
