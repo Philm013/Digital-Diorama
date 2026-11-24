@@ -15,23 +15,23 @@ const LIVING = CATALOG.filter((d) => d.living !== false && d.category !== 'habit
 const BIOME_NAME = Object.fromEntries(BIOMES.map((b) => [b.id, `${b.emoji} ${b.name}`]));
 
 /** profile header shared by the welcome screen and the journal */
-/** `compact` tightens the card for short screens; `mini` also drops the stat tiles */
+/** `compact` tightens the card for short screens; `mini` is a single row (no XP line, no stat tiles) */
 export function RangerCard({ dark = true, onOpenJournal, size = 'full' }: { dark?: boolean; onOpenJournal?: () => void; size?: 'full' | 'compact' | 'mini' }) {
   const p = useProfile();
   const L = levelOf(p.xp);
   const [pick, setPick] = useState(false);
   const found = p.discovered.filter((id) => LIVING.some((d) => d.id === id)).length;
   return (
-    <div className={clsx('relative', size === 'full' ? 'rounded-[28px] p-4' : 'rounded-[24px] p-3', dark ? 'dd-card-dark text-white' : 'dd-card text-ink')}>
+    <div className={clsx('relative', size === 'full' ? 'rounded-[28px] p-4' : size === 'compact' ? 'rounded-[24px] p-3' : 'rounded-[22px] p-2.5', dark ? 'dd-card-dark text-white' : 'dd-card text-ink')}>
       <div className="flex items-center gap-3">
-        <button onClick={() => setPick((v) => !v)} className={clsx('grid shrink-0 place-items-center bg-gradient-to-br from-amber-200 to-amber-400 shadow-[0_4px_0_#b77d12] transition active:translate-y-0.5', size === 'full' ? 'h-16 w-16 rounded-[22px] text-4xl' : 'h-12 w-12 rounded-[18px] text-3xl')} title="Choose your avatar">{p.avatar}</button>
+        <button onClick={() => setPick((v) => !v)} className={clsx('grid shrink-0 place-items-center bg-gradient-to-br from-amber-200 to-amber-400 shadow-[0_4px_0_#b77d12] transition active:translate-y-0.5', size === 'full' ? 'h-16 w-16 rounded-[22px] text-4xl' : size === 'compact' ? 'h-12 w-12 rounded-[18px] text-3xl' : 'h-11 w-11 rounded-[16px] text-[26px]')} title="Choose your avatar">{p.avatar}</button>
         <div className="min-w-0 flex-1">
-          <input value={p.name} onChange={(e) => updateProfile({ name: e.target.value.slice(0, 24) })} placeholder="Your ranger name" className={clsx('w-full rounded-lg bg-transparent font-display text-xl font-bold outline-none placeholder:opacity-50', dark ? 'focus:bg-white/10' : 'focus:bg-black/5')} aria-label="Ranger name" />
-          <div className={clsx('font-display text-sm font-semibold', dark ? 'text-amber-300' : 'text-amber-700')}>Level {L.level} · {L.rank}</div>
-          <div className={clsx('mt-1.5 h-2.5 overflow-hidden rounded-full', dark ? 'bg-white/10' : 'bg-black/10')}><div className="h-full rounded-full bg-gradient-to-r from-[#ffe066] to-[#ffb020] transition-all duration-700" style={{ width: `${L.frac * 100}%` }} /></div>
-          <div className={clsx('mt-0.5 text-[11px] font-semibold', dark ? 'text-white/55' : 'text-ink/55')}>{L.into} / {L.need} XP to level {L.level + 1}</div>
+          <input value={p.name} onChange={(e) => updateProfile({ name: e.target.value.slice(0, 24) })} placeholder="Your ranger name" className={clsx('w-full rounded-lg bg-transparent font-display font-bold outline-none placeholder:opacity-50', size === 'mini' ? 'text-lg leading-tight' : 'text-xl', dark ? 'focus:bg-white/10' : 'focus:bg-black/5')} aria-label="Ranger name" />
+          <div className={clsx('font-display font-semibold', size === 'mini' ? 'text-[13px] leading-tight' : 'text-sm', dark ? 'text-amber-300' : 'text-amber-700')}>Level {L.level} · {L.rank}</div>
+          <div className={clsx('overflow-hidden rounded-full', size === 'mini' ? 'mt-1 h-1.5' : 'mt-1.5 h-2.5', dark ? 'bg-white/10' : 'bg-black/10')}><div className="h-full rounded-full bg-gradient-to-r from-[#ffe066] to-[#ffb020] transition-all duration-700" style={{ width: `${L.frac * 100}%` }} /></div>
+          {size !== 'mini' && <div className={clsx('mt-0.5 text-[11px] font-semibold', dark ? 'text-white/55' : 'text-ink/55')}>{L.into} / {L.need} XP to level {L.level + 1}</div>}
         </div>
-        <LevelRing xp={p.xp} size={size === 'full' ? 52 : 44} stroke={5} />
+        <LevelRing xp={p.xp} size={size === 'full' ? 52 : size === 'compact' ? 44 : 40} stroke={size === 'mini' ? 4 : 5} />
       </div>
       {pick && (
         <div className="mt-3 flex flex-wrap gap-1.5">

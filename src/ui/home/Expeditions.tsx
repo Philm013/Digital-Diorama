@@ -110,21 +110,22 @@ function LessonWaiting() {
 }
 
 /** how far along the ranger path the student is, and what comes next */
-export function PathProgress({ dark }: { dark?: boolean }) {
+/** where the student is on the ranger path; `compact` (short phone screens) leaves out the line about the next rank */
+export function PathProgress({ dark, compact }: { dark?: boolean; compact?: boolean }) {
   const profile = useProfile();
   const stage = stageOf(profile);
   const next = nextStage(profile);
   const cur = STAGES[stage];
   return (
-    <div className={clsx('flex items-center gap-3 rounded-[20px] p-2.5 pr-3', dark ? 'dd-card-dark text-white' : 'bg-gradient-to-r from-amber-50 to-white ring-1 ring-amber-200/70')}>
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-b from-amber-200 to-amber-400 text-2xl shadow-[0_3px_0_#b77d12]">{cur.emoji}</span>
+    <div className={clsx('flex items-center gap-3 rounded-[20px] pr-3', compact ? 'p-2' : 'p-2.5', dark ? 'dd-card-dark text-white' : 'bg-gradient-to-r from-amber-50 to-white ring-1 ring-amber-200/70')}>
+      <span className={clsx('grid shrink-0 place-items-center bg-gradient-to-b from-amber-200 to-amber-400 shadow-[0_3px_0_#b77d12]', compact ? 'h-9 w-9 rounded-[12px] text-xl' : 'h-11 w-11 rounded-[14px] text-2xl')}>{cur.emoji}</span>
       <div className="min-w-0 flex-1">
         <div className={clsx('font-display text-[11px] font-bold uppercase tracking-[0.14em]', dark ? 'text-amber-300' : 'text-amber-700')}>Ranger path · {profile.completed.length} completed</div>
         <div className="truncate font-display text-[15px] font-bold leading-tight">{profile.unlockAll ? 'Everything unlocked (teacher mode)' : cur.rank}</div>
         <div className="mt-1 flex gap-1" aria-hidden>
           {STAGES.slice(1).map((s) => <span key={s.n} className={clsx('h-1.5 flex-1 rounded-full', stage >= s.n ? 'bg-amber-500' : dark ? 'bg-white/15' : 'bg-black/10')} />)}
         </div>
-        {next && <div className={clsx('mt-1 truncate text-[11.5px] font-semibold', dark ? 'text-white/60' : 'text-ink/55')}>Next: {next.emoji} {next.rank} — {unlockSummary(next, 2)}</div>}
+        {next && !compact && <div className={clsx('mt-1 truncate text-[11.5px] font-semibold', dark ? 'text-white/60' : 'text-ink/55')}>Next: {next.emoji} {next.rank} — {unlockSummary(next, 2)}</div>}
       </div>
     </div>
   );
