@@ -480,7 +480,8 @@ function Welcome({ biome, model, onStart, onSkip }: { biome: { name: string; emo
             {model ? 'This finished example shows a healthy habitat to explore. ' : 'Your box starts as bare land, sky and climate — it’s up to you to bring it to life. '}
             Want a quick guided start? About {minutes} minutes, one small step at a time — you do each one yourself.
           </p>
-          <ol className="mt-3 space-y-1.5">
+          {/* (short screens — phones held sideways — keep the message and the buttons, without the list) */}
+          <ol className="mt-3 space-y-1.5 [@media(max-height:540px)]:hidden">
             {FIRST_STEPS.map((l, i) => (
               <li key={l.id} className="flex items-center gap-2.5 rounded-2xl bg-white/[0.06] px-3 py-2 ring-1 ring-white/[0.08]">
                 <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-amber-300/20 font-display text-[12px] font-bold text-amber-200">{i + 1}</span>
