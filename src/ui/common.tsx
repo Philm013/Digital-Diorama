@@ -11,7 +11,8 @@ export function Btn({ className, variant = 'soft', size = 'md', active, children
       {...rest}
       className={clsx(
         'inline-flex items-center justify-center gap-1.5 rounded-xl font-display font-semibold transition-all select-none disabled:opacity-40 disabled:pointer-events-none active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500',
-        size === 'sm' && 'h-8 px-2.5 text-[13px]',
+        // (touch screens get finger-sized small buttons)
+        size === 'sm' && 'h-8 px-2.5 text-[13px] [@media(pointer:coarse)]:h-10',
         size === 'md' && 'h-11 px-3.5 text-sm',
         size === 'lg' && 'h-12 px-5 text-base',
         variant === 'soft' && (active ? 'bg-amber-200/90 text-ink ring-1 ring-amber-400' : 'bg-white/85 text-ink ring-1 ring-black/10 hover:bg-white'),
@@ -62,7 +63,7 @@ export function Slider({ label, value, min, max, step = 0.01, onChange, format, 
 
 export function Toggle({ label, checked, onChange, hint }: { label: ReactNode; checked: boolean; onChange: (v: boolean) => void; hint?: string }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 py-1 text-[13px]" title={hint}>
+    <label className="flex min-h-9 cursor-pointer items-center justify-between gap-3 py-1 text-[13px] [@media(pointer:coarse)]:min-h-11" title={hint}>
       <span className="font-semibold text-ink/80">{label}</span>
       <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
         className={clsx('relative h-6 w-11 shrink-0 rounded-full transition-colors', checked ? 'bg-leaf' : 'bg-black/20')}>
@@ -77,7 +78,8 @@ export function Segmented<T extends string>({ value, options, onChange, size = '
     <div className="flex flex-wrap gap-1 rounded-xl bg-black/5 p-1">
       {options.map((o) => (
         <button key={o.value} type="button" title={o.title} onClick={() => onChange(o.value)}
-          className={clsx('flex-1 whitespace-nowrap rounded-lg px-2 font-display font-semibold transition-all', size === 'sm' ? 'h-7 text-xs' : 'h-8 text-[13px]',
+          aria-pressed={o.value === value}
+          className={clsx('flex-1 whitespace-nowrap rounded-lg px-2 font-display font-semibold transition-all', size === 'sm' ? 'h-7 text-xs [@media(pointer:coarse)]:h-9' : 'h-8 text-[13px] [@media(pointer:coarse)]:h-10',
             o.value === value ? 'bg-white text-ink shadow-sm' : 'text-ink/60 hover:text-ink')}>
           {o.label}
         </button>
@@ -102,7 +104,7 @@ export function Section({ title, children, right, defaultOpen = true }: { title:
  * A dialog: centred on wide screens, a sheet from the bottom on phones that can be dragged down
  * by its header to close. Escape (when it is on top) and the phone's Back button close it too.
  */
-export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; wide?: boolean }) {
+export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; wide?: boolean | 'xl' }) {
   const isTop = useBackLayer(open, onClose);
   const close = useRef(onClose);
   close.current = onClose;
@@ -121,7 +123,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
   return (
     <div className={clsx('dd-modal-bg fixed inset-0 z-[65] flex items-end justify-center bg-black/45 p-0 backdrop-blur-[3px] transition-opacity duration-200 sm:items-center sm:p-6', leaving && 'opacity-0')} onClick={onClose}>
       <div data-sheet role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => e.stopPropagation()}
-        className={clsx('dd-panel dd-modal flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px]', !drag.dragging && 'dd-sheet-snap', wide ? 'sm:max-w-4xl' : 'sm:max-w-lg')}
+        className={clsx('dd-panel dd-modal flex max-h-[92vh] max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px]', !drag.dragging && 'dd-sheet-snap', wide === 'xl' ? 'sm:max-w-6xl' : wide ? 'sm:max-w-4xl' : 'sm:max-w-lg')}
         style={leaving ? { transform: 'translateY(105%)' } : drag.dy ? { transform: `translateY(${drag.dy}px)` } : undefined}>
         <div className={clsx(sheet && 'touch-none select-none')} {...drag.handlers}>
           <div className="flex justify-center pt-2 sm:hidden"><span className="h-1.5 w-11 rounded-full bg-black/15" /></div>

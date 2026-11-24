@@ -15,7 +15,9 @@ import { useBiomeThumb } from './thumbs';
 import { AppBar, TabBar, TopTabs, useLayout, type ShellTab } from './shell';
 import { Tray, TrayHeader } from './Tray';
 import { useBackLayer } from './backStack';
-import { ExpeditionPicker, KRAFT_EDGE, QUALITY_OPTIONS } from './home/Expeditions';
+import { ExpeditionPicker, KRAFT_EDGE, PathProgress, QUALITY_OPTIONS } from './home/Expeditions';
+import { LockedNotice } from './game/Locked';
+import { habitatUnlocked } from '../game/unlocks';
 import { DioramaLibrary, ago } from './home/Library';
 
 const LIVING = CATALOG.filter((d) => d.living !== false && d.category !== 'habitats');
@@ -64,7 +66,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
 
   const header = {
     expeditions: <TrayHeader id="dd-tray-title" onClose={() => go('home')} icon="🧭" accent="#2fae4b" title="Choose your expedition"
-      subtitle={`${BIOMES.length - 1} habitats & a blank box${explored ? ` · ${explored} explored` : ''}`} />,
+      subtitle={`${BIOMES.filter((b) => habitatUnlocked(b.id, profile)).length} of ${BIOMES.length} habitats open${explored ? ` · ${explored} explored` : ''}`} />,
     library: <TrayHeader id="dd-tray-title" onClose={() => go('home')} icon="🗂️" accent="#3d85c6" title="My dioramas"
       subtitle={projects ? (projects.length === 1 ? '1 saved on this device' : `${projects.length} saved on this device`) : ' '}
       actions={<Btn size="sm" onClick={() => fileRef.current?.click()} title="Open a .diorama.json file"><Upload size={15} /> Open file</Btn>} />,
@@ -109,6 +111,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
         try { setError(''); onOpen(await importProjectFile(f)); } catch (err) { setError((err as Error).message); setTray('library'); }
       }} />
 
+      <LockedNotice />
       <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Settings">
         <div className="space-y-4">
           <div>
@@ -117,6 +120,10 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
             <p className="mt-1 text-[11.5px] text-ink/50">Fast suits phones and Chromebooks; Detailed is for fast computers. Applies to dioramas you open next.</p>
           </div>
           <Toggle label="Sound effects" checked={settings.sound} onChange={(v) => updateSettings({ ...settings, sound: v })} />
+          <div>
+            <Toggle label="Unlock everything (teacher mode)" checked={!!profile.unlockAll} onChange={(v) => updateProfile({ unlockAll: v })} />
+            <p className="mt-1 text-[11.5px] text-ink/50">Normally habitats and tools open one step at a time as students complete expeditions (⭐⭐ on a diorama of their own). Switch this on to open every habitat, tool and example diorama on this device.</p>
+          </div>
           <label className="block">
             <span className="text-[13px] font-semibold text-ink/70">Made by <span className="font-normal text-ink/45">(your name or team, shown on new dioramas)</span></span>
             <input className="dd-input mt-1" value={settings.author || profile.name} placeholder="Your name or team" maxLength={40}
@@ -157,6 +164,7 @@ function HomeCore({ projects, profile, wide, landscape, onTab, onContinue }: {
         </div>
         <div className="flex flex-col gap-3">
           <RangerCard dark onOpenJournal={() => onTab('journal')} />
+          <button type="button" onClick={() => onTab('expeditions')} className="block w-full rounded-[20px] text-left transition active:scale-[0.99]" aria-label="Ranger path: see your expeditions"><PathProgress dark /></button>
           {(wide || landscape) && <BadgeStrip profile={profile} onClick={() => onTab('journal')} />}
         </div>
       </div>
@@ -170,7 +178,7 @@ function Intro({ size }: { size: 'sm' | 'md' | 'lg' }) {
     <div className={clsx('text-center', big && 'text-left')}>
       <div className="mb-2.5 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-kraft-dark shadow-sm ring-1 ring-black/5">📦 The shoebox diorama, reimagined</div>
       <h1 className={clsx('dd-logo font-display font-bold leading-[0.95] text-ink', big ? 'text-7xl' : size === 'sm' ? 'text-[34px]' : 'text-[42px] sm:text-6xl')}>Digital{big && <br />} Diorama</h1>
-      <p className={clsx('max-w-xl font-semibold text-ink/75', big ? 'mt-3 text-lg' : size === 'sm' ? 'mx-auto mt-2 text-[13.5px] leading-snug' : 'mx-auto mt-3 text-[15px]')}>Build a living 3D habitat, discover real species, keep its ecosystem healthy — then bring it to life with code.</p>
+      <p className={clsx('max-w-xl font-semibold text-ink/75', big ? 'mt-3 text-lg' : size === 'sm' ? 'mx-auto mt-2 text-[13.5px] leading-snug' : 'mx-auto mt-3 text-[15px]')}>Build living 3D habitats from the ground up, discover real species and keep their ecosystems healthy. Every expedition you complete unlocks new habitats and tools.</p>
     </div>
   );
 }
@@ -211,7 +219,7 @@ function ContinueCard({ p, stars, onOpen }: { p: ProjectMeta; stars: number; onO
 function QuickActions({ count, onTab }: { count: number; onTab: (id: TabId) => void }) {
   return (
     <div className="grid grid-cols-2 gap-2.5">
-      <ActionTile onClick={() => onTab('expeditions')} icon={<MapIcon size={20} />} title="New expedition" detail={`${BIOMES.length} habitats`}
+      <ActionTile onClick={() => onTab('expeditions')} icon={<MapIcon size={20} />} title="New expedition" detail={`${BIOMES.filter((b) => habitatUnlocked(b.id)).length} habitats open`}
         className="bg-white text-ink [--edge:rgba(0,0,0,.16)]" iconClass="bg-gradient-to-b from-[#4fd36a] to-[#2fae4b] text-white" />
       <ActionTile onClick={() => onTab('library')} icon={<Boxes size={20} />} title="My dioramas" detail={count === 1 ? '1 saved' : `${count} saved`}
         className="bg-[#3d85c6] text-white [--edge:#255a8c]" iconClass="bg-white/20 text-white" />

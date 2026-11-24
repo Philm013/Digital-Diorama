@@ -55,6 +55,8 @@ export interface AssetDef {
   living?: boolean;
   /** rebuilt when the diorama's season changes (blossom, autumn colour, bare winters) */
   seasonal?: boolean;
+  /** typical adult mass (kg), for who can catch whom in the food web */
+  mass?: number;
 }
 
 export const BIOME_IDS = ['forest', 'taiga', 'grassland', 'savanna', 'rainforest', 'desert', 'tundra', 'wetland', 'mountain', 'reef', 'kelp', 'shore', 'garden'] as const;

@@ -2,6 +2,9 @@
 import { Engine } from './engine/Engine';
 import { newDocById } from './biomes/factory';
 import type { Quality } from './engine/types';
+import { BIOME_BY_ID } from './biomes/templates';
+
+Engine.recipeFor = (b) => BIOME_BY_ID[b]?.terrain;
 
 const root = document.getElementById('root')!;
 root.style.position = 'relative';
@@ -11,7 +14,7 @@ const engine = new Engine(root, q);
 (window as any).__engine = engine;
 engine.on((e) => { if (e.type === 'toast') console.log('TOAST', e.text); if (e.type === 'loaded') (window as any).__loaded = true; });
 const biome = params.get('biome') || 'forest';
-const doc = newDocById(biome, q);
+const doc = newDocById(biome, q, { model: params.get('starter') === null });
 const lineup = params.get('lineup');
 if (lineup) {
   const ids = lineup.split(',');

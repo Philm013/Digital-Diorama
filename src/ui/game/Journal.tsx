@@ -3,7 +3,7 @@ import { clsx } from 'clsx';
 import { Search, Lock } from 'lucide-react';
 import { CATALOG, CATEGORY_META } from '../../assets/catalog';
 import type { AssetDef } from '../../assets/types';
-import { roleOf, ROLE_META } from '../../assets/foodweb';
+import { dietText, roleOf, ROLE_META } from '../../assets/foodweb';
 import { BIOMES } from '../../biomes/templates';
 import { AVATARS, BADGES, levelOf, updateProfile } from '../../game/progress';
 import { AssetThumb } from '../AssetThumb';
@@ -133,6 +133,7 @@ export function Journal({ initialTab = 'species' }: { initialTab?: 'species' | '
               {open.info.scientific && <div className="-mt-1 text-sm italic text-ink/60">{open.info.scientific}</div>}
               <div className="flex flex-wrap gap-1"><Chip color={ROLE_META[roleOf(open)].color}>{ROLE_META[roleOf(open)].emoji} {ROLE_META[roleOf(open)].label}</Chip>{open.info.status && <Chip color={statusColor(open.info.status)}>{open.info.status}</Chip>}</div>
               <p className="text-sm leading-relaxed text-ink/80">💡 {open.info.fact ?? open.info.blurb}</p>
+              {open.category === 'animals' && !!open.info.eats?.length && <p className="text-[13px] text-ink/70"><b className="text-ink/85">🍽️ Eats:</b> {dietText(open)}</p>}
               <div className="text-xs text-ink/55">{[open.info.kingdom, open.info.phylum, open.info.class, open.info.order, open.info.family].filter(Boolean).join(' › ')}</div>
             </div>
           </div>

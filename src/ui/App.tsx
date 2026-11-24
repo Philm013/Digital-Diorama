@@ -5,6 +5,7 @@ import { loadSettings, loadProject, type Settings } from '../storage/projects';
 import type { DioramaDoc } from '../engine/types';
 import { newDocById } from '../biomes/factory';
 import { BIOME_BY_ID } from '../biomes/templates';
+import { DIORAMA_SIZES } from '../engine/sizes';
 import { layerOf, useBackLayer } from './backStack';
 
 export function App() {
@@ -20,7 +21,11 @@ export function App() {
   useEffect(() => {
     const h = new URLSearchParams(location.hash.slice(1));
     const n = h.get('new');
-    if (n && BIOME_BY_ID[n]) setDoc(newDocById(n, (h.get('q') as Settings['quality']) || settings.quality, { author: settings.author }));
+    if (n && BIOME_BY_ID[n]) {
+      // #new=forest&size=large starts a diorama; &model=1 opens the finished example instead
+      const sz = DIORAMA_SIZES.find((x) => x.id === h.get('size'));
+      setDoc(newDocById(n, (h.get('q') as Settings['quality']) || settings.quality, { author: settings.author, model: h.get('model') === '1', size: sz ? { width: sz.w, depth: sz.d } : undefined }));
+    }
     const o = h.get('open');
     if (o) void loadProject(o).then((d) => {
       if (!d) return;

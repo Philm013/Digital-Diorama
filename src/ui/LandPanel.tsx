@@ -11,12 +11,15 @@ import type { SculptTool } from '../engine/Terrain';
 import { useEngine, useEngineVersion } from './store';
 import { Btn, Section, Segmented, Slider, Toggle } from './common';
 import { haptic, uiSound } from './feedback';
+import { areaKindUnlocked, isUnlocked, showLocked, sizeUnlocked, stampFeature, stampUnlocked, type FeatureId } from '../game/unlocks';
+import { useProfile } from './game/useGame';
+import { LockBadge } from './game/Locked';
 
 type Tab = 'sculpt' | 'landforms' | 'area' | 'paint';
-const TABS: { id: Tab; label: string; emoji: string }[] = [
+const TABS: { id: Tab; label: string; emoji: string; needs?: FeatureId }[] = [
   { id: 'landforms', label: 'Landforms', emoji: '🏔️' },
-  { id: 'area', label: 'Area', emoji: '⬚' },
-  { id: 'sculpt', label: 'Sculpt', emoji: '✋' },
+  { id: 'area', label: 'Area', emoji: '⬚', needs: 'area' },
+  { id: 'sculpt', label: 'Sculpt', emoji: '✋', needs: 'sculpt' },
   { id: 'paint', label: 'Paint', emoji: '🎨' },
 ];
 const SCULPT: { tool: SculptTool; label: string; icon: React.ReactNode }[] = [
@@ -31,11 +34,15 @@ let lastTab: Tab = 'landforms';
 export function LandTools() {
   const engine = useEngine();
   useEngineVersion();
+  const profile = useProfile();
   const t = engine.terrain!;
   const brush = engine.brush;
-  const [tab, setTabState] = useState<Tab>(() => tabOf(brush.tool) ?? lastTab);
+  const open = (k: Tab) => { const n = TABS.find((x) => x.id === k)?.needs; return !n || isUnlocked(n, profile); };
+  const [tab, setTabState] = useState<Tab>(() => { const k = tabOf(brush.tool) ?? lastTab; return open(k) ? k : 'landforms'; });
   useEffect(() => { const k = tabOf(brush.tool); if (k && k !== tab) setTabState(k); }, [brush.tool]); // eslint-disable-line react-hooks/exhaustive-deps
   const setTab = (k: Tab) => {
+    const needs = TABS.find((x) => x.id === k)?.needs;
+    if (needs && !isUnlocked(needs)) { showLocked(needs); return; }
     lastTab = k;
     setTabState(k);
     uiSound('tick');
@@ -47,8 +54,9 @@ export function LandTools() {
     <div className="space-y-3">
       <div className="grid grid-cols-4 gap-1 rounded-2xl bg-black/[0.05] p-1">
         {TABS.map((x) => (
-          <button key={x.id} data-landtab={x.id} onClick={() => setTab(x.id)} className={clsx('flex h-12 flex-col items-center justify-center rounded-xl font-display text-[11.5px] font-semibold leading-tight transition', tab === x.id ? 'bg-white text-ink shadow-sm' : 'text-ink/60 hover:text-ink')}>
+          <button key={x.id} data-landtab={x.id} onClick={() => setTab(x.id)} className={clsx('relative flex h-12 flex-col items-center justify-center rounded-xl font-display text-[11.5px] font-semibold leading-tight transition', tab === x.id ? 'bg-white text-ink shadow-sm' : 'text-ink/60 hover:text-ink', !open(x.id) && 'opacity-55')}>
             <span className="text-[17px] leading-none">{x.emoji}</span>{x.label}
+            {!open(x.id) && <LockBadge className="absolute right-1 top-1" />}
           </button>
         ))}
       </div>
@@ -86,7 +94,9 @@ function StampTools() {
   const armed = engine.brush.tool === 'stamp';
   const digs = ['canyon', 'valley', 'lake', 'crater'].includes(d.id);
   const t = engine.terrain!;
+  useProfile();
   const pick = (id: string) => {
+    if (!stampUnlocked(id)) { showLocked(stampFeature(id)!); return; }
     if (armed && st.id === id) { engine.setLandTool(null); return; }
     engine.land.chooseStamp(id);
     engine.setLandTool('stamp');
@@ -97,9 +107,10 @@ function StampTools() {
       <div className="grid grid-cols-4 gap-1.5">
         {STAMPS.map((s) => (
           <button key={s.id} data-stamp={s.id} onClick={() => pick(s.id)} title={s.hint}
-            className={clsx('flex flex-col items-center gap-0.5 rounded-xl px-1 pb-1.5 pt-1 text-[10.5px] font-bold leading-tight ring-1 transition', armed && st.id === s.id ? 'bg-amber-100 ring-amber-400' : 'bg-white ring-black/10 hover:bg-black/[0.03]')}>
+            className={clsx('relative flex flex-col items-center gap-0.5 rounded-xl px-1 pb-1.5 pt-1 text-[10.5px] font-bold leading-tight ring-1 transition', armed && st.id === s.id ? 'bg-amber-100 ring-amber-400' : 'bg-white ring-black/10 hover:bg-black/[0.03]', !stampUnlocked(s.id) && 'opacity-50 grayscale')}>
             <span className="text-[22px] leading-none">{s.emoji}</span>
             <span className="truncate">{s.name}</span>
+            {!stampUnlocked(s.id) && <LockBadge className="absolute right-0.5 top-0.5" />}
           </button>
         ))}
       </div>
@@ -179,9 +190,10 @@ function AreaTools() {
       )}
       <div className="grid grid-cols-4 gap-1.5">
         {AREA_KINDS.map((k) => (
-          <button key={k.id} data-area={k.id} onClick={() => { set({ kind: k.id }); uiSound('tick'); }} title={k.hint}
-            className={clsx('flex flex-col items-center gap-0.5 rounded-xl px-1 pb-1.5 pt-1 text-[10.5px] font-bold leading-tight ring-1 transition', a.kind === k.id ? 'bg-amber-100 ring-amber-400' : 'bg-white ring-black/10 hover:bg-black/[0.03]')}>
+          <button key={k.id} data-area={k.id} onClick={() => { if (!areaKindUnlocked(k.id)) { showLocked(k.id === 'volcanic' ? 'landforms-4' : ['dunes', 'canyons', 'mesas'].includes(k.id) ? 'landforms-3' : 'landforms-2'); return; } set({ kind: k.id }); uiSound('tick'); }} title={k.hint}
+            className={clsx('relative flex flex-col items-center gap-0.5 rounded-xl px-1 pb-1.5 pt-1 text-[10.5px] font-bold leading-tight ring-1 transition', a.kind === k.id ? 'bg-amber-100 ring-amber-400' : 'bg-white ring-black/10 hover:bg-black/[0.03]', !areaKindUnlocked(k.id) && 'opacity-50 grayscale')}>
             <span className="text-[22px] leading-none">{k.emoji}</span><span className="truncate">{k.name}</span>
+            {!areaKindUnlocked(k.id) && <LockBadge className="absolute right-0.5 top-0.5" />}
           </button>
         ))}
       </div>
@@ -247,6 +259,8 @@ const SIZES = DIORAMA_SIZES;
 export function SizeSection() {
   const engine = useEngine();
   useEngineVersion();
+  const profile = useProfile();
+  const custom = isUnlocked('size-custom', profile);
   const t = engine.terrain!;
   const [w, setW] = useState(t.width), [d, setD] = useState(t.depth);
   useEffect(() => { setW(t.width); setD(t.depth); }, [t]);
@@ -263,10 +277,23 @@ export function SizeSection() {
     <Section title={<span className="flex items-center gap-1.5"><Ruler size={14} /> Diorama size</span>} defaultOpen={false}>
       <div className="text-[12.5px] text-ink/70">Now <b>{t.width} × {t.depth} m</b>. Growing adds land around the edges; shrinking trims them.</div>
       <div className="grid grid-cols-4 gap-1.5">
-        {SIZES.map((s) => <Btn key={s.id} size="sm" active={w === s.w && d === s.d} onClick={() => { setW(s.w); setD(s.d); }} title={`${s.w} × ${s.d} m`}>{s.label}</Btn>)}
+        {SIZES.map((s) => {
+          const ok = sizeUnlocked(s.id, profile);
+          return (
+            <Btn key={s.id} size="sm" active={w === s.w && d === s.d} className={clsx('relative', !ok && 'opacity-55')} title={`${s.w} × ${s.d} m`}
+              onClick={() => { if (!ok) { showLocked(s.id === 'huge' ? 'size-huge' : 'size-large'); return; } setW(s.w); setD(s.d); }}>
+              {s.label}{!ok && <LockBadge className="absolute -right-1 -top-1" />}
+            </Btn>
+          );
+        })}
       </div>
-      <Slider label="Width" value={w} min={MIN_SIZE} max={MAX_WIDTH} step={2} unit="m" onChange={setW} />
-      <Slider label="Depth" value={d} min={MIN_SIZE} max={MAX_DEPTH} step={2} unit="m" onChange={setD} />
+      {custom ? (
+        <>
+          <Slider label="Width" value={w} min={MIN_SIZE} max={MAX_WIDTH} step={2} unit="m" onChange={setW} />
+          <Slider label="Depth" value={d} min={MIN_SIZE} max={MAX_DEPTH} step={2} unit="m" onChange={setD} />
+        </>
+      ) : <button type="button" onClick={() => showLocked('size-custom')} className="flex w-full items-center gap-2 rounded-xl bg-black/[0.04] px-3 py-2 text-left text-[12px] font-semibold text-ink/55"><LockBadge /> Any width and depth unlocks later on your ranger path</button>}
+      {changed && <p className="text-[12px] text-ink/60">New land around the edges continues this habitat — its hills, ground and streams carry on.</p>}
       {changed && cell > 0.26 && <p className="text-[11px] text-ink/50">Big dioramas use a slightly coarser grid ({Math.round(cell * 100)} cm) to stay smooth.</p>}
       <Btn variant="solid" className="w-full" disabled={!changed} onClick={apply}><Ruler size={15} /> Make it {w} × {d} m</Btn>
     </Section>

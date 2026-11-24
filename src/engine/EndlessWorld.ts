@@ -9,6 +9,7 @@ import { CoverKit, Groundcover } from './Groundcover';
 import { WATER_FRAG, WATER_VERT } from './Water';
 import { applyWind } from './wind';
 import { Noise2D, clamp, disposeObject, lerp, rng, smoothstep, uid } from './util';
+import { EdgeContinuation, carveRiver, fieldHeight, mirrorInto } from './terrainGen';
 import { buildModel } from '../assets/builder';
 import { CATALOG } from '../assets/catalog';
 import type { AssetDef } from '../assets/types';
@@ -22,8 +23,10 @@ import type { AssetDef } from '../assets/types';
  */
 
 const CHUNK = 32;
-/** how far (m) past the diorama's edge its own ground flows into the world */
-const SKIRT = 16;
+/** how far (m) past the diorama's edge its own habitat's land carries on, before the wider world takes over */
+const NEAR = 28, BLEND = 90;
+/** how far (m) past the diorama's edge its ground's pattern carries on */
+const SKIRT = 7;
 
 interface Profile { relief: number; scale: number; ridges: number; mountains: number; dunes: number; lakes: number }
 const PROFILES: Record<string, Partial<Profile>> = {
@@ -95,6 +98,11 @@ export class EndlessWorld {
   private spawning = false;
   private runId = 0;
   private lastPos = new THREE.Vector3();
+  /** the diorama's own land carried on outward (its generator, joined to its real edge) */
+  private cont: EdgeContinuation | null = null;
+  private field: ReturnType<typeof fieldHeight> | null = null;
+  /** how wet the last worldHeight() point was: 1 in a lake or river, 0 on dry land */
+  private lastWet = 0;
 
   constructor(private e: Engine) {
     this.group.name = 'endless-world';
@@ -106,45 +114,67 @@ export class EndlessWorld {
     return Math.abs(x) < t.width / 2 + pad && Math.abs(z) < t.depth / 2 + pad;
   }
 
-  /** the endless landscape alone, without the diorama */
+  /** the endless landscape alone, without the diorama (sets lastWet) */
   worldHeight(x: number, z: number) {
     const P = this.profile, N = this.N;
     const s = P.scale;
-    let h = this.base + P.relief * N.fbm(x * s, z * s, 4);
-    const far = smoothstep(this.near, this.near + 150, Math.hypot(x, z));
-    if (P.ridges) h += P.ridges * (N.ridged(x * s * 0.7 + 17, z * s * 0.7 - 9, 4) - 0.3) * (0.35 + 0.65 * far);
-    if (P.mountains) h += P.mountains * Math.pow(N.ridged(x / 240 + 3.3, z / 240 - 1.7, 5), 2.2) * far;
+    // warp the domain so hills, valleys and ranges wander instead of lining up on the noise grid
+    const wx = x + 34 * N.fbm(x / 260 + 5.2, z / 260 - 1.3, 2), wz = z + 34 * N.fbm(x / 260 - 7.7, z / 260 + 9.1, 2);
+    let h = this.base + P.relief * N.fbm(wx * s, wz * s, 5);
+    // broad swells and basins
+    h += P.relief * 1.2 * N.fbm(wx / 420 + 11, wz / 420 - 4, 2);
+    const far = smoothstep(this.near, this.near + 160, Math.hypot(x, z));
+    if (P.ridges) h += P.ridges * (N.ridged(wx * s * 0.7 + 17, wz * s * 0.7 - 9, 4) - 0.3) * (0.35 + 0.65 * far);
+    if (P.mountains) {
+      // ranges rise out of foothills: a ridged range mask times sharper peaks
+      const range = smoothstep(0.35, 0.75, N.fbm(wx / 520 - 3.1, wz / 520 + 6.4, 2) * 0.5 + 0.5);
+      const peaks = Math.pow(N.ridged(wx / 230 + 3.3, wz / 230 - 1.7, 5), 2.2);
+      h += P.mountains * peaks * (0.35 + 0.65 * range) * far;
+    }
     if (P.dunes) {
       const w = x * 0.12 + N.fbm(x * 0.02, z * 0.02, 2) * 3;
       const crest = Math.pow(0.5 + 0.5 * Math.sin(w + z * 0.04), 2.2);
       h += P.dunes * (crest * (0.7 + 0.3 * N.noise(x * 0.04, z * 0.06)) - 0.3);
     }
     const wl = this.waterLevel;
+    let wet = 0;
     if (wl !== null && P.lakes > 0) {
-      // lakes fill the lowest basins; rivers wind between them
-      const l = N.fbm(x / 110 + 40, z / 110 - 20, 3);
-      const q = -0.38 + P.lakes * 0.42;
-      const lake = smoothstep(q + 0.09, q - 0.05, l);
-      if (lake > 0) h = lerp(h, wl - 0.4 - 1.6 * lake, lake);
-      if (P.lakes >= 0.25) {
-        const r = Math.abs(N.fbm(x / 160 - 70, z / 160 + 30, 3));
-        const bank = smoothstep(0.05, 0.022, r), bed = smoothstep(0.022, 0.008, r);
-        if (bank > 0) h = lerp(h, Math.min(h, wl + 0.25), bank);
-        if (bed > 0) h = lerp(h, wl - 0.7, bed);
-      }
+      // lakes fill a few basins; streams wind between them
+      const l = N.fbm(x / 130 + 40, z / 130 - 20, 3);
+      const q = -0.5 + P.lakes * 0.38;
+      const lake = smoothstep(q + 0.08, q - 0.05, l);
+      if (lake > 0) h = lerp(h, wl - 0.3 - 1.8 * lake, lake);
+      wet = lake;
+      // (rivers come from the diorama's own creek, carried on across the land: see heightAt)
     }
+    this.lastWet = wet;
     return h;
   }
 
-  /** ground height anywhere: the diorama inside its box, flowing out into the world around it */
+  /** ground height anywhere: the diorama inside its box, its own land around it, the wider world beyond */
   heightAt = (x: number, z: number) => {
-    const t = this.terrain;
+    const t = this.terrain, cont = this.cont!;
     const hw = t.width / 2, hd = t.depth / 2;
-    const cx = x < -hw ? -hw : x > hw ? hw : x, cz = z < -hd ? -hd : z > hd ? hd : z;
-    const dx = x - cx, dz = z - cz;
-    if (dx === 0 && dz === 0) return t.heightAt(x, z);
-    const edge = t.heightAt(cx, cz);
-    return edge + (this.worldHeight(x, z) - edge) * smoothstep(0, SKIRT, Math.sqrt(dx * dx + dz * dz));
+    if (x >= -hw && x <= hw && z >= -hd && z <= hd) return t.heightAt(x, z);
+    const d = cont.outside(x, z);
+    const a = smoothstep(NEAR, NEAR + BLEND, d);
+    let h = a < 1 ? cont.height(x, z) : 0;
+    let wet = 0;
+    if (a > 0) { h = lerp(h, this.worldHeight(x, z), a); wet = this.lastWet * a; }
+    const wl = this.waterLevel, f = this.field!;
+    if (wl !== null) {
+      if (a < 1) wet = Math.max(wet, f.wet(x, z) * (1 - a));
+      // the diorama's creek carries on across the land, at the water's level
+      if (f.riverWidth > 0) {
+        const before = h;
+        h = carveRiver(h, x, z, f, wl, smoothstep(0, 8, d));
+        if (h < before) wet = Math.max(wet, smoothstep(wl + 0.1, wl - 0.2, h));
+      }
+      // only lakes and rivers hold water: other hollows settle into dry flats just above it
+      const floor = wl + 0.2 + 0.1 * this.N.noise(x * 0.3, z * 0.3);
+      if (h < floor && wet < 1) h = lerp(floor, h, wet);
+    }
+    return h;
   };
 
   waterAt = (x: number, z: number): number | null => {
@@ -161,20 +191,36 @@ export class EndlessWorld {
     const t = this.terrain;
     const hw = t.width / 2, hd = t.depth / 2;
     const out = Math.hypot(x - clamp(x, -hw, hw), z - clamp(z, -hd, hd));
-    // close to the box, its own ground carries on outward with a wandering edge
-    if (out < SKIRT * 0.75 + N.noise(x * 0.15, z * 0.15) * 3) {
-      const g = t.paintGrid;
-      const i = Math.round((clamp(x, -hw, hw) + hw) / g.dx), j = Math.round((clamp(z, -hd, hd) + hd) / g.dz);
-      const edgeType = t.paint[clamp(j, 0, t.nz - 1) * t.nx + clamp(i, 0, t.nx - 1)];
-      if (slope < 0.8 || edgeType === G.rock || edgeType === G.cliff) return edgeType;
-    }
     const wl = this.waterLevel;
+    // close to the box, its ground's own pattern carries on outward (mirrored, so nothing is
+    // stretched), with a ragged edge
+    if (out < SKIRT + N.fbm(x * 0.12, z * 0.12, 2) * SKIRT * 0.8) {
+      const [mx, mz] = mirrorInto(x, z, hw, hd);
+      const mh = t.heightAt(mx, mz);
+      const dry = t.waterLevel === null || mh > t.waterLevel + 0.45;
+      const g = t.paint[clamp(Math.round((mz + hd) / t.paintGrid.dz), 0, t.nz - 1) * t.nx + clamp(Math.round((mx + hw) / t.paintGrid.dx), 0, t.nx - 1)];
+      const steep = g === G.rock || g === G.cliff;
+      if ((dry || (wl !== null && h < wl)) && (!steep || slope > 0.6)) return g;
+    }
     const above = h - this.base;
     return this.style.pick({
       x, z, h, above, rel: clamp(above / Math.max(4, this.profile.mountains * 0.6), 0, 1), slope,
-      wet: wl === null ? 99 : h < wl ? h - wl : (h - wl) * 0.45,
+      wet: wl === null ? 99 : h < wl ? h - wl : this.shoreDist(x, z, out) * 0.2,
       n1: N.fbm(x * 0.08, z * 0.08, 3), n2: N.noise(x * 0.3, z * 0.3),
     });
+  }
+
+  /** roughly how many metres a point is from open water: the creek, a pond or a lake */
+  private shoreDist(x: number, z: number, out: number) {
+    const f = this.field!, P = this.profile;
+    let m = 99;
+    if (f.riverWidth > 0) m = Math.min(m, f.riverDist(x, z) - f.riverWidth / 2);
+    m = Math.min(m, f.pondDist(x, z));
+    if (P.lakes > 0 && out > NEAR + BLEND * 0.3) {
+      const l = this.N.fbm(x / 130 + 40, z / 130 - 20, 3);
+      m = Math.min(m, Math.max(0, l - (-0.5 + P.lakes * 0.38) - 0.03) * 170);
+    }
+    return Math.max(0, m);
   }
 
   /* ======================= start / stop ======================= */
@@ -195,7 +241,11 @@ export class EndlessWorld {
     edge.sort((a, b) => a - b);
     this.base = edge[Math.floor(edge.length / 2)] ?? 0;
     this.waterLevel = t.waterLevel ?? (this.profile.lakes > 0.05 ? this.base - 0.5 : null);
-    this.near = Math.max(t.width, t.depth) * 0.6 + SKIRT;
+    this.near = Math.max(t.width, t.depth) * 0.6 + NEAR;
+    // the diorama's own land, carried on outward (its creek too, for hundreds of metres)
+    const gen = e.terrainGen() ?? { recipe: { seed: t.seed, relief: 0.4, width: t.width, depth: t.depth }, norm: 0 };
+    this.field = fieldHeight(gen, 700);
+    this.cont = new EdgeContinuation(t, this.field.height);
     this.radius = e.quality === 'high' ? 6 : e.quality === 'medium' ? 5 : 4;
     this.waterMat = e.water ? new THREE.ShaderMaterial({ vertexShader: WATER_VERT, fragmentShader: WATER_FRAG, uniforms: e.water.material.uniforms, defines: { DEPTH_ATTR: 1 }, transparent: true, depthWrite: false, fog: true }) : null;
     const snowy = e.env.season === 'winter' || e.env.weather === 'snow';
@@ -225,6 +275,8 @@ export class EndlessWorld {
     this.waterMat?.dispose();
     this.waterMat = null;
     this.e.scene.remove(this.group);
+    this.cont = null;
+    this.field = null;
   }
 
   /** how far the walker can see (m), for fog */

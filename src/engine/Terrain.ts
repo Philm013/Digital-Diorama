@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Noise2D, clamp, smoothstep } from './util';
 import { b64ToBytes, bytesToB64, type TerrainDoc } from './types';
+import type { TerrainGen } from './terrainGen';
 import { GROUND_TYPES, GROUND_UNIFORMS, createGroundMaterial, createPaintTexture, dominantGround, type GroundLocalUniforms, type GroundType, type PaintGrid } from './ground';
 
 export { GROUND_TYPES, GROUND_INDEX, type GroundType } from './ground';
@@ -36,6 +37,8 @@ export class Terrain {
   waterLevel: number | null;
   strata: StrataStyle;
   seed: number;
+  /** what generated this land (when known), for carrying it on beyond the box */
+  gen?: TerrainGen;
   /** thickness of the base below the lowest point */
   baseDepth = 3.2;
   group = new THREE.Group();
@@ -399,6 +402,7 @@ export class Terrain {
       heights: bytesToB64(new Uint8Array(q.buffer)),
       paint: bytesToB64(this.paint),
       waterLevel: this.waterLevel, strata: this.strata.id, seed: this.seed,
+      ...(this.gen ? { gen: this.gen } : {}),
     };
   }
 
@@ -408,7 +412,9 @@ export class Terrain {
     const heights = new Float32Array(d.nx * d.nz);
     for (let k = 0; k < heights.length && k < q.length; k++) heights[k] = q[k] / 100;
     const paint = b64ToBytes(d.paint);
-    return new Terrain({ width: d.width, depth: d.depth, nx: d.nx, nz: d.nz, heights, paint: paint.length === d.nx * d.nz ? paint : undefined, waterLevel: d.waterLevel, strata: d.strata, seed: d.seed });
+    const t = new Terrain({ width: d.width, depth: d.depth, nx: d.nx, nz: d.nz, heights, paint: paint.length === d.nx * d.nz ? paint : undefined, waterLevel: d.waterLevel, strata: d.strata, seed: d.seed });
+    t.gen = d.gen;
+    return t;
   }
 
   dispose() {

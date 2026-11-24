@@ -7,7 +7,7 @@ import { LandEditor } from './LandEditor';
 import { EndlessWorld } from './EndlessWorld';
 import { GROUND_UNIFORMS } from './ground';
 import { autoPaintBrush, styleForBiome, terrainLevels, waterDistance } from './landforms';
-import { resampleTerrain } from './terrainGen';
+import { inferGen, resampleTerrain, type TerrainGen, type TerrainRecipe } from './terrainGen';
 import { cellFor } from './sizes';
 import { Water } from './Water';
 import { Frame } from './Frame';
@@ -1053,13 +1053,25 @@ export class Engine {
   actorsOutside(width: number, depth: number) {
     return this.actorList.filter((a) => !a.isClone && (Math.abs(a.root.position.x) > width / 2 - 0.3 || Math.abs(a.root.position.z) > depth / 2 - 0.3));
   }
-  /** change the size of the diorama, keeping the land centred: growing extends the edges naturally, shrinking crops */
+  /** the habitat recipe a biome's land is made from (set by the app, which knows the biomes) */
+  static recipeFor: (biome: string) => TerrainRecipe | undefined = () => undefined;
+  /** what generated this diorama's land: recorded on new dioramas, worked out for older ones */
+  terrainGen(): TerrainGen | undefined {
+    const t = this.terrain;
+    if (!t) return undefined;
+    if (t.gen) return t.gen;
+    const r = Engine.recipeFor(this.doc.biome) ?? Engine.recipeFor('blank');
+    if (!r) return undefined;
+    t.gen = inferGen({ ...r, seed: t.seed }, t.width, t.depth);
+    return t.gen;
+  }
+  /** change the size of the diorama, keeping the land centred: growing adds new land of the same habitat, shrinking crops */
   resizeTerrain(width: number, depth: number) {
     const old = this.terrain;
     if (!old) return;
     this.pushUndo();
     for (const a of this.actorsOutside(width, depth)) this.removeActor(a.id, false);
-    const nt = resampleTerrain(old, width, depth, Engine.cellFor(width, depth));
+    const nt = resampleTerrain(old, width, depth, Engine.cellFor(width, depth), this.terrainGen());
     this.swapTerrain(nt);
     if (this.topView) this.frameTop(); else this.frameCamera();
     this.emit({ type: 'actors' });

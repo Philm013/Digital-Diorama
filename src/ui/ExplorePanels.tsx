@@ -4,7 +4,10 @@ import { X, Crosshair, Volume2, Footprints, Earth, Tag, Network, BookOpen, Prese
 import { XRMode } from '../engine/XRMode';
 import { useEngine, useEngineEvent, useEngineVersion } from './store';
 import { Btn, Chip, IconBtn, Modal, Segmented, Slider, statusColor } from './common';
-import { buildFoodWeb, roleOf, ROLE_META, type Role } from '../assets/foodweb';
+import { ROLE_META, LINK_META, dietText, partnersOf } from '../assets/foodweb';
+import { dioramaWeb } from '../game/ecology';
+import { FoodWebView } from './FoodWebView';
+import { getDef } from '../assets/catalog';
 import { BIOME_BY_ID } from '../biomes/templates';
 import { speak, stopSpeech, audio } from '../code/sound';
 import { timeLabel } from './BuildPanels';
@@ -15,12 +18,17 @@ import { AssetThumb } from './AssetThumb';
 import { discover, isDiscovered, awardBadge } from '../game/progress';
 import { flag, quests, starsFor } from '../game/ecology';
 import { haptic, uiSound } from './feedback';
+import { isUnlocked, showLocked, type FeatureId } from '../game/unlocks';
+import { useProfile } from './game/useGame';
+import { LockBadge } from './game/Locked';
 
 export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; landscape?: boolean; playing?: boolean; onJournal?: () => void }) {
   const engine = useEngine();
   useEngineVersion();
+  useProfile();
   const [card, setCard] = useState<string | null>(null);
-  const [web, setWeb] = useState(false);
+  // the food web, optionally opened on one species
+  const [web, setWeb] = useState<string | true | null>(null);
   const [guide, setGuide] = useState(false);
   const [tour, setTour] = useState(false);
   const [pop, setPop] = useState<'time' | 'weather' | null>(null);
@@ -61,31 +69,34 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
   );
   if (tour) return <Tour onExit={() => setTour(false)} />;
   const actor = engine.getActor(card);
-  const tools: { key: string; icon: React.ReactNode; label: string; on?: boolean; fn: () => void; sep?: boolean }[] = [
+  const tools: { key: string; icon: React.ReactNode; label: string; on?: boolean; fn: () => void; sep?: boolean; needs?: FeatureId }[] = [
     { key: 'labels', icon: <Tag size={20} />, label: 'Labels', on: engine.env.labels, fn: () => engine.setEnv({ labels: !engine.env.labels }, false) },
     { key: 'time', icon: <Clock size={20} />, label: timeLabel(engine.env.time), on: pop === 'time', fn: () => setPop(pop === 'time' ? null : 'time') },
-    { key: 'weather', icon: <CloudSun size={20} />, label: 'Weather', on: pop === 'weather', fn: () => setPop(pop === 'weather' ? null : 'weather'), sep: true },
+    { key: 'weather', icon: <CloudSun size={20} />, label: 'Weather', on: pop === 'weather', fn: () => setPop(pop === 'weather' ? null : 'weather'), sep: true, needs: 'weather' },
     { key: 'web', icon: <Network size={20} />, label: 'Food web', fn: () => setWeb(true) },
     { key: 'guide', icon: <BookOpen size={20} />, label: 'Guide', fn: () => setGuide(true) },
     // on phones the Journal is in the tab bar
     ...(wide || landscape ? [{ key: 'journal', icon: <Library size={20} />, label: 'Journal', fn: () => onJournal?.() }] : []),
-    { key: 'tour', icon: <Presentation size={20} />, label: 'Tour', fn: () => { audio(); engine.select(null); setTour(true); } },
+    { key: 'tour', icon: <Presentation size={20} />, label: 'Tour', fn: () => { audio(); engine.select(null); setTour(true); }, needs: 'tour' },
     { key: 'walk', icon: <Footprints size={20} />, label: 'Walk in', fn: () => walkIn(1.6) },
-    ...(engine.terrain ? [{ key: 'roam', icon: <Earth size={20} />, label: 'Roam', fn: roam }] : []),
-    ...(xrSupport.ar ? [{ key: 'ar', icon: <Smartphone size={20} />, label: 'AR table', fn: () => startXr('ar') }] : []),
-    ...(xrSupport.vr ? [{ key: 'vr', icon: <Glasses size={20} />, label: 'VR', fn: () => startXr('vr') }] : []),
+    ...(engine.terrain ? [{ key: 'roam', icon: <Earth size={20} />, label: 'Roam', fn: roam, needs: 'roam' as const }] : []),
+    ...(xrSupport.ar ? [{ key: 'ar', icon: <Smartphone size={20} />, label: 'AR table', fn: () => startXr('ar'), needs: 'xr' as const }] : []),
+    ...(xrSupport.vr ? [{ key: 'vr', icon: <Glasses size={20} />, label: 'VR', fn: () => startXr('vr'), needs: 'xr' as const }] : []),
     { key: 'home', icon: <Maximize2 size={20} />, label: 'Overview', fn: () => { engine.follow(null); engine.frameCamera(); } },
   ];
   return (
     <>
-      {actor && !walking && <InfoCard actor={actor} wide={wide} side={wide || !!landscape} onClose={() => { setCard(null); engine.select(null); }} onWalk={walkIn} />}
+      {actor && !walking && <InfoCard actor={actor} wide={wide} side={wide || !!landscape} onClose={() => { setCard(null); engine.select(null); }} onWalk={walkIn} onWeb={() => setWeb(actor.id)} />}
       {!walking && !(actor && !wide) && (
         <div className={clsx('pointer-events-none absolute inset-x-0 z-20 flex justify-center px-2', wide ? 'bottom-4' : 'bottom-2')}>
           <div className="dd-hotbar dd-scroll-x pointer-events-auto relative flex max-w-full items-center gap-1 overflow-x-auto rounded-[22px] p-1.5">
             {tools.map((t) => (
               <span key={t.key} className="flex shrink-0 items-center gap-1">
-                <button onClick={() => { uiSound('tick'); haptic(6); t.fn(); }} className={clsx('dd-hotkey flex h-[54px] min-w-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl px-2 font-display text-[11px] font-semibold transition', t.on ? 'on' : 'text-white/85')}>
+                <button onClick={() => { if (t.needs && !isUnlocked(t.needs)) { setPop(null); showLocked(t.needs); return; } uiSound('tick'); haptic(6); t.fn(); }}
+                  className={clsx('dd-hotkey relative flex h-[54px] min-w-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl px-2 font-display text-[11px] font-semibold transition', t.on ? 'on' : 'text-white/85', t.needs && !isUnlocked(t.needs) && 'opacity-55')}
+                  aria-label={t.needs && !isUnlocked(t.needs) ? `${t.label} (locked)` : undefined}>
                   {t.icon}<span className="whitespace-nowrap">{t.label}</span>
+                  {t.needs && !isUnlocked(t.needs) && <LockBadge className="absolute right-1 top-1" />}
                 </button>
                 {t.sep && <span className="mx-0.5 h-8 w-px bg-white/15" />}
               </span>
@@ -100,7 +111,7 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
         </div>
       )}
       {xrOverlay}
-      <Modal open={web} onClose={() => setWeb(false)} title="🕸️ Food web" wide><FoodWeb onPick={(id) => { setWeb(false); engine.select(id); engine.focusActor(id); setCard(id); }} /></Modal>
+      <Modal open={web !== null} onClose={() => setWeb(null)} title="🕸️ Food web" wide="xl"><FoodWebView initial={typeof web === 'string' ? web : null} onVisit={(id) => { setWeb(null); engine.select(id); engine.focusActor(id); setCard(id); }} /></Modal>
       <Modal open={guide} onClose={() => setGuide(false)} title={`${BIOME_BY_ID[engine.doc.biome]?.emoji ?? '📦'} Habitat guide`} wide><Guide /></Modal>
     </>
   );
@@ -127,7 +138,9 @@ function WeatherPop() {
   return (
     <div className="space-y-3">
       <Segmented value={engine.env.weather} onChange={(w) => engine.setEnv({ weather: w }, false)} options={W} />
-      <Segmented size="sm" value={engine.env.season} onChange={(s) => engine.setEnv({ season: s }, false)} options={[{ value: 'spring', label: '🌱' }, { value: 'summer', label: '☀️' }, { value: 'autumn', label: '🍂' }, { value: 'winter', label: '❄️' }]} />
+      {isUnlocked('seasons')
+        ? <Segmented size="sm" value={engine.env.season} onChange={(s) => engine.setEnv({ season: s }, false)} options={[{ value: 'spring', label: '🌱' }, { value: 'summer', label: '☀️' }, { value: 'autumn', label: '🍂' }, { value: 'winter', label: '❄️' }]} />
+        : <button type="button" onClick={() => showLocked('seasons')} className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-black/[0.05] font-display text-[13px] font-semibold text-ink/55"><LockBadge /> Seasons unlock later on your ranger path</button>}
       <Slider label="Wind" value={engine.env.wind} min={0} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => engine.setEnv({ wind: v }, false)} />
     </div>
   );
@@ -138,10 +151,14 @@ function factText(a: Actor) {
   const d = a.def;
   return [a.doc.note, d.info.fact ?? d.info.blurb].filter(Boolean).join(' ');
 }
-function InfoCard({ actor, wide, side, onClose, onWalk }: { actor: Actor; wide: boolean; side: boolean; onClose: () => void; onWalk: (eye: number) => void }) {
+function InfoCard({ actor, wide, side, onClose, onWalk, onWeb }: { actor: Actor; wide: boolean; side: boolean; onClose: () => void; onWalk: (eye: number) => void; onWeb: () => void }) {
   const engine = useEngine();
+  const version = useEngineVersion();
   const d = actor.def;
-  const role = roleOf(d);
+  // its place in this diorama's food web (the same model as the food web diagram)
+  const web = useMemo(() => dioramaWeb(engine), [engine, version]); // eslint-disable-line react-hooks/exhaustive-deps
+  const wnode = web.nodes.find((n) => n.ids.includes(actor.id));
+  const role = wnode?.role ?? (d.category === 'plants' ? 'producer' : 'abiotic');
   const rm = ROLE_META[role];
   const info = d.info;
   const chain = [info.kingdom, info.phylum, info.class, info.order, info.family].filter(Boolean) as string[];
@@ -172,8 +189,9 @@ function InfoCard({ actor, wide, side, onClose, onWalk }: { actor: Actor; wide: 
     engine.centerOn(p);
     return () => { ro.disconnect(); engine.setViewInset(0, 0); };
   }, [engine, actor, wide, side]);
-  const eatsList = useMemo(() => speciesList(engine.actorList.filter((o) => o !== actor && !o.isClone && o.def.living !== false && webEats(engine, actor, o))), [engine, actor]);
-  const eatenBy = useMemo(() => speciesList(engine.actorList.filter((o) => o !== actor && !o.isClone && webEats(engine, o, actor))), [engine, actor]);
+  const eatsList = wnode ? web.food(wnode.id).map((e) => ({ n: web.byId.get(e.from)!, kind: e.kind })) : [];
+  const eatenBy = wnode ? web.eaters(wnode.id).map((e) => ({ n: web.byId.get(e.to)!, kind: e.kind })) : [];
+  const partners = partnersOf(d.id).filter((p) => engine.actorList.some((o) => o.def.id === p.other));
   return (
     <div ref={cardRef} className={clsx('dd-species-card dd-pop absolute z-30 flex flex-col overflow-hidden rounded-[28px]', wide ? 'right-4 top-4 max-h-[calc(100%-32px)] w-[370px]' : side ? 'bottom-2 right-2 top-2 w-[min(370px,50%)]' : 'inset-x-2 bottom-2 max-h-[64%]')} style={{ ['--role' as string]: rm.color }}>
       <div className="dd-species-hero relative flex items-end gap-3 px-4 pb-3 pt-3">
@@ -199,10 +217,14 @@ function InfoCard({ actor, wide, side, onClose, onWalk }: { actor: Actor; wide: 
           {ex >= 1.05 && <Fact k="Shown at" v={`×${ex < 10 ? ex.toFixed(1) : Math.round(ex)} life size`} />}
           {d.loco !== 'sessile' && d.loco !== 'scenery' && <Fact k="Moves by" v={{ walk: 'walking', fly: 'flying', swim: 'swimming', slither: 'slithering', hop: 'hopping', crawl: 'crawling' }[d.loco] ?? d.loco} />}
         </div>
-        {(eatsList.length > 0 || eatenBy.length > 0) && (
+        {d.living !== false && (
           <div className="space-y-1.5 rounded-2xl bg-black/[0.03] p-3 text-[12.5px]">
-            {eatsList.length > 0 && <div className="flex flex-wrap items-center gap-1"><b className="mr-1">🍽️ Eats here:</b>{eatsList.slice(0, 8).map((n) => <span key={n} className="rounded-full bg-white px-2 py-0.5 font-semibold ring-1 ring-black/10">{n}</span>)}</div>}
-            {eatenBy.length > 0 && <div className="flex flex-wrap items-center gap-1"><b className="mr-1">⚠️ Eaten by:</b>{eatenBy.slice(0, 8).map((n) => <span key={n} className="rounded-full bg-white px-2 py-0.5 font-semibold ring-1 ring-black/10">{n}</span>)}</div>}
+            {d.category === 'animals' && d.info.eats?.length ? <div className="text-ink/70"><b className="text-ink/85">Diet:</b> {dietText(d)}</div> : null}
+            {wnode?.hungry && <div className="rounded-xl bg-red-50 px-2.5 py-1.5 font-semibold text-red-800 ring-1 ring-red-200">⚠️ Nothing it can eat is here yet.</div>}
+            {eatsList.length > 0 && <FoodRow label={wnode?.role === 'decomposer' ? '♻ Breaks down:' : '🍽️ Eats here:'} items={eatsList} />}
+            {eatenBy.length > 0 && <FoodRow label={wnode?.source ? '♻ Recycled by:' : '⚠️ Eaten by:'} items={eatenBy} />}
+            {partners.map((p) => <div key={p.other} className="text-emerald-800"><b>🤝 Partner — {getDef(p.other)?.name}:</b> {p.how}</div>)}
+            <button type="button" onClick={onWeb} className="mt-0.5 flex items-center gap-1 font-display text-[12.5px] font-bold text-[#3d85c6] hover:underline">🕸️ See it in the food web →</button>
           </div>
         )}
         {chain.length > 1 && (
@@ -226,73 +248,17 @@ function CardBtn({ icon, label, onClick, on }: { icon: React.ReactNode; label: s
 function Fact({ k, v }: { k: string; v: string }) {
   return <div className="rounded-xl bg-black/[0.03] px-2.5 py-1.5"><div className="text-[10px] font-bold uppercase tracking-wide text-ink/45">{k}</div><div className="font-semibold text-ink/85">{v}</div></div>;
 }
-function speciesList(list: Actor[]) {
-  const m = new Map<string, number>();
-  for (const a of list) m.set(a.def.name, (m.get(a.def.name) ?? 0) + 1);
-  return [...m.entries()].map(([n, c]) => (c > 1 ? `${n} ×${c}` : n));
-}
-function webEats(_e: Engine, a: Actor, b: Actor) {
-  const want = a.def.info.eats ?? [];
-  const tags = b.def.info.tags ?? [];
-  return want.includes(b.def.id) || want.some((t) => tags.includes(t));
-}
-
-/* ---------------- food web ---------------- */
-function FoodWeb({ onPick }: { onPick: (id: string) => void }) {
-  const engine = useEngine();
-  const web = useMemo(() => buildFoodWeb(engine.actorList.filter((a) => !a.isClone).map((a) => ({ id: a.id, def: a.def, name: a.name }))), [engine]);
-  const [hover, setHover] = useState<string | null>(null);
-  const levels = new Map<number, typeof web.nodes>();
-  for (const n of web.nodes) {
-    const L = n.role === 'decomposer' ? 0 : Math.max(1, n.level);
-    if (!levels.has(L)) levels.set(L, []);
-    levels.get(L)!.push(n);
-  }
-  const rows = [...levels.keys()].filter((l) => l >= 1).sort((a, b) => b - a);
-  if (levels.has(0)) rows.push(0);
-  const W = Math.max(720, Math.max(...[...levels.values()].map((l) => l.length)) * 92 + 140), rowH = 116, H = Math.max(220, rows.length * rowH + 30);
-  const pos = new Map<string, { x: number; y: number }>();
-  rows.forEach((L, ri) => {
-    const list = levels.get(L)!;
-    list.forEach((n, i) => pos.set(n.id, { x: ((i + 0.5) / list.length) * (W - 120) + 60, y: 50 + ri * rowH }));
-  });
-  if (!web.nodes.length) return <p className="text-ink/60">Add some plants and animals to see who eats whom.</p>;
-  const levelName = (L: number) => (L === 0 ? 'Decomposers — recycle everything that dies' : L === 1 ? 'Producers — make food from sunlight' : L === 2 ? 'Primary consumers — eat producers' : L === 3 ? 'Secondary consumers' : 'Top predators');
+function FoodRow({ label, items }: { label: string; items: { n: { id: string; name: string; emoji: string; count: number }; kind: keyof typeof LINK_META }[] }) {
   return (
-    <div>
-      <p className="mb-3 text-sm text-ink/70">Arrows show the flow of energy: <b>from the food to the eater</b>. Tap an organism to visit it.</p>
-      <div className="overflow-x-auto rounded-2xl bg-[#fbf7ef] ring-1 ring-black/5">
-        <svg viewBox={`0 0 ${W} ${H}`} className="min-w-[640px]" style={{ width: '100%' }}>
-          <defs>
-            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b5b45" /></marker>
-            <marker id="arrowHi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e0662f" /></marker>
-          </defs>
-          {rows.map((L, ri) => <text key={L} x={12} y={22 + ri * rowH} fontSize="12" fontWeight="700" fill="#8a7a62">{levelName(L)}</text>)}
-          {web.edges.map((e, i) => {
-            const a = pos.get(e.from), b = pos.get(e.to);
-            if (!a || !b) return null;
-            const hi = hover === e.from || hover === e.to;
-            const my = (a.y + b.y) / 2;
-            return <path key={i} d={`M${a.x},${a.y - 22} C${a.x},${my} ${b.x},${my} ${b.x},${b.y + 24}`} fill="none" stroke={hi ? '#e0662f' : '#6b5b4588'} strokeWidth={hi ? 2.4 : 1.3} markerEnd={`url(#${hi ? 'arrowHi' : 'arrow'})`} />;
-          })}
-          {web.nodes.map((n) => {
-            const p = pos.get(n.id);
-            if (!p) return null;
-            const c = ROLE_META[n.role as Role].color;
-            return (
-              <g key={n.id} transform={`translate(${p.x},${p.y})`} className="cursor-pointer" onClick={() => onPick(n.id)} onMouseEnter={() => setHover(n.id)} onMouseLeave={() => setHover(null)}>
-                <circle r={22} fill="#fff" stroke={c} strokeWidth={hover === n.id ? 4 : 2.5} />
-                <text textAnchor="middle" dy="8" fontSize="22">{n.def.emoji}</text>
-                <text textAnchor="middle" y={38} fontSize="11.5" fontWeight="700" fill="#3b3328">{n.name.length > 16 ? n.name.slice(0, 15) + '…' : n.name}</text>
-                {n.count > 1 && <g transform="translate(17,-17)"><circle r={9} fill={c} /><text textAnchor="middle" dy="3.5" fontSize="10" fontWeight="800" fill="#fff">×{n.count}</text></g>}
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {(['producer', 'primary', 'secondary', 'tertiary', 'decomposer'] as Role[]).map((r) => <Chip key={r} color={ROLE_META[r].color}>{ROLE_META[r].emoji} {ROLE_META[r].label}</Chip>)}
-      </div>
+    <div className="flex flex-wrap items-center gap-1">
+      <b className="mr-1">{label}</b>
+      {items.slice(0, 8).map(({ n, kind }) => (
+        <span key={n.id + kind} className="flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-semibold ring-1 ring-black/10">
+          {n.emoji} {n.name}{n.count > 1 ? ` ×${n.count}` : ''}
+          {kind !== 'eats' && kind !== 'recycles' && <span className="text-[10px] font-bold uppercase" style={{ color: LINK_META[kind].color }}>{kind === 'eggs' ? 'eggs' : kind === 'scavenges' ? 'remains' : 'host'}</span>}
+        </span>
+      ))}
+      {items.length > 8 && <span className="text-ink/50">+{items.length - 8} more</span>}
     </div>
   );
 }
@@ -340,7 +306,11 @@ function Guide() {
 /* ---------------- guided tour ---------------- */
 function tourStops(engine: Engine) {
   const actors = engine.actorList.filter((a) => !a.isClone && a.root.visible && a.def.category !== 'sky' && a.def.category !== 'habitats');
-  const order = (a: Actor) => ({ producer: 1, primary: 2, secondary: 3, tertiary: 4, decomposer: 5, abiotic: 6 }[roleOf(a.def)]);
+  // up the food web: producers, plant-eaters, predators by trophic level, then decomposers
+  const web = dioramaWeb(engine);
+  const tlOf = new Map<string, number>();
+  for (const n of web.nodes) for (const id of n.ids) tlOf.set(id, n.role === 'decomposer' ? 9 : n.tl);
+  const order = (a: Actor) => tlOf.get(a.id) ?? 10;
   const withNotes = actors.filter((a) => (a.doc.note ?? '').trim());
   const pool = withNotes.length >= 3 ? withNotes : actors.filter((a) => a.def.living !== false);
   // one stop per species keeps the tour moving

@@ -68,7 +68,12 @@ async function run() {
   s = await state(); check('one Back closes a switched tray', !s.tray, JSON.stringify(s));
 
   await tab('Expeditions'); await wait(600);
-  await pg.evaluate(() => [...document.querySelectorAll('.dd-tray button')].find((b) => b.textContent.includes('Desert'))?.click()); await wait(900);
+  // habitats further along the ranger path explain how to unlock them
+  await pg.evaluate(() => [...document.querySelectorAll('.dd-tray button')].find((b) => b.textContent.includes('Desert'))?.click()); await wait(700);
+  s = await state(); check('a locked habitat explains how to unlock it', s.sheets.some((t) => t.includes('Not unlocked yet')), JSON.stringify(s));
+  await back();
+  s = await state(); check('Back closes the explanation and keeps the tray', !s.sheets.length && !!s.tray, JSON.stringify(s));
+  await pg.evaluate(() => [...document.querySelectorAll('.dd-tray button')].find((b) => b.textContent.includes('Backyard'))?.click()); await wait(900);
   await shot('3-briefing');
   s = await state(); check('a habitat opens its briefing', s.briefing, JSON.stringify(s));
   await back();
@@ -79,7 +84,7 @@ async function run() {
   s = await state(); check('dragging the tray down closes it', !s.tray, JSON.stringify(s));
 
   await tab('Expeditions'); await wait(600);
-  await pg.evaluate(() => [...document.querySelectorAll('.dd-tray button')].find((b) => b.textContent.includes('Desert'))?.click()); await wait(600);
+  await pg.evaluate(() => [...document.querySelectorAll('.dd-tray button')].find((b) => b.textContent.includes('Backyard'))?.click()); await wait(600);
   await pg.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Start expedition'))?.click());
   await pg.waitForFunction('window.__loaded === true', null, { timeout: 240000 }); await wait(1500);
   s = await state(); check('Start opens the studio at #open=<id>', s.studio && /#open=/.test(s.url), JSON.stringify(s));
