@@ -22,12 +22,16 @@ function ConfettiCanvas() {
     const resize = () => { c.width = innerWidth * devicePixelRatio; c.height = innerHeight * devicePixelRatio; };
     resize();
     addEventListener('resize', resize);
-    const loop = () => {
+    let last = 0;
+    const loop = (now: number) => {
       ctx.clearRect(0, 0, c.width, c.height);
       const d = devicePixelRatio;
+      // steps of a 60 fps frame, so slow devices see the same short burst rather than a slow-motion one
+      const k = last ? Math.min(4, (now - last) / 16.7) : 1;
+      last = now;
       parts = parts.filter((p) => p.life > 0 && p.y < innerHeight + 40);
       for (const p of parts) {
-        p.vy += 0.18; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.a += p.va; p.life -= 1;
+        p.vy += 0.18 * k; p.vx *= Math.pow(0.99, k); p.x += p.vx * k; p.y += p.vy * k; p.a += p.va * k; p.life -= k;
         ctx.save();
         ctx.translate(p.x * d, p.y * d);
         ctx.rotate(p.a);
@@ -38,6 +42,7 @@ function ConfettiCanvas() {
         ctx.restore();
       }
       raf = parts.length ? requestAnimationFrame(loop) : 0;
+      if (!raf) last = 0;
     };
     fire = (x, y, n = 120) => {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;

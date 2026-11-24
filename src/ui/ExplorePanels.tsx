@@ -266,12 +266,14 @@ function FoodWeb({ onPick }: { onPick: (id: string) => void }) {
     list.forEach((n, i) => pos.set(n.id, { x: ((i + 0.5) / list.length) * (W - 120) + 60, y: 50 + ri * rowH }));
   });
   if (!web.nodes.length) return <p className="text-ink/60">Add some plants and animals to see who eats whom.</p>;
-  const levelName = (L: number) => (L === 0 ? 'Decomposers — recycle everything that dies' : L === 1 ? 'Producers — make food from sunlight' : L === 2 ? 'Primary consumers — eat producers' : L === 3 ? 'Secondary consumers' : 'Top predators');
+  // the highest row holds the top predators; any rows between them and the plant-eaters are numbered
+  const levelName = (L: number) => (L === 0 ? 'Decomposers — recycle everything that dies' : L === 1 ? 'Producers — make food from sunlight' : L === 2 ? 'Primary consumers — eat producers' : L === rows[0] ? 'Top predators' : L === 3 ? 'Secondary consumers' : 'Tertiary consumers');
   return (
     <div>
       <p className="mb-3 text-sm text-ink/70">Arrows show the flow of energy: <b>from the food to the eater</b>. Tap an organism to visit it.</p>
       <div className="overflow-x-auto rounded-2xl bg-[#fbf7ef] ring-1 ring-black/5">
-        <svg viewBox={`0 0 ${W} ${H}`} className="min-w-[640px]" style={{ width: '100%' }}>
+        {/* (never squeezed below a readable size: on phones it scrolls sideways instead) */}
+        <svg viewBox={`0 0 ${W} ${H}`} className="block" style={{ width: '100%', minWidth: Math.round(W * 0.82), height: 'auto' }}>
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b5b45" /></marker>
             <marker id="arrowHi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e0662f" /></marker>

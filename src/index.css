@@ -150,6 +150,12 @@ textarea.dd-input { resize: vertical; line-height: 1.4; }
 .dd-range::-moz-range-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, #d9c9a8, #c4a676); }
 .dd-range::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -7px; height: 20px; width: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 0 0 5px var(--accent, #3f7d3a); }
 .dd-range::-moz-range-thumb { height: 20px; width: 20px; border-radius: 50%; border: 0; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 0 0 5px var(--accent, #3f7d3a); }
+/* bigger thumbs and a taller hit area for fingers */
+@media (pointer: coarse) {
+  .dd-range { height: 32px; }
+  .dd-range::-webkit-slider-thumb { margin-top: -10px; height: 26px; width: 26px; }
+  .dd-range::-moz-range-thumb { height: 26px; width: 26px; }
+}
 .dd-toast { animation: dd-slide 0.25s ease-out; }
 @keyframes dd-slide { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
 .dd-caption { animation: dd-pop 0.25s ease-out; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); }

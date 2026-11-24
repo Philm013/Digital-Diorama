@@ -274,8 +274,8 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
       <AppBar tall={wide} hidden={immersive}>
         <IconBtn label="Back to all dioramas" onClick={() => void exit()} className="text-white hover:bg-white/10"><ArrowLeft size={21} /></IconBtn>
         <div className={clsx('flex min-w-0 items-center gap-2', phone && 'flex-1')}>
-          <span className="hidden h-10 w-10 shrink-0 place-items-center rounded-2xl text-2xl sm:grid" style={{ background: 'color-mix(in srgb, var(--accent) 45%, transparent)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.15)' }}>{biome?.emoji ?? '📦'}</span>
-          <div className={clsx('min-w-0', phone && 'flex-1')}>
+          <span className="hidden h-10 w-10 shrink-0 place-items-center rounded-2xl text-2xl sm:grid [@media(max-height:540px)]:!hidden" style={{ background: 'color-mix(in srgb, var(--accent) 45%, transparent)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.15)' }}>{biome?.emoji ?? '📦'}</span>
+          <div className={clsx('min-w-0 overflow-hidden', phone && 'flex-1')}>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -284,7 +284,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
               className={clsx('block min-w-0 truncate rounded-lg bg-transparent px-1.5 font-display text-[15px] font-semibold leading-tight text-white outline-none hover:bg-white/10 focus:bg-white/15 sm:text-lg', phone ? 'w-full' : landscape ? 'w-[19vw]' : 'w-[30vw] max-w-[240px]')}
               aria-label="Diorama title"
             />
-            <button onClick={() => setQuestLog(true)} className="flex items-center gap-1 whitespace-nowrap px-1.5 text-[11px] font-bold text-white/55 hover:text-white/85" title="Quests (Q)">
+            <button onClick={() => setQuestLog(true)} className="flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap px-1.5 text-[11px] font-bold text-white/55 hover:text-white/85" title="Quests (Q)">
               <Stars n={game.stars} size={10} /> <span className="tabular-nums">{game.done}/{game.quests.length || 16} quests</span>
             </button>
           </div>

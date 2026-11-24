@@ -27,7 +27,7 @@ async function run(name, ctxOpts, phone) {
   await ctx.addInitScript(init);
   const pg = await ctx.newPage();
   pg.on('pageerror', (e) => { errors.push(`${name}: ${e}`); console.log('[pageerror]', String(e).slice(0, 300)); });
-  await pg.goto(`http://localhost:${PORT}/#new=${BIOME}`, { waitUntil: 'load' });
+  await pg.goto(`http://localhost:${PORT}/#new=${BIOME}&model=1`, { waitUntil: 'load' });
   await pg.waitForFunction('window.__loaded === true', null, { timeout: 240000 });
   await pg.waitForTimeout(2500);
   // focus the target so it is big on screen, then tap it
