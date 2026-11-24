@@ -15,36 +15,37 @@ const LIVING = CATALOG.filter((d) => d.living !== false && d.category !== 'habit
 const BIOME_NAME = Object.fromEntries(BIOMES.map((b) => [b.id, `${b.emoji} ${b.name}`]));
 
 /** profile header shared by the welcome screen and the journal */
-export function RangerCard({ dark = true, onOpenJournal }: { dark?: boolean; onOpenJournal?: () => void }) {
+/** `compact` tightens the card for short screens; `mini` also drops the stat tiles */
+export function RangerCard({ dark = true, onOpenJournal, size = 'full' }: { dark?: boolean; onOpenJournal?: () => void; size?: 'full' | 'compact' | 'mini' }) {
   const p = useProfile();
   const L = levelOf(p.xp);
   const [pick, setPick] = useState(false);
   const found = p.discovered.filter((id) => LIVING.some((d) => d.id === id)).length;
   return (
-    <div className={clsx('relative rounded-[28px] p-4', dark ? 'dd-card-dark text-white' : 'dd-card text-ink')}>
+    <div className={clsx('relative', size === 'full' ? 'rounded-[28px] p-4' : 'rounded-[24px] p-3', dark ? 'dd-card-dark text-white' : 'dd-card text-ink')}>
       <div className="flex items-center gap-3">
-        <button onClick={() => setPick((v) => !v)} className="grid h-16 w-16 shrink-0 place-items-center rounded-[22px] bg-gradient-to-br from-amber-200 to-amber-400 text-4xl shadow-[0_4px_0_#b77d12] transition active:translate-y-0.5" title="Choose your avatar">{p.avatar}</button>
+        <button onClick={() => setPick((v) => !v)} className={clsx('grid shrink-0 place-items-center bg-gradient-to-br from-amber-200 to-amber-400 shadow-[0_4px_0_#b77d12] transition active:translate-y-0.5', size === 'full' ? 'h-16 w-16 rounded-[22px] text-4xl' : 'h-12 w-12 rounded-[18px] text-3xl')} title="Choose your avatar">{p.avatar}</button>
         <div className="min-w-0 flex-1">
           <input value={p.name} onChange={(e) => updateProfile({ name: e.target.value.slice(0, 24) })} placeholder="Your ranger name" className={clsx('w-full rounded-lg bg-transparent font-display text-xl font-bold outline-none placeholder:opacity-50', dark ? 'focus:bg-white/10' : 'focus:bg-black/5')} aria-label="Ranger name" />
           <div className={clsx('font-display text-sm font-semibold', dark ? 'text-amber-300' : 'text-amber-700')}>Level {L.level} · {L.rank}</div>
           <div className={clsx('mt-1.5 h-2.5 overflow-hidden rounded-full', dark ? 'bg-white/10' : 'bg-black/10')}><div className="h-full rounded-full bg-gradient-to-r from-[#ffe066] to-[#ffb020] transition-all duration-700" style={{ width: `${L.frac * 100}%` }} /></div>
           <div className={clsx('mt-0.5 text-[11px] font-semibold', dark ? 'text-white/55' : 'text-ink/55')}>{L.into} / {L.need} XP to level {L.level + 1}</div>
         </div>
-        <LevelRing xp={p.xp} size={52} stroke={5} />
+        <LevelRing xp={p.xp} size={size === 'full' ? 52 : 44} stroke={5} />
       </div>
       {pick && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {AVATARS.map((a) => <button key={a} onClick={() => { updateProfile({ avatar: a }); setPick(false); }} className={clsx('grid h-10 w-10 place-items-center rounded-xl text-2xl transition hover:scale-110', a === p.avatar ? 'bg-amber-300/40 ring-2 ring-amber-300' : dark ? 'bg-white/10' : 'bg-black/5')}>{a}</button>)}
         </div>
       )}
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+      {size !== 'mini' && <div className={clsx('grid grid-cols-3 gap-2 text-center', size === 'full' ? 'mt-3' : 'mt-2')}>
         {[[found, LIVING.length, 'species found'], [p.badges.length, BADGES.length, 'badges'], [p.biomesBuilt.length, BIOMES.length - 1, 'habitats built']].map(([a, b, t]) => (
-          <button key={String(t)} onClick={onOpenJournal} className={clsx('rounded-2xl py-2', dark ? 'bg-white/[0.07] hover:bg-white/[0.12]' : 'bg-black/[0.04] hover:bg-black/[0.07]')}>
+          <button key={String(t)} onClick={onOpenJournal} className={clsx('rounded-2xl', size === 'full' ? 'py-2' : 'py-1', dark ? 'bg-white/[0.07] hover:bg-white/[0.12]' : 'bg-black/[0.04] hover:bg-black/[0.07]')}>
             <div className="font-display text-xl font-bold tabular-nums">{a}<span className="text-sm opacity-50">/{b}</span></div>
             <div className="text-[10.5px] font-bold uppercase tracking-wider opacity-60">{t}</div>
           </button>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }

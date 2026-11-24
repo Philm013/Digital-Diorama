@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { BookOpen, Blocks, Boxes, ChevronRight, Compass, GraduationCap, Hammer, House, Map as MapIcon, Play, Settings2, Sparkles, Trophy, Upload } from 'lucide-react';
 import { clsx } from 'clsx';
 import { BIOMES, BIOME_BY_ID } from '../biomes/templates';
@@ -52,6 +52,9 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  // the room the home really has: what is left between the top bar and the tab bar (and any notch)
+  const mainRef = useRef<HTMLElement>(null);
+  const areaH = useElementHeight(mainRef);
   const refresh = useCallback(async () => { setProjects(await listProjects()); }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { setUiSound(settings.sound); }, [settings.sound]);
@@ -115,9 +118,9 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
         <IconBtn label="Settings" onClick={() => setSettingsOpen(true)} className="text-white hover:bg-white/10"><Settings2 size={20} /></IconBtn>
       </AppBar>
 
-      <main className="relative min-h-0 flex-1 overflow-hidden">
+      <main ref={mainRef} className="relative min-h-0 flex-1 overflow-hidden">
         <div className="absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain" inert={tray !== null}>
-          <HomeCore projects={projects} profile={profile} wide={wide} landscape={landscape} onTab={go} onContinue={(id) => void openProject(id)} />
+          <HomeCore projects={projects} profile={profile} wide={wide} landscape={landscape} areaH={areaH} onTab={go} onContinue={(id) => void openProject(id)} />
         </div>
         <Tray open={tray !== null} onClose={() => go('home')} isTop={trayOnTop} labelId="dd-tray-title" header={header}
           className={wide ? 'h-[min(86%,800px)] max-w-[1180px] [--tray-pb:max(env(safe-area-inset-bottom),20px)]' : landscape ? 'top-1.5 [--tray-pb:max(env(safe-area-inset-bottom),12px)]' : 'top-2.5 [--tray-pb:16px]'}>
@@ -163,72 +166,142 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
   );
 }
 
+/** the live height of an element, so a screen can size itself to the room it actually has */
+function useElementHeight(ref: React.RefObject<HTMLElement | null>) {
+  const [h, setH] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => setH(Math.round(el.getBoundingClientRect().height));
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return h;
+}
+
 /* ================================ the home itself ================================ */
-function HomeCore({ projects, profile, wide, landscape, onTab, onContinue }: {
-  projects: ProjectMeta[] | null; profile: Readonly<Profile>; wide: boolean; landscape: boolean; onTab: (id: TabId) => void; onContinue: (id: string) => void;
+function HomeCore({ projects, profile, wide, landscape, areaH, onTab, onContinue }: {
+  projects: ProjectMeta[] | null; profile: Readonly<Profile>; wide: boolean; landscape: boolean; areaH: number; onTab: (id: TabId) => void; onContinue: (id: string) => void;
 }) {
   const last = projects?.[0];
   // nothing saved yet: introduce the app and point at the first expedition
   const first = projects !== null && projects.length === 0;
   const meadow = useBiomeThumb('meadow', wide ? 1600 : 960, wide ? 420 : 320);
+  const phone = !wide && !landscape;
   return (
-    <div className="dd-title-sky relative min-h-full overflow-hidden">
+    <div className={clsx('dd-title-sky relative overflow-hidden', phone ? 'h-full' : 'min-h-full')}>
       {[[8, 6, 110, 38], [62, 3, 150, 46], [30, 14, 90, 30], [85, 18, 120, 36]].map(([top, delay, w, dur], i) => (
         <span key={i} className="dd-cloud" style={{ top: `${top * 0.6}%`, width: w, height: w * 0.32, animationDuration: `${dur * 2}s`, animationDelay: `-${delay * 7}s` }} />
       ))}
       {meadow && <div className="dd-thumb-in pointer-events-none absolute inset-x-0 bottom-0 h-[30%] min-h-[140px] bg-cover bg-bottom opacity-95" style={{ backgroundImage: `url(${meadow})`, maskImage: 'linear-gradient(to bottom, transparent, black 40%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 40%)' }} />}
-      <div className={clsx('relative mx-auto grid min-h-full max-w-6xl gap-3.5 px-4 [&>*]:min-w-0',
-        wide ? 'grid-cols-[1.2fr_1fr] content-center items-center gap-10 px-8 py-10'
-          : landscape ? 'grid-cols-2 content-start items-start gap-4 pb-6 pt-3'
-            : 'content-start pb-8 pt-4 sm:max-w-xl sm:content-center sm:px-8 sm:py-10')}>
-        <div className="flex flex-col gap-3">
-          {first || wide ? <Intro size={wide ? 'lg' : landscape ? 'sm' : 'md'} /> : <Greeting name={profile.name} />}
-          {last ? <ContinueCard p={last} stars={profile.projectStars[last.id] ?? 0} onOpen={() => onContinue(last.id)} />
-            : first ? <button type="button" onClick={() => onTab('expeditions')} className="dd-cta flex h-14 w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl px-4 font-display text-[clamp(15px,4.6vw,18px)] font-bold text-white sm:px-6 lg:w-auto lg:self-start lg:text-lg"><Sparkles size={21} className="shrink-0" /> Start your first expedition</button>
+      {phone ? (
+        <PhoneHome projects={projects} profile={profile} first={first} areaH={areaH} onTab={onTab} onContinue={onContinue} />
+      ) : (
+        <div className={clsx('relative mx-auto grid min-h-full max-w-6xl gap-3.5 px-4 [&>*]:min-w-0',
+          wide ? 'grid-cols-[1.2fr_1fr] content-center items-center gap-10 px-8 py-10' : 'grid-cols-2 content-start items-start gap-3 pb-3 pt-2.5')}>
+          <div className="flex flex-col gap-3">
+            {first || wide ? <Intro size={wide ? 'lg' : 'xs'} /> : <Greeting name={profile.name} compact={landscape} />}
+            {last ? <ContinueCard p={last} stars={profile.projectStars[last.id] ?? 0} onOpen={() => onContinue(last.id)} compact={landscape} />
+              : first ? <button type="button" onClick={() => onTab('expeditions')} className="dd-cta flex h-14 w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl px-4 font-display text-[clamp(15px,4.6vw,18px)] font-bold text-white sm:px-6 lg:w-auto lg:self-start lg:text-lg"><Sparkles size={21} className="shrink-0" /> Start your first expedition</button>
+                : <div className="h-[104px] animate-pulse rounded-[24px] bg-white/45" />}
+            {!first && <QuickActions count={projects?.length ?? 0} onTab={onTab} />}
+            {first && wide && <HowItWorks />}
+            {!first && wide && <FeatureTiles />}
+          </div>
+          <div className="flex flex-col gap-3">
+            <RangerCard dark onOpenJournal={() => onTab('journal')} size={wide ? 'full' : 'mini'} />
+            <PathButton onTab={onTab} />
+            <TrainingCard onOpen={() => onTab('learn')} />
+            {wide && <BadgeStrip profile={profile} onClick={() => onTab('journal')} />}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The home on a portrait phone: one screen, with nothing to scroll. It starts with the fullest
+ * layout and, while that is taller than the room between the bars, steps down to a leaner one
+ * (shorter intro, smaller cards, fewer extras) before the screen is painted.
+ */
+function PhoneHome({ projects, profile, first, areaH, onTab, onContinue }: {
+  projects: ProjectMeta[] | null; profile: Readonly<Profile>; first: boolean; areaH: number; onTab: (id: TabId) => void; onContinue: (id: string) => void;
+}) {
+  const last = projects?.[0];
+  const MAX = first ? 5 : 6;
+  const [fonts, setFonts] = useState(0);
+  useEffect(() => { void document.fonts?.ready.then(() => setFonts(1)); }, []);
+  const key = `${areaH}|${first}|${last?.id ?? ''}|${projects === null}|${fonts}`;
+  const [fit, setFit] = useState({ key, level: 0 });
+  const level = fit.key === key ? fit.level : 0;
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!outer.current || !inner.current || !areaH) return;
+    if (inner.current.offsetHeight > outer.current.clientHeight && level < MAX) setFit({ key, level: level + 1 });
+  }, [key, level, MAX, areaH]);
+
+  const rangerSize = level <= 1 ? 'full' : level <= 3 ? 'compact' : 'mini';
+  return (
+    <div ref={outer} className="relative mx-auto flex h-full max-w-xl flex-col justify-center px-4 sm:px-8">
+      <div ref={inner} className="flex flex-col gap-2.5 py-3 [&>*]:min-w-0 [&>*]:shrink-0">
+        {first ? (
+          <>
+            <Intro size={level <= 1 ? 'md' : level <= 3 ? 'sm' : 'xs'} />
+            <button type="button" onClick={() => onTab('expeditions')} className="dd-cta flex h-14 w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl px-4 font-display text-[clamp(15px,4.6vw,18px)] font-bold text-white"><Sparkles size={21} className="shrink-0" /> Start your first expedition</button>
+            {level < 5 && <HowItWorks compact={level >= 1} />}
+            <RangerCard dark onOpenJournal={() => onTab('journal')} size={rangerSize} />
+            {level <= 2 && <PathButton onTab={onTab} />}
+          </>
+        ) : (
+          <>
+            <Greeting name={profile.name} compact={level >= 1} />
+            {last ? <ContinueCard p={last} stars={profile.projectStars[last.id] ?? 0} onOpen={() => onContinue(last.id)} compact={level >= 5} />
               : <div className="h-[104px] animate-pulse rounded-[24px] bg-white/45" />}
-          {!first && <QuickActions count={projects?.length ?? 0} onTab={onTab} />}
-          {/* portrait phones: lessons right under the quick actions, where they are seen without scrolling */}
-          {!first && !wide && !landscape && <TrainingCard onOpen={() => onTab('learn')} />}
-          {first && !landscape && <HowItWorks />}
-          {!first && wide && <FeatureTiles />}
-        </div>
-        <div className="flex flex-col gap-3">
-          <RangerCard dark onOpenJournal={() => onTab('journal')} />
-          <button type="button" onClick={() => onTab('expeditions')} className="block w-full rounded-[20px] text-left transition active:scale-[0.99]" aria-label="Ranger path: see your expeditions"><PathProgress dark /></button>
-          {(first || wide || landscape) && <TrainingCard onOpen={() => onTab('learn')} />}
-          {(wide || landscape) && <BadgeStrip profile={profile} onClick={() => onTab('journal')} />}
-        </div>
+            <QuickActions count={projects?.length ?? 0} onTab={onTab} />
+            <TrainingCard onOpen={() => onTab('learn')} />
+            {level < 6 && <RangerCard dark onOpenJournal={() => onTab('journal')} size={rangerSize} />}
+            {level <= 2 && <PathButton onTab={onTab} />}
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function Intro({ size }: { size: 'sm' | 'md' | 'lg' }) {
+function PathButton({ onTab }: { onTab: (id: TabId) => void }) {
+  return <button type="button" onClick={() => onTab('expeditions')} className="block w-full rounded-[20px] text-left transition active:scale-[0.99]" aria-label="Ranger path: see your expeditions"><PathProgress dark /></button>;
+}
+
+function Intro({ size }: { size: 'xs' | 'sm' | 'md' | 'lg' }) {
   const big = size === 'lg';
   return (
     <div className={clsx('text-center', big && 'text-left')}>
-      <div className="mb-2.5 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-kraft-dark shadow-sm ring-1 ring-black/5">📦 The shoebox diorama, reimagined</div>
-      <h1 className={clsx('dd-logo font-display font-bold leading-[0.95] text-ink', big ? 'text-7xl' : size === 'sm' ? 'text-[34px]' : 'text-[42px] sm:text-6xl')}>Digital{big && <br />} Diorama</h1>
-      <p className={clsx('max-w-xl font-semibold text-ink/75', big ? 'mt-3 text-lg' : size === 'sm' ? 'mx-auto mt-2 text-[13.5px] leading-snug' : 'mx-auto mt-3 text-[15px]')}>Build living 3D habitats from the ground up, discover real species and keep their ecosystems healthy. Every expedition you complete unlocks new habitats and tools.</p>
+      {size !== 'xs' && <div className="mb-2.5 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-kraft-dark shadow-sm ring-1 ring-black/5">📦 The shoebox diorama, reimagined</div>}
+      <h1 className={clsx('dd-logo font-display font-bold leading-[0.95] text-ink', big ? 'text-7xl' : size === 'sm' ? 'text-[34px]' : size === 'xs' ? 'text-[32px]' : 'text-[42px] sm:text-6xl')}>Digital{big && <br />} Diorama</h1>
+      <p className={clsx('max-w-xl font-semibold text-ink/75', big ? 'mt-3 text-lg' : size === 'sm' || size === 'xs' ? 'mx-auto mt-1.5 text-[13.5px] leading-snug' : 'mx-auto mt-3 text-[15px]')}>{size === 'xs' || size === 'sm' ? 'Build living 3D habitats, discover real species and unlock more with every expedition.' : 'Build living 3D habitats from the ground up, discover real species and keep their ecosystems healthy. Every expedition you complete unlocks new habitats and tools.'}</p>
     </div>
   );
 }
 
-function Greeting({ name }: { name: string }) {
+function Greeting({ name, compact }: { name: string; compact?: boolean }) {
   const h = new Date().getHours();
   return (
     <div className="px-0.5 pt-0.5">
       <div className="font-display text-[12px] font-bold uppercase tracking-[0.16em] text-[#1d4e7a]/70">{h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}</div>
-      <h1 className="truncate font-display text-[30px] font-bold leading-tight text-ink [text-shadow:0_2px_0_rgba(255,255,255,.85)]">Hi, {name.trim() || 'Ranger'}!</h1>
-      <p className="text-[14px] font-semibold text-ink/65">Pick up where you left off, or set off somewhere new.</p>
+      <h1 className={clsx('truncate font-display font-bold leading-tight text-ink', compact ? 'text-[26px]' : 'text-[30px]')} style={{ textShadow: '0 2px 0 rgba(255,255,255,.85)' }}>Hi, {name.trim() || 'Ranger'}!</h1>
+      {!compact && <p className="text-[14px] font-semibold text-ink/65">Pick up where you left off, or set off somewhere new.</p>}
     </div>
   );
 }
 
-function ContinueCard({ p, stars, onOpen }: { p: ProjectMeta; stars: number; onOpen: () => void }) {
+function ContinueCard({ p, stars, onOpen, compact }: { p: ProjectMeta; stars: number; onOpen: () => void; compact?: boolean }) {
   const b = BIOME_BY_ID[p.biome];
   return (
-    <button type="button" onClick={onOpen} className="dd-card dd-level-card group flex w-full items-center gap-3 overflow-hidden rounded-[24px] p-2.5 pr-3 text-left" aria-label={`Continue ${p.title}`}>
+    <button type="button" onClick={onOpen} className={clsx('dd-card dd-level-card group flex w-full items-center gap-3 overflow-hidden rounded-[24px] pr-3 text-left', compact ? 'p-2' : 'p-2.5')} aria-label={`Continue ${p.title}`}>
       <div className="relative aspect-[16/10] w-[38%] max-w-[210px] shrink-0 overflow-hidden rounded-[18px] bg-[#e9dfcc] min-[360px]:w-[44%]" style={{ ['--accent' as string]: b?.accent }}>
         {p.thumb ? <img src={p.thumb} alt="" draggable={false} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" /> : <div className="dd-thumb-ph grid h-full w-full place-items-center text-4xl">{b?.emoji ?? '📦'}</div>}
         <div className="absolute inset-x-0 bottom-0 h-[6px]" style={{ background: KRAFT_EDGE }} />
@@ -270,12 +343,25 @@ function ActionTile({ onClick, icon, title, detail, className, iconClass }: { on
 }
 
 /** first-timers: the whole idea in three steps */
-function HowItWorks() {
+function HowItWorks({ compact }: { compact?: boolean }) {
   const steps: [string, string, string][] = [
     ['🗺️', 'Pick a habitat', 'Start an expedition: the Backyard, a Forest or the Prairie.'],
     ['🌱', 'Bring it to life', 'Add plants, animals and decomposers, and keep the heart healthy.'],
     ['⭐', 'Earn ⭐⭐, unlock more', '10 quests complete an expedition and open new habitats and tools.'],
   ];
+  if (compact) {
+    // short screens: the three steps as a single row of chips
+    return (
+      <ol className="grid grid-cols-3 gap-2" aria-label="How it works">
+        {steps.map(([e, h], i) => (
+          <li key={h} className="flex flex-col items-center gap-1 rounded-2xl bg-white/80 px-1 py-2 text-center ring-1 ring-black/5 backdrop-blur-sm">
+            <span className="relative grid h-9 w-9 place-items-center rounded-[12px] bg-amber-50 text-[20px] leading-none ring-1 ring-amber-200">{e}<span className="absolute -left-1.5 -top-1.5 grid h-[18px] w-[18px] place-items-center rounded-full bg-[#2fae4b] font-display text-[10.5px] font-bold text-white">{i + 1}</span></span>
+            <span className="font-display text-[12px] font-bold leading-tight text-ink">{h}</span>
+          </li>
+        ))}
+      </ol>
+    );
+  }
   return (
     <div className="rounded-[22px] bg-white/80 p-3 ring-1 ring-black/5 backdrop-blur-sm">
       <div className="px-0.5 font-display text-[11.5px] font-bold uppercase tracking-[0.16em] text-[#1d4e7a]/70">How it works</div>
