@@ -156,4 +156,10 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   'humpback-whale': builtin('cetacean', { kind: 'humpback' }),
   'portuguese-man-o-war': { ...builtin('man-o-war'), water: 'surface' },
   'sea-hare': builtin('sea-hare'),
+  // fish the generic plans drew as faceted blobs (src/assets/builtin/fish.ts)
+  'great-white-shark': builtin('fish', { kind: 'shark' }),
+  'manta-ray': builtin('fish', { kind: 'manta' }),
+  'yellow-tang': builtin('fish', { kind: 'tang' }),
+  clownfish: builtin('fish', { kind: 'clownfish' }),
+  lionfish: builtin('fish', { kind: 'lionfish' }),
 };

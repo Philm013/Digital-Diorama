@@ -226,7 +226,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
     case 'builtin': {
       const key = def.path.slice(8);
       const fn = BUILTINS[key]?.createAsset?.name;
-      const file = ['seal', 'cetacean', 'man-o-war', 'sea-hare'].includes(key) ? 'src/assets/builtin/marine.ts' : 'src/assets/builtin/fungi.ts';
+      const file = key === 'fish' ? 'src/assets/builtin/fish.ts' : ['seal', 'cetacean', 'man-o-war', 'sea-hare'].includes(key) ? 'src/assets/builtin/marine.ts' : 'src/assets/builtin/fungi.ts';
       add(file, file.split('/').pop()!, fn ? [region(`Model · ${fn}`, declaration(fn))] : []);
       add('src/assets/builtin/index.ts', 'builtin/index.ts', [region('Registry', declaration('BUILTINS'))]);
       break;

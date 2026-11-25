@@ -169,9 +169,6 @@ export const WILDFORM_SIZE_FIX: Record<string, number> = {
   'sand-lizard': 0.76, // 0.26 m → 20 cm total
   'alpine-newt': 0.56, // 0.20 m → 11 cm
   'common-garter-snake': 0.52, // ~1.25 m along the body → 65 cm
-  'manta-ray': 0.57, // 5.3 m across → 3 m disc
   'blue-dragon': 0.59, // 5.1 cm → 3 cm
   'stag-beetle': 0.68, // 9.5 cm → 6.5 cm with mandibles
-  clownfish: 0.77, // 12.4 cm → 9.5 cm
-  'yellow-tang': 1.68, // 10.7 cm → 18 cm
 };

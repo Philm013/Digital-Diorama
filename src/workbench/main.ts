@@ -28,6 +28,7 @@ import { replaceModule, type ParamSpec } from '../assets/modules';
 import { BUILTINS } from '../assets/builtin';
 import * as marineNs from '../assets/builtin/marine';
 import * as fungiNs from '../assets/builtin/fungi';
+import * as fishNs from '../assets/builtin/fish';
 import { ANIMALS as WILDFORM } from '@ref/Animals/src/data/catalog';
 import type { AssetDef } from '../assets/types';
 import type { Quality } from '../engine/types';
@@ -601,7 +602,7 @@ async function revertFile() {
 }
 
 /* hot swap: re-import a saved asset module and rebuild */
-const builtinNs: Record<string, Record<string, unknown>> = { 'src/assets/builtin/marine.ts': { ...marineNs }, 'src/assets/builtin/fungi.ts': { ...fungiNs } };
+const builtinNs: Record<string, Record<string, unknown>> = { 'src/assets/builtin/marine.ts': { ...marineNs }, 'src/assets/builtin/fungi.ts': { ...fungiNs }, 'src/assets/builtin/fish.ts': { ...fishNs } };
 async function hotSwap(path: string) {
   const url = '/' + path.split('/').map(encodeURIComponent).join('/') + '?t=' + Date.now();
   try {
