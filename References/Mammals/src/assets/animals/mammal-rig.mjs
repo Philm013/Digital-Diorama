@@ -1757,7 +1757,9 @@ function tetraMane(B, S, L) {
         const lock = M.style === 'horse' ? 1 + 0.25 * Math.sin(u * 37) * v : 1, env = Math.pow(Math.sin(Math.PI * clamp(u * 1.08, 0, 1)), 0.45);
         return p.addScaledVector(n, -0.2 * hgt).addScaledVector(dir, (0.15 + v * env) * hgt * lock);
       },
-      th: (u, v) => hgt * 0.22 * (1 - 0.7 * v), zone: 'mane', skin: (u) => rig.chain(L.axial, lerp(u1, u0, u)) });
+      th: (u, v) => hgt * 0.22 * (1 - 0.7 * v), skin: (u) => rig.chain(L.axial, lerp(u1, u0, u)),
+      // a striped coat carries its stripes up into the mane (zebras); other manes are one colour
+      zone: S.pattern === 'stripes' ? (u, v, face, P) => (P && v < 0.86 ? B.paint({ part: 'mane', u, a: 0, P }) : 'mane') : 'mane' });
     if (M.forelock !== false && M.style === 'horse') {
       const { p, n } = L.head.at(0.12, Math.PI / 2);
       sheet(part, { nu: 4, nv: 2, f: (u, v) => p.clone().addScaledVector(n, hgt * 0.1 * (1 - u)).addScaledVector(L.hd, u * hgt * 1.3).addScaledVector(V3(1, 0, 0), (v - 0.5) * hgt * 0.5 * (1 - u * 0.6)),
@@ -1772,7 +1774,14 @@ function tetraMane(B, S, L) {
       w: (u) => R0 * lerp(0.92, 1.0, Math.sin(Math.PI * Math.min(1, u * 1.1 + 0.1))), ht: (u) => R0 * lerp(0.88, 0.98, u), hb: (u) => R0 * lerp(0.95, 1.3, u), oy: () => -R0 * 0.12,
       bump: (u, a) => 0.22 * (fbm(Math.cos(a) * 3 + u * 5, Math.sin(a) * 3, u * 4, 11) - 0.45) + 0.08 * Math.sin(a * 9 + u * 7),
       cap0: { type: 'round', len: 0.35, n: 3 }, cap1: { type: 'round', len: 0.55, n: 3 }, bend: 0.5 });
-    emit(part, mg, 'mane', (u, a, P) => rig.near(P, ['Head', 'Neck2', 'Neck1', 'Chest'], R0 * 1.2));
+    // Digital Diorama revision: streaks of hair, a tawny fringe round the face darkening toward the shoulders
+    const dark = M.dark ?? 0.65;
+    const maneZone = (u, a) => {
+      const st = fbm(Math.cos(a) * 5.5 + 3, Math.sin(a) * 5.5, u * 1.3, 23) + 0.12 * (fbm(Math.cos(a) * 18, Math.sin(a) * 18, u * 4, 31) - 0.5);
+      if (st < lerp(0.62, 0.3, sstep(0.0, 0.42, u))) return 'body';
+      return st > lerp(0.78, 0.52, sstep(0.3, 1, u) * dark) ? 'marking' : 'mane';
+    };
+    emit(part, mg, maneZone, (u, a, P) => rig.near(P, ['Head', 'Neck2', 'Neck1', 'Chest'], R0 * 1.2));
   }
   if (M.beard) {
     // chin beard (goat, bison): a tapered lock hanging from under the jaw
@@ -1841,81 +1850,135 @@ function makePainter(S, L) {
     if (torso && S.flankStripe && Math.abs(sa + 0.38) < 0.11 && u > U.haunch && u < U.chest) zone = 'marking';
     // ── patterns
     switch (pat) {
-      case 'stripes': { // zebra
-        let v;
+      case 'stripes': { // plains zebra (Digital Diorama revision: stripe spacing, rump arcs, leg rings, belly line)
+        // Black and white bands of about equal width, ~10 cm apart on the barrel. Upright on the barrel,
+        // square to the neck on the neck, sweeping into broad arcs round the thigh on the rump, rings on the
+        // legs (finer toward the hooves); a dark line runs along the belly; the muzzle is dark.
+        const f = S.stripeFreq ?? 12, warp = fbm(x * 1.6, y * 1.6, z * 1.6, seed) - 0.5;
+        let ph;
         if (torso) {
-          if (zone === 'belly' && sa < -0.85) return 'body';
-          v = u < U.haunch + 0.08 ? Math.sin(TAU * (y * 3.0 + z * 1.3 + 0.2 * fbm(x * 3, y * 3, z * 3, seed)))
-            : Math.sin(TAU * (z * 3.1 + y * (u > U.chest ? 0.9 : 0.25) + 0.35 * fbm(x * 2, y * 2, z * 2, seed)));
-          if (u > U.neckRoot) v = Math.sin(TAU * (P.clone().dot(L.nd) * k * 3.6 + 0.1 * fbm(x * 3, y * 3, z, seed)));
-        } else if (limb) v = Math.sin(TAU * y * 5.2);
-        else if (head) { if (u > s0 + 0.55 * (1 - s0)) return 'marking'; v = Math.sin(TAU * (u * 7.5 + (part === 'jaw' ? 0.3 : 0))); }
-        else if (part === 'tail') v = u < 0.85 ? Math.sin(TAU * u * 6) : 1;
-        else if (part === 'ear') v = u > 0.8 ? 1 : -1;
-        if (v !== undefined && v > 0.08) return 'pattern';
+          if (sa < -0.93 && u > U.haunch && u < U.chest + 0.04) return 'pattern';
+          if (u > U.neckRoot - 0.02) ph = (P.x * L.nd.x + P.y * L.nd.y + P.z * L.nd.z) * k * f * 0.8 + warp * 0.7;
+          else {
+            const zr = (P.z - (L.zB + 0.12 * L.Lt)) * k, yr = (P.y - (L.yR - 0.75 * L.Dr)) * k;
+            const arc = Math.hypot(zr * 1.05, yr) * f * 0.72, bar = z * f;
+            ph = lerp(arc, bar, sstep(U.haunch - 0.02, U.loin + 0.06, u)) + warp * 0.9;
+            if (sa < bellyLine && sa > -0.93) return Math.sin(TAU * ph) > 0.55 ? 'pattern' : 'body';
+          }
+        } else if (limb) {
+          if (P.y < 0.07 * L.elbowY) return 'pattern';
+          const t = clamp(P.y / L.elbowY, 0, 1.4);
+          ph = y * f * lerp(2.1, 1.25, Math.min(1, t)) + warp * 0.35;
+        } else if (head) {
+          if (u > s0 + 0.5 * (1 - s0)) return 'marking';
+          ph = u * 16 + (part === 'jaw' ? 0.35 : 0) + Math.abs(ca) * 1.2 + warp * 0.4;
+        } else if (part === 'tail') { if (u > 0.8) return 'mane'; ph = u * 8; }
+        else if (part === 'ear') return u > 0.72 ? 'pattern' : zone;
+        else if (part === 'mane') ph = (P.x * L.nd.x + P.y * L.nd.y + P.z * L.nd.z) * k * f * 0.8 + warp * 0.7;
+        if (ph === undefined) return zone;
+        return Math.sin(TAU * ph) > (S.stripeGap ?? -0.04) ? 'pattern' : zone === 'belly' ? 'body' : zone;
+      }
+      case 'tiger': { // Digital Diorama revision: narrow, tapering, broken stripes; white cheeks and brows
+        // Tigers carry 100+ narrow dark stripes: thick along the spine, tapering to points down the flank,
+        // often forked or broken. White belly, inner legs, cheeks and a spot over each eye; ringed tail, black tip.
+        if (zone === 'marking') return zone;
+        const f = S.stripeFreq ?? 9.5;
+        const n1 = fbm(x * 2.3, y * 2.3, z * 2.3, seed) - 0.5, n2 = fbm(x * 7, y * 7, z * 7, seed + 3);
+        if (torso) {
+          if (sa < -0.62) return zone;
+          const along = u > U.neckRoot - 0.02 ? (P.x * L.nd.x + P.y * L.nd.y + P.z * L.nd.z) * k : z;
+          const ph = along * f + n1 * 1.5 - sa * 0.18;
+          const w = lerp(0.07, 0.34, sstep(-0.6, 0.95, sa)) * (0.55 + 0.9 * n2);
+          if (0.5 + 0.5 * Math.cos(TAU * ph) > 1 - w && n2 > 0.3) return 'pattern';
+          return zone;
+        }
+        if (limb) {
+          if (P.y < 0.3 * L.elbowY) return zone;
+          if (sa < -0.2 && Math.abs(ca) < 0.6) return 'belly';
+          const ph = y * f * 1.25 + n1 * 1.2 + x * 0.6;
+          return 0.5 + 0.5 * Math.cos(TAU * ph) > 1 - 0.22 * (0.6 + n2) && n2 > 0.32 ? 'pattern' : zone;
+        }
+        if (part === 'head') {
+          if (eyeNear(P, 2.2) && sa > 0.1) return 'belly';
+          if (u > s0 - 0.05 && sa < 0.25) return 'belly';
+          if (u < s0 && Math.abs(ca) > 0.4 && sa > -0.5 && Math.cos(TAU * (u * 10 + n1)) > 0.55) return 'pattern';
+          if (u < s0 * 0.7 && sa > 0.55 && Math.cos(TAU * (Math.abs(ca) * 4 + n1)) > 0.5) return 'pattern';
+          return zone;
+        }
+        if (part === 'tail') return u > 0.9 || Math.cos(TAU * u * 7) > 0.35 ? 'pattern' : zone;
+        if (part === 'ear') return sa > 0 && u > 0.35 ? 'pattern' : zone;
         return zone;
       }
-      case 'tiger': {
-        if (zone === 'belly' || zone === 'marking') return zone;
-        if (torso) {
-          const v = Math.sin(TAU * (z * 3.8 + 0.5 * fbm(x * 3, y * 3, z * 3, seed) + (u > U.neckRoot ? y : 0)));
-          if (v > 0.55 && sa > -0.65 && fbm(x * 5, y * 5, z * 5, seed + 3) > 0.36) return 'pattern';
-        } else if (limb) { if (P.y > 0.35 * L.elbowY && Math.sin(TAU * (y * 5 + x * 0.6)) > 0.72) return 'pattern'; }
-        else if (head && part === 'head') { if (Math.abs(ca) > 0.45 && sa > -0.4 && Math.sin(TAU * u * 9) > 0.62 && u < s0 + 0.15) return 'pattern'; }
-        else if (part === 'tail') { if (Math.sin(TAU * u * 7) > 0.35 || u > 0.9) return 'pattern'; }
-        return zone;
-      }
-      case 'spots': case 'hyena': {
-        if (zone === 'marking' || (zone === 'belly' && pat === 'hyena')) return zone;
-        const f = pat === 'hyena' ? 6 : 10, th = pat === 'hyena' ? 0.27 : 0.3;
-        if (torso || limb || part === 'tail' || (head && u < s0)) {
-          if (part === 'tail' && pat === 'spots' && u > 0.65) return Math.sin(TAU * u * 9) > 0.1 ? 'pattern' : zone;
-          if (limb && P.y < 0.18 * L.elbowY) return zone;
-          const [f1] = worley(x * f * (head ? 1.6 : 1), y * f * (head ? 1.6 : 1), z * f * (head ? 1.6 : 1), seed);
-          if (f1 < th) return 'pattern';
+      case 'spots': case 'hyena': { // Digital Diorama revision: dense small solid spots (cheetah) / blotches (hyena)
+        if (zone === 'marking' || (zone === 'belly' && sa < -0.75)) return zone;
+        const hy = pat === 'hyena';
+        const f = (S.spotFreq ?? (hy ? 10 : 19)) * (head ? 1.7 : 1), th = S.spotSize ?? (hy ? 0.3 : 0.29);
+        if (torso || limb || part === 'tail' || (head && u < s0 + 0.1)) {
+          if (part === 'tail' && !hy && u > 0.62) return u > 0.93 ? 'belly' : Math.cos(TAU * u * 10) > 0.25 ? 'pattern' : zone;
+          if (limb && P.y < (hy ? 0.12 : 0.2) * L.elbowY) return zone;
+          const sc = limb ? lerp(1.45, 1, clamp(P.y / L.elbowY, 0, 1)) : 1;
+          const wx = hy ? (fbm(x * 4, y * 4, z * 4, seed + 9) - 0.5) * 0.5 : 0;
+          const [f1] = worley((x + wx) * f * sc, y * f * sc, (z - wx) * f * sc, seed);
+          if (f1 < th * (hy && torso && u > U.neckRoot ? 0.8 : 1)) return 'pattern';
         }
         if (head && S.tearMark && part === 'head' && Math.abs(ca) > 0.55 && Math.abs(ca) < 0.85 && u > L.headS.sEye && u < s0 + 0.35 * (1 - s0) && sa < 0.2) return 'marking';
         return zone;
       }
-      case 'rosettes': {
-        if (zone === 'belly' && sa < -0.8) return zone;
-        const [f1] = worley(x * 6.5, y * 6.5, z * 6.5, seed);
-        if (torso) {
-          if (f1 > 0.24 && f1 < 0.4 && fbm(x * 9, y * 9, z * 9, seed + 1) > 0.33) return 'pattern';
+      case 'rosettes': { // Digital Diorama revision: small rosettes (broken rings round a darker centre)
+        // Body: rosettes ~6 cm across; head, legs, belly and tail base: solid spots; the tail ends in rings.
+        if (zone === 'belly' && sa < -0.82) return zone;
+        const f = S.spotFreq ?? 11.5, n = fbm(x * 9, y * 9, z * 9, seed + 1);
+        if (torso && sa > -0.55) {
+          const [f1] = worley(x * f, y * f, z * f, seed);
+          if (f1 > 0.22 && f1 < 0.36 && n > 0.36) return 'pattern';
           if (f1 < 0.2) return 'marking';
-        } else if (limb || (head && u < s0) || part === 'tail') {
-          const [g1] = worley(x * 11, y * 11, z * 11, seed); if (g1 < 0.26) return 'pattern';
+          return zone;
+        }
+        if (part === 'tail' && u > 0.7) return Math.cos(TAU * u * 9) > 0.3 || u > 0.95 ? 'pattern' : zone;
+        if (torso || limb || (head && u < s0 + 0.1) || part === 'tail') {
+          if (limb && P.y < 0.12 * L.elbowY) return zone;
+          const g = f * (head ? 2.4 : 1.6), [g1] = worley(x * g, y * g, z * g, seed + 2);
+          if (g1 < 0.27) return 'pattern';
         }
         return zone;
       }
-      case 'giraffe': {
-        if (limb && P.y < 0.55 * L.elbowY) return 'belly';
+      case 'giraffe': { // Digital Diorama revision: fine reticulated network of pale lines between polygonal patches
+        if (limb && P.y < 0.5 * L.elbowY) return 'belly';
+        if (head && u > s0 + 0.1 * (1 - s0)) return 'belly';
         if (torso || limb || head) {
-          const f = head ? 9 : 4.2, [f1, f2] = worley(x * f, y * f, z * f, seed);
-          if (head && u > s0 + 0.2 * (1 - s0)) return 'belly';
-          return f2 - f1 < 0.17 ? 'belly' : 'pattern';
+          const neck = torso && u > U.neckRoot;
+          const f = (head ? 24 : neck ? 15 : 11) * (S.patchFreq ?? 1) * (limb ? 1.25 : 1);
+          const w = (fbm(x * 2.5, y * 2.5, z * 2.5, seed + 5) - 0.5) * 0.4;
+          const [f1, f2] = worley(x * f + w, y * f * (neck ? 0.75 : 1), z * f - w, seed);
+          return f2 - f1 < (S.netWidth ?? 0.16) * (limb ? 1.3 : 1) ? 'belly' : 'pattern';
         }
         return zone;
       }
-      case 'patches': {
-        if (limb && P.y < 0.45 * L.elbowY) return 'body';
-        if (fbm(x * 1.8, y * 1.8, z * 1.8, seed, 3) > 0.53) return 'pattern';
+      case 'patches': { // Digital Diorama revision: Holstein — large ragged black patches, white legs, belly and blaze
+        if (limb && P.y < 0.55 * L.elbowY) return 'body';
+        if (torso && sa < -0.7) return 'body';
+        if (part === 'tail') return u > 0.6 ? 'body' : zone;
+        if (head && part === 'head') return u > s0 * 0.55 && Math.abs(ca) < 0.28 && sa > -0.2 ? 'body' : u > s0 + 0.35 * (1 - s0) ? zone : 'pattern';
+        const w = (fbm(x * 3.5, y * 3.5, z * 3.5, seed + 4) - 0.5) * 0.55;
+        if (fbm(x * 1.5 + w, y * 1.5, z * 1.5 - w, seed, 4) > 0.5) return 'pattern';
         return zone;
       }
       case 'panda': {
         if (limb) return 'pattern';
         if (part === 'ear') return 'pattern';
         if (torso) {
-          const fz = (P.z - (L.zF - 0.3 * L.Lt)) / (0.22 * L.Lt);
-          if (Math.abs(fz) < 0.5 && u < U.neckRoot + 0.06) return 'pattern';
+          // the black saddle runs over the shoulders and joins the forelegs
+          const fz = (P.z - (L.zF - 0.3 * L.Lt)) / (0.25 * L.Lt);
+          if (Math.abs(fz) < 0.55 - Math.max(0, sa) * 0.12 && u < U.neckRoot + 0.06) return 'pattern';
         }
-        if (head && eyeNear(P, 2.6)) return 'pattern';
+        // eye patches: drooping teardrops, larger than the eye
+        if (head && part === 'head' && L.eyes && L.eyes.some(e => { const dx = P.x - e.c.x, dy = P.y - e.c.y + eyeR * 0.9, dz = P.z - e.c.z; return Math.hypot(dx * 0.85, dy * 0.75, dz) < 3.1 * eyeR; })) return 'pattern';
         return zone === 'belly' ? 'body' : zone;
       }
       case 'raccoon': {
         if (head && part === 'head' && eyeNear(P, 2.9) && u < s0 + 0.3 * (1 - s0)) return 'pattern';
         if (head && part === 'head' && u > s0 + 0.3 * (1 - s0)) return 'belly';
-        if (part === 'tail') return Math.sin(TAU * u * 5.5) > 0 ? 'pattern' : 'body';
+        if (part === 'tail') return u > 0.94 || Math.sin(TAU * u * 5.5) > 0 ? 'pattern' : 'body';
         if (limb && P.y < 0.5 * L.elbowY) return 'pattern';
         return zone;
       }
@@ -1928,13 +1991,24 @@ function makePainter(S, L) {
       case 'anteater': {
         if (torso && Math.abs((P.z - L.zF + 0.25 * L.Lt) / L.Lt + (P.y - L.H * 0.6) / L.Lt * 0.9) < 0.05 && sa > -0.6) return 'pattern';
         if (torso && Math.abs((P.z - L.zF + 0.25 * L.Lt) / L.Lt + (P.y - L.H * 0.6) / L.Lt * 0.9) < 0.075 && sa > -0.6) return 'belly';
+        // pale forelegs with a black band at the wrist
+        if (limb && q.front) return P.y < 0.28 * L.elbowY && P.y > 0.12 * L.elbowY ? 'pattern' : P.y < L.elbowY * 1.05 ? 'belly' : zone;
         return zone;
       }
-      case 'tabby': {
+      case 'tabby': { // Digital Diorama revision: mackerel tabby — dorsal line, narrow ribs of stripes, ringed legs and tail, forehead M
         if (zone === 'belly') return zone;
-        if (torso && Math.sin(TAU * (z * 6 + 0.6 * fbm(x * 4, y * 4, z * 4, seed))) > 0.5 && sa > -0.5) return 'pattern';
-        if (part === 'tail' && Math.sin(TAU * u * 8) > 0.3) return 'pattern';
-        if (limb && P.y > 0.3 * L.elbowY && Math.sin(TAU * y * 9) > 0.6) return 'pattern';
+        const n = fbm(x * 3, y * 3, z * 3, seed) - 0.5;
+        if (torso) {
+          if (sa > 0.93) return 'pattern';
+          const along = u > U.neckRoot - 0.02 ? (P.x * L.nd.x + P.y * L.nd.y + P.z * L.nd.z) * k : z;
+          return sa > -0.5 && Math.cos(TAU * (along * (S.stripeFreq ?? 13) + n * 1.2 - sa * 0.3)) > 0.45 ? 'pattern' : zone;
+        }
+        if (part === 'tail') return u > 0.92 || Math.cos(TAU * u * 9) > 0.3 ? 'pattern' : zone;
+        if (limb) return P.y > 0.2 * L.elbowY && Math.cos(TAU * (y * 14 + n)) > 0.5 && !(sa < -0.2 && Math.abs(ca) < 0.6) ? 'pattern' : zone;
+        if (part === 'head') {
+          if (u < s0 && sa > 0.5 && Math.cos(TAU * (Math.abs(ca) * 3.2 + u * 2)) > 0.55) return 'pattern';
+          if (u < s0 && Math.abs(ca) > 0.6 && sa > -0.4 && Math.cos(TAU * (u * 7 + sa)) > 0.6) return 'pattern';
+        }
         return zone;
       }
       default: return zone;
