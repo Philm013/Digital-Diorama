@@ -48,6 +48,11 @@
  *   - Skull: rounded occiput, egg-shaped braincase, supraorbital brow ridge. The neck tapers
  *     near-linearly into the skull (no collar on short-necked species).
  *   - Ears: tubular conch at the root plus an auricular mound, and fan ears hang properly.
+ *
+ * REVISION 3 (Digital Diorama: realism)
+ *   - Coat atlas: painters are rasterised into one texture per asset instead of one colour per
+ *     quad, so stripes, spots, rosettes, masks and patch edges are smooth curves (see COAT ATLAS).
+ *   - Smooth, crease-aware normals and glossy eyes. Options: coat, coatGrain, shading.
  */
 
 import * as THREE from 'three';
@@ -165,6 +170,8 @@ class Part {
   constructor(name, opt = {}) {
     this.name = name; this.glass = !!opt.glass; this.group = opt.group || name;
     this.p = []; this.z = []; this.si = []; this.sw = [];
+    // coat atlas: per-vertex (s, t) inside each face's patch, and the patch per face (null = flat colour)
+    this.uv = []; this.pt = []; this.coat = false;
   }
   get count() { return this.p.length / 3; }
   v(P, W) {
@@ -172,11 +179,13 @@ class Part {
     const w = W || NO_W;
     for (let i = 0; i < 4; i++) { const e = w[i]; this.si.push(e ? e[0] : 0); this.sw.push(e ? e[1] : 0); }
   }
-  tri(a, b, c, zone, wa, wb, wc) {
+  tri(a, b, c, zone, wa, wb, wc, uv = null, patch = null) {
     const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
     const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
     if (cx * cx + cy * cy + cz * cz < 1e-26) return;
     this.v(a, wa); this.v(b, wb || wa); this.v(c, wc || wa); this.z.push(zone);
+    if (patch) { this.uv.push(uv[0], uv[1], uv[2], uv[3], uv[4], uv[5]); this.pt.push(patch); }
+    else { this.uv.push(0, 0, 0, 0, 0, 0); this.pt.push(null); }
   }
 }
 
@@ -319,30 +328,33 @@ function emit(part, g, zone, skin) {
   const sf = typeof skin === 'function' ? skin : () => skin;
   const rows = g.rows, us = g.us, R = g.R, nr = rows.length;
   const Wt = rows.map((row, k) => row.map((P, j) => sf(us[k], (j / R) * TAU, P)));
+  // Digital Diorama revision: a painted loft becomes a coat-atlas patch (see COAT ATLAS)
+  const pt = part.coat && typeof zone === 'function' ? loftPatch(g, zf) : null, T = pt && pt.t, L0 = pt ? pt.lead : 0;
   const ctr = V3();
   const kEnd = g.closed ? nr : nr - 1;
   for (let k = 0; k < kEnd; k++) {
     const k1 = (k + 1) % nr, um = g.closed && k1 === 0 ? (us[k] + 1) / 2 : (us[k] + us[k1]) / 2;
+    const t0 = pt ? T[k + L0] : 0, t1 = pt ? T[k + 1 + L0] : 0;
     for (let j = 0; j < R; j++) {
-      const j1 = (j + 1) % R, A = rows[k][j], B = rows[k1][j], Cc = rows[k1][j1], D = rows[k][j1];
+      const j1 = (j + 1) % R, A = rows[k][j], B = rows[k1][j], Cc = rows[k1][j1], D = rows[k][j1], s0 = j / R, s1 = (j + 1) / R;
       ctr.copy(A).add(B).add(Cc).add(D).multiplyScalar(0.25);
       const zn = zf(um, ((j + 0.5) / R) * TAU, ctr);
-      part.tri(A, Cc, B, zn, Wt[k][j], Wt[k1][j1], Wt[k1][j]);
-      part.tri(A, D, Cc, zn, Wt[k][j], Wt[k][j1], Wt[k1][j1]);
+      part.tri(A, Cc, B, zn, Wt[k][j], Wt[k1][j1], Wt[k1][j], pt && [s0, t0, s1, t1, s0, t1], pt);
+      part.tri(A, D, Cc, zn, Wt[k][j], Wt[k][j1], Wt[k1][j1], pt && [s0, t0, s1, t0, s1, t1], pt);
     }
   }
-  const fan = (tip, row, u, start, ws) => {
+  const fan = (tip, row, u, start, ws, tTip, tRow) => {
     const wt = sf(u, 0, tip);
     for (let j = 0; j < R; j++) {
-      const j1 = (j + 1) % R;
+      const j1 = (j + 1) % R, s0 = j / R, s1 = (j + 1) / R, sm = (j + 0.5) / R;
       ctr.copy(tip).add(row[j]).add(row[j1]).multiplyScalar(1 / 3);
       const zn = zf(u, ((j + 0.5) / R) * TAU, ctr);
-      if (start) part.tri(tip, row[j1], row[j], zn, wt, ws[j1], ws[j]);
-      else part.tri(tip, row[j], row[j1], zn, wt, ws[j], ws[j1]);
+      if (start) part.tri(tip, row[j1], row[j], zn, wt, ws[j1], ws[j], pt && [sm, tTip, s1, tRow, s0, tRow], pt);
+      else part.tri(tip, row[j], row[j1], zn, wt, ws[j], ws[j1], pt && [sm, tTip, s0, tRow, s1, tRow], pt);
     }
   };
-  if (!g.closed && g.tip0) fan(g.tip0, rows[0], us[0], true, Wt[0]);
-  if (!g.closed && g.tip1) fan(g.tip1, rows[nr - 1], us[nr - 1], false, Wt[nr - 1]);
+  if (!g.closed && g.tip0) fan(g.tip0, rows[0], us[0], true, Wt[0], pt ? T[0] : 0, pt ? T[L0] : 0);
+  if (!g.closed && g.tip1) fan(g.tip1, rows[nr - 1], us[nr - 1], false, Wt[nr - 1], pt ? T[T.length - 1] : 0, pt ? T[nr - 1 + L0] : 0);
   return g;
 }
 
@@ -387,13 +399,16 @@ function sheet(part, o) {
       Wt[i].push(sf(i / nu, j / nv, P[i][j]));
     }
   }
+  // Digital Diorama revision: a painted membrane becomes two coat-atlas patches, one per face
+  const pF = part.coat && typeof o.zone === 'function' ? sheetPatch(F, zf, 1) : null, pB = pF && sheetPatch(B, zf, -1);
   for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
     const um = (i + 0.5) / nu, vm = (j + 0.5) / nv, zF = zf(um, vm, 1), zB = zf(um, vm, -1);
     const w = [Wt[i][j], Wt[i + 1][j], Wt[i + 1][j + 1], Wt[i][j + 1]];
-    part.tri(F[i][j], F[i + 1][j], F[i + 1][j + 1], zF, w[0], w[1], w[2]);
-    part.tri(F[i][j], F[i + 1][j + 1], F[i][j + 1], zF, w[0], w[2], w[3]);
-    part.tri(B[i][j], B[i + 1][j + 1], B[i + 1][j], zB, w[0], w[2], w[1]);
-    part.tri(B[i][j], B[i][j + 1], B[i + 1][j + 1], zB, w[0], w[3], w[2]);
+    const sa = j / nv, sb = (j + 1) / nv, fa = pF ? pF.t[i] : 0, fb = pF ? pF.t[i + 1] : 0, ba = pB ? pB.t[i] : 0, bb = pB ? pB.t[i + 1] : 0;
+    part.tri(F[i][j], F[i + 1][j], F[i + 1][j + 1], zF, w[0], w[1], w[2], pF && [sa, fa, sa, fb, sb, fb], pF);
+    part.tri(F[i][j], F[i + 1][j + 1], F[i][j + 1], zF, w[0], w[2], w[3], pF && [sa, fa, sb, fb, sb, fa], pF);
+    part.tri(B[i][j], B[i + 1][j + 1], B[i + 1][j], zB, w[0], w[2], w[1], pB && [sa, ba, sb, bb, sa, bb], pB);
+    part.tri(B[i][j], B[i][j + 1], B[i + 1][j + 1], zB, w[0], w[3], w[2], pB && [sa, ba, sb, ba, sb, bb], pB);
   }
   const edge = (a0, a1, b0, b1, wa, wb, zn) => { part.tri(a0, b0, b1, zn, wa, wa, wb); part.tri(a0, b1, a1, zn, wa, wb, wb); };
   for (let i = 0; i < nu; i++) {
@@ -550,6 +565,192 @@ function applySample(rig, sample) {
 }
 
 /* ── shared materials (vertex colours, flat shading, double sided membranes) ── */
+/* ════════════════════════════════════════════════════════════════════════════
+ *  COAT ATLAS  (Digital Diorama revision — shared verbatim by the mammal and bird rigs)
+ *  Painters used to be sampled once per quad, so stripes, spots, masks and patch
+ *  edges followed the mesh grid in staircases. Every painted loft and membrane now
+ *  records its grid as a patch; finish() paints each patch into one texture per
+ *  asset at an even texel size (adaptive sampling, softened edges and a faint coat
+ *  grain on fur and feathers) and the triangles carry UVs into it. Parts with one
+ *  constant colour keep plain vertex colours. Normals are smoothed across faces
+ *  (keeping creases sharper than COAT_CREASE degrees).
+ * ════════════════════════════════════════════════════════════════════════════ */
+const COAT_RES = { draft: 300, standard: 420, high: 560 }; // texels across the model's bounding diagonal
+const COAT_PAD = 2, COAT_BLOCK = 4, COAT_CREASE = 62, COAT_MAX = 2048;
+
+/** A paintable grid of points grid[row][col]; `wrap` closes the columns into rings (lofts). */
+function makePatch(grid, wrap, zoneAt) {
+  const K = grid.length - 1, J = wrap ? grid[0].length : grid[0].length - 1;
+  const at = wrap ? (row, j) => row[j % row.length] : (row, j) => row[j];
+  const t = [0];
+  let len = 0, per = 0;
+  for (let k = 1; k <= K; k++) {
+    let d = 0;
+    for (let j = 0; j <= (wrap ? J - 1 : J); j++) d += grid[k][j].distanceTo(grid[k - 1][j]);
+    len += d / (wrap ? J : J + 1); t.push(len);
+  }
+  for (let k = 0; k <= K; k++) t[k] = len > 1e-12 ? t[k] / len : k / Math.max(1, K);
+  for (let k = 0; k <= K; k++) { let p = 0; for (let j = 0; j < J; j++) p += at(grid[k], j + 1).distanceTo(grid[k][j]); per = Math.max(per, p); }
+  return { grid, wrap, K, J, t, len, per, zoneAt, at };
+}
+/** Patch over a loft, its capped tips added as degenerate rows (`lead` = rows before the loft's own). */
+function loftPatch(g, zf) {
+  const R = g.R, rows = g.rows.slice(), us = g.us.slice();
+  const lead = !g.closed && g.tip0 ? 1 : 0;
+  if (lead) { rows.unshift(new Array(R).fill(g.tip0)); us.unshift(us[0]); }
+  if (!g.closed && g.tip1) { rows.push(new Array(R).fill(g.tip1)); us.push(us[us.length - 1]); }
+  if (g.closed) { rows.push(rows[0]); us.push(1); }
+  const p = makePatch(rows, true, (s, k, f, P) => zf(lerp(us[k], us[k + 1], f), s * TAU, P));
+  p.lead = lead;
+  return p;
+}
+/** Patch over one face of a membrane (rows along u, columns along v). */
+function sheetPatch(G, zf, face) {
+  const nu = G.length - 1;
+  return makePatch(G, false, (s, k, f, P) => zf((k + f) / nu, s, face, P));
+}
+
+/** Paints every patch used by `parts` into one atlas; returns the texture and each patch's tile. */
+function paintAtlas(parts, cfg, hexOf) {
+  const patches = [], seen = new Set();
+  for (const part of parts) for (const pt of part.pt) if (pt && !seen.has(pt)) { seen.add(pt); patches.push(pt); }
+  if (!patches.length) return null;
+  const mn = V3(Infinity, Infinity, Infinity), mx = V3(-Infinity, -Infinity, -Infinity), q = V3();
+  for (const part of parts) for (let i = 0; i < part.p.length; i += 3) { q.set(part.p[i], part.p[i + 1], part.p[i + 2]); mn.min(q); mx.max(q); }
+  const D = Math.max(1e-6, mx.distanceTo(mn));
+  let tau = D / (cfg.res || 420), AW = 256, AH = 0, place = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    let area = 0;
+    for (const pt of patches) {
+      pt.tw = clamp(Math.ceil(pt.per / tau), 2, COAT_MAX - 2 * COAT_PAD);
+      pt.th = clamp(Math.ceil(pt.len / tau), 2, COAT_MAX - 2 * COAT_PAD);
+      area += (pt.tw + 2 * COAT_PAD) * (pt.th + 2 * COAT_PAD);
+    }
+    AW = clamp(2 ** Math.ceil(Math.log2(Math.sqrt(area * 1.2) + 1)), 128, COAT_MAX);
+    const items = [{ tw: 4, th: 4, white: true }, ...patches.slice().sort((a, b) => b.th - a.th)];
+    let x = 0, y = 0, sh = 0;
+    place = new Map();
+    for (const it of items) {
+      it.tw = Math.min(it.tw, AW - 2 * COAT_PAD);
+      const W = it.tw + 2 * COAT_PAD, H = it.th + 2 * COAT_PAD;
+      if (x + W > AW) { x = 0; y += sh; sh = 0; }
+      place.set(it, { x: x + COAT_PAD, y: y + COAT_PAD, w: it.tw, h: it.th });
+      x += W; sh = Math.max(sh, H);
+    }
+    AH = Math.ceil((y + sh) / 4) * 4;
+    if (AH <= COAT_MAX) break;
+    tau *= 1.3;
+  }
+  const data = new Uint8Array(AW * AH * 4).fill(255);
+  const f1 = 1 / (tau * 2.4), f2 = 1 / (D * 0.045), grain = cfg.grain ?? 0.06;
+  const cache = new Map();
+  const shade = (z, P, out, o) => {
+    let c = cache.get(z);
+    if (!c) { const h = hexOf(z); c = [(h >> 16) & 255, (h >> 8) & 255, h & 255, cfg.grainOf && cfg.grainOf(z) ? 1 : 0]; cache.set(z, c); }
+    let m = 1;
+    if (c[3] && grain > 0) m = 1 + grain * ((0.6 * vnoise(P.x * f1, P.y * f1, P.z * f1 * 0.4, 17) + 0.4 * vnoise(P.x * f2, P.y * f2, P.z * f2, 29)) - 0.5) * 2;
+    out[o] = c[0] * m; out[o + 1] = c[1] * m; out[o + 2] = c[2] * m;
+  };
+  for (const pt of patches) paintPatch(pt, place.get(pt), data, AW, shade, cfg.soft !== false);
+  let white = null;
+  for (const [it, pl] of place) if (it.white) white = [(pl.x + 2) / AW, (pl.y + 2) / AH];
+  const tex = new THREE.DataTexture(data, AW, AH, THREE.RGBAFormat, THREE.UnsignedByteType);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = 4;
+  tex.flipY = false;
+  tex.name = 'coat-atlas';
+  tex.needsUpdate = true;
+  const tiles = new Map();
+  for (const pt of patches) tiles.set(pt, place.get(pt));
+  return { tex, tiles, AW, AH, white, texels: AW * AH };
+}
+
+/** Rasterises one patch's painter into its tile (lattice-sampled; uniform blocks skip the painter). */
+function paintPatch(pt, tile, data, AW, shade, soft) {
+  const { grid, K, J, t, at, zoneAt, wrap } = pt, { x: X0, y: Y0, w, h } = tile;
+  const rowK = new Int32Array(h), rowF = new Float32Array(h), colJ = new Int32Array(w), colF = new Float32Array(w);
+  let k = 0;
+  for (let y = 0; y < h; y++) {
+    const tt = (y + 0.5) / h;
+    while (k < K - 1 && t[k + 1] < tt) k++;
+    rowK[y] = k; rowF[y] = clamp((tt - t[k]) / ((t[k + 1] - t[k]) || 1), 0, 1);
+  }
+  for (let x = 0; x < w; x++) { const c = ((x + 0.5) / w) * J, j = Math.min(J - 1, Math.floor(c)); colJ[x] = j; colF[x] = c - j; }
+  const P = V3();
+  const pos = (x, y) => {
+    const r0 = grid[rowK[y]], r1 = grid[rowK[y] + 1], j = colJ[x], fs = colF[x], ft = rowF[y];
+    const a = at(r0, j), b = at(r0, j + 1), c = at(r1, j), d = at(r1, j + 1);
+    const w00 = (1 - fs) * (1 - ft), w10 = fs * (1 - ft), w01 = (1 - fs) * ft, w11 = fs * ft;
+    P.set(a.x * w00 + b.x * w10 + c.x * w01 + d.x * w11, a.y * w00 + b.y * w10 + c.y * w01 + d.y * w11, a.z * w00 + b.z * w10 + c.z * w01 + d.z * w11);
+  };
+  const zoneOf = (x, y) => { pos(x, y); return zoneAt((x + 0.5) / w, rowK[y], rowF[y], P); };
+  const B = COAT_BLOCK, cw = Math.ceil(w / B), ch = Math.ceil(h / B), lw = cw + 1;
+  const lat = new Array(lw * (ch + 1));
+  for (let cy = 0; cy <= ch; cy++) for (let cx = 0; cx <= cw; cx++) lat[cy * lw + cx] = zoneOf(Math.min(cx * B, w - 1), Math.min(cy * B, h - 1));
+  const rgb = new Float32Array(w * h * 3);
+  for (let by = 0; by < ch; by++) for (let bx = 0; bx < cw; bx++) {
+    const z = lat[by * lw + bx], uni = z === lat[by * lw + bx + 1] && z === lat[(by + 1) * lw + bx] && z === lat[(by + 1) * lw + bx + 1];
+    for (let y = by * B; y < Math.min(h, by * B + B); y++) for (let x = bx * B; x < Math.min(w, bx * B + B); x++) {
+      let zz = z;
+      if (uni) pos(x, y); else zz = zoneOf(x, y);
+      shade(zz, P, rgb, (y * w + x) * 3);
+    }
+  }
+  if (soft && w > 2 && h > 2) {
+    // a 1-2-1 blur softens zone edges by about a texel, like fur or feather margins
+    const tmp = new Float32Array(rgb.length);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const xl = x > 0 ? x - 1 : wrap ? w - 1 : 0, xr = x < w - 1 ? x + 1 : wrap ? 0 : w - 1;
+      for (let c = 0; c < 3; c++) tmp[(y * w + x) * 3 + c] = 0.25 * rgb[(y * w + xl) * 3 + c] + 0.5 * rgb[(y * w + x) * 3 + c] + 0.25 * rgb[(y * w + xr) * 3 + c];
+    }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const yu = Math.max(0, y - 1), yd = Math.min(h - 1, y + 1);
+      for (let c = 0; c < 3; c++) rgb[(y * w + x) * 3 + c] = 0.25 * tmp[(yu * w + x) * 3 + c] + 0.5 * tmp[(y * w + x) * 3 + c] + 0.25 * tmp[(yd * w + x) * 3 + c];
+    }
+  }
+  for (let y = -COAT_PAD; y < h + COAT_PAD; y++) for (let x = -COAT_PAD; x < w + COAT_PAD; x++) {
+    const sx = wrap ? ((x % w) + w) % w : clamp(x, 0, w - 1), sy = clamp(y, 0, h - 1);
+    const si = (sy * w + sx) * 3, di = ((Y0 + y) * AW + (X0 + x)) * 4;
+    data[di] = clamp(Math.round(rgb[si]), 0, 255); data[di + 1] = clamp(Math.round(rgb[si + 1]), 0, 255); data[di + 2] = clamp(Math.round(rgb[si + 2]), 0, 255); data[di + 3] = 255;
+  }
+}
+
+/** Smooth vertex normals for non-indexed triangles: faces meeting at a point share a normal unless they crease more than `deg`. */
+function smoothNormals(geo, deg = COAT_CREASE) {
+  const pos = geo.attributes.position.array, n = pos.length / 3;
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox, eps = Math.max(1e-9, bb.max.distanceTo(bb.min) * 2e-6);
+  const fn = new Float32Array(n), keys = new Array(n), groups = new Map();
+  for (let f = 0; f < n; f += 3) {
+    const ax = pos[f * 3], ay = pos[f * 3 + 1], az = pos[f * 3 + 2];
+    const ux = pos[f * 3 + 3] - ax, uy = pos[f * 3 + 4] - ay, uz = pos[f * 3 + 5] - az, vx = pos[f * 3 + 6] - ax, vy = pos[f * 3 + 7] - ay, vz = pos[f * 3 + 8] - az;
+    fn[f] = uy * vz - uz * vy; fn[f + 1] = uz * vx - ux * vz; fn[f + 2] = ux * vy - uy * vx;
+    for (let k = 0; k < 3; k++) {
+      const i = f + k, key = `${Math.round(pos[i * 3] / eps)},${Math.round(pos[i * 3 + 1] / eps)},${Math.round(pos[i * 3 + 2] / eps)}`;
+      keys[i] = key;
+      const g = groups.get(key);
+      if (g) g.push(f); else groups.set(key, [f]);
+    }
+  }
+  const cosC = Math.cos(deg * DEG), nor = new Float32Array(n * 3);
+  const unit = (f) => { const l = Math.hypot(fn[f], fn[f + 1], fn[f + 2]) || 1; return [fn[f] / l, fn[f + 1] / l, fn[f + 2] / l]; };
+  for (let i = 0; i < n; i++) {
+    const f = i - (i % 3), me = unit(f);
+    let sx = 0, sy = 0, sz = 0;
+    for (const g of groups.get(keys[i])) {
+      const o = unit(g);
+      if (o[0] * me[0] + o[1] * me[1] + o[2] * me[2] < cosC) continue;
+      sx += fn[g]; sy += fn[g + 1]; sz += fn[g + 2];
+    }
+    const l = Math.hypot(sx, sy, sz);
+    if (l > 1e-20) { nor[i * 3] = sx / l; nor[i * 3 + 1] = sy / l; nor[i * 3 + 2] = sz / l; } else { nor[i * 3] = me[0]; nor[i * 3 + 1] = me[1]; nor[i * 3 + 2] = me[2]; }
+  }
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+}
+
 const MAT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.82, metalness: 0.0, side: THREE.DoubleSide });
 const GLASS_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
 
@@ -581,12 +782,25 @@ function finish(build, opt) {
     if (!colorCache.has(z)) { const al = opt.alias || {}; const h = zones[z] ?? zones[al[z]] ?? zones[al[al[z]]] ?? zones[Object.keys(zones)[0]]; colorCache.set(z, new THREE.Color(h)); }
     return colorCache.get(z);
   };
+  // Digital Diorama revision: painted patches go into one coat texture (see COAT ATLAS)
+  const hexOfZone = (z) => { const al = opt.alias || {}; return zones[z] ?? zones[al[z]] ?? zones[al[al[z]]] ?? zones[Object.keys(zones)[0]]; };
+  const coat = opt.coat ? paintAtlas(build.parts.filter(p => p.count > 0 && !p.glass), opt.coat, hexOfZone) : null;
+  const smooth = !!(opt.coat && opt.coat.smooth !== false);
+  const WHITE = new THREE.Color(1, 1, 1);
   const toGeo = (part) => {
     const n = part.count, geo = new THREE.BufferGeometry(), col = new Float32Array(n * 3);
     let pos = new Float32Array(part.p);
+    const uv = coat && !part.glass ? new Float32Array(n * 2) : null;
     for (let t = 0; t < n / 3; t++) {
-      const c = colorOf(part.z[t]);
-      for (let k = 0; k < 3; k++) { const o = (t * 3 + k) * 3; col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b; }
+      const tile = uv && part.pt[t] ? coat.tiles.get(part.pt[t]) : null;
+      const c = tile ? WHITE : colorOf(part.z[t]);
+      for (let k = 0; k < 3; k++) {
+        const o = (t * 3 + k) * 3; col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b;
+        if (!uv) continue;
+        const i = (t * 3 + k) * 2;
+        if (tile) { uv[i] = (tile.x + part.uv[i] * tile.w) / coat.AW; uv[i + 1] = (tile.y + part.uv[i + 1] * tile.h) / coat.AH; }
+        else { uv[i] = coat.white[0]; uv[i + 1] = coat.white[1]; }
+      }
     }
     if (bake) {
       const v = V3(), acc = V3(), tmp = V3();
@@ -598,11 +812,12 @@ function finish(build, opt) {
     }
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    if (uv) geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     if (skinned) {
       geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(part.si, 4));
       geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(part.sw, 4));
     }
-    geo.computeVertexNormals();
+    if (smooth && !part.glass) smoothNormals(geo); else geo.computeVertexNormals();
     geo.computeBoundingBox(); geo.computeBoundingSphere();
     return geo;
   };
@@ -613,16 +828,24 @@ function finish(build, opt) {
     return m;
   };
   const live = build.parts.filter(p => p.count > 0);
-  for (const glass of [false, true]) {
-    const list = live.filter(p => p.glass === glass);
+  let solid = MAT, eyeMat = null;
+  if (coat || smooth) {
+    solid = MAT.clone(); solid.flatShading = !smooth; solid.name = 'coat'; if (coat) solid.map = coat.tex;
+    // wet, glossy eyes that catch a highlight
+    eyeMat = solid.clone(); eyeMat.roughness = 0.16; eyeMat.name = 'eyes';
+  }
+  const isEye = (p) => !!eyeMat && !p.glass && p.name === 'eyes';
+  for (const kind of ['solid', 'eyes', 'glass']) {
+    const glass = kind === 'glass';
+    const list = live.filter(p => (glass ? p.glass : !p.glass && isEye(p) === (kind === 'eyes')));
     if (!list.length) continue;
-    const mat = glass ? GLASS_MAT : MAT;
+    const mat = glass ? GLASS_MAT : kind === 'eyes' ? eyeMat : solid;
     if (merge) {
       const geos = list.map(toGeo), merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
       if (geos.length > 1) geos.forEach(g => g.dispose());
       if (!merged) continue;
       merged.computeBoundingBox(); merged.computeBoundingSphere();
-      root.add(meshOf(merged, mat, glass ? 'glass' : 'solid', { merged: true, parts: list.map(p => p.name) }));
+      root.add(meshOf(merged, mat, kind, { merged: true, parts: list.map(p => p.name) }));
     } else {
       const used = new Map();
       for (const p of list) {
@@ -2013,6 +2236,9 @@ export const params = withZones({
   seed: { type: 'range', default: 7, min: 1, max: 999, step: 1, label: 'Variation seed', affects: 'colors', describe: 'Seed for spots, stripes and quills.' },
   showHorns: { type: 'toggle', default: true, label: 'Horns / antlers', affects: 'geometry', describe: 'Build horns, antlers and ossicones.' },
   showTusks: { type: 'toggle', default: true, label: 'Tusks', affects: 'geometry', describe: 'Build tusks.' },
+  coat: { type: 'toggle', default: true, label: 'Painted coat', affects: 'colors', describe: 'Paint markings into a coat texture (crisp stripes, spots and patch edges); off: one colour per mesh face.' },
+  coatGrain: { type: 'range', default: 0.06, min: 0, max: 0.25, step: 0.01, label: 'Coat grain', affects: 'colors', describe: 'Faint tonal variation in fur or feathers (painted coat only).' },
+  shading: { type: 'choice', default: 'smooth', options: ['smooth', 'flat'], label: 'Shading', affects: 'geometry', describe: 'Smooth, rounded shading or flat low-poly facets.' },
   hide: { type: 'text', default: '', label: 'Hide parts', affects: 'geometry', describe: 'Comma list of detachable parts to omit (see `detach`).' },
   mergeForProduction: { type: 'toggle', default: false, label: 'Merge for Production', affects: 'geometry', describe: 'One mesh per material (1-2 draw calls) instead of one selectable mesh per anatomical part.' },
 }, ZONE_LABELS, BASE);
@@ -2132,8 +2358,9 @@ export function createAsset(input = {}) {
   const S = specFor(base, p);
   const det = DETAIL[p.detail] ?? 1;
   const rigB = new Rig(), parts = [], byName = new Map();
+  const coatOn = p.coat !== false;
   const B = { det, rig: rigB, parts, paint: null,
-    part(name, opt = {}) { if (!byName.has(name)) { const pt = new Part(name, opt); byName.set(name, pt); parts.push(pt); } return byName.get(name); } };
+    part(name, opt = {}) { if (!byName.has(name)) { const pt = new Part(name, opt); pt.coat = coatOn && !pt.glass; byName.set(name, pt); parts.push(pt); } return byName.get(name); } };
   const L = tetraLayout(S);
   tetraTorso(B, S, L);
   B.paint = makePainter(S, L);
@@ -2164,7 +2391,8 @@ export function createAsset(input = {}) {
     hipToShoulder: rigB.head('Chest').distanceTo(rigB.head('Hips')),
   };
   const pose = p.pose !== 'stand' ? sampleFor(info, p.pose, p.posePhase) : null;
-  const { root, skeleton } = finish(build, { name: `mammal-${p.species}`, merge: p.mergeForProduction, skinned: p.rigMode === 'skinned', zones, pose });
+  const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, grain: p.coatGrain, grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat' };
+  const { root, skeleton } = finish(build, { name: `mammal-${p.species}`, merge: p.mergeForProduction, skinned: p.rigMode === 'skinned', zones, pose, coat: coatOn || coat.smooth ? coat : null });
   let tris = 0; root.traverse(m => { if (m.isMesh) tris += m.geometry.attributes.position.count / 3; });
   root.userData = {
     species: p.species, label: S.label, params: p, dimensions: measure(root), triangles: tris, zones: Object.fromEntries(Object.entries(zones).map(([k, v]) => [k, hexStr(v)])),

@@ -147,12 +147,35 @@ export class Viewport {
   }
   gridStep = 1;
 
-  view(name: ViewName) {
+  view(name: ViewName | 'head' | 'headside') {
+    if (name === 'head' || name === 'headside') { this.headView(name === 'headside'); return; }
     const dir = (VIEW_DIRS[name] ?? VIEW_DIRS.front34).clone().normalize();
     const dist = this.radius / Math.sin((this.camera.fov / 2) * DEG) * (name === 'top' || name === 'below' ? 0.92 : 1.0);
     this.camera.position.copy(this.center).addScaledVector(dir, dist);
     this.controls.target.copy(this.center);
     this.camera.lookAt(this.center);
+    this.controls.update();
+  }
+  /** Close-up of the face: the rig's Head bone (or the front-top of the bounds), from ¾ front or the side. */
+  headView(side = false) {
+    if (!this.model) return;
+    const obj = this.model.object;
+    obj.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(obj, this.model.skinned);
+    const size = box.getSize(new THREE.Vector3());
+    let head: THREE.Vector3 | null = null;
+    const bone = this.model.raw.getObjectByName('Head') ?? this.model.raw.getObjectByName('head');
+    if (bone) head = bone.getWorldPosition(new THREE.Vector3());
+    if (!head) head = new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y + size.y * 0.78, box.max.z - size.z * 0.12);
+    // frame about a fifth of the body (at least the head's own size)
+    const r = Math.max(Math.max(size.x, size.y, size.z) * 0.2, 1e-4);
+    const dir = (side ? new THREE.Vector3(1, 0.1, 0.05) : new THREE.Vector3(0.55, 0.18, 1)).normalize();
+    const dist = r / Math.sin((this.camera.fov / 2) * DEG);
+    // a bone sits inside the skull: aim a little ahead of it, toward the snout
+    const aim = head.clone().add(new THREE.Vector3(0, 0, r * 0.35));
+    this.camera.position.copy(aim).addScaledVector(dir, dist);
+    this.controls.target.copy(aim);
+    this.camera.lookAt(aim);
     this.controls.update();
   }
   cameraState() { return { p: this.camera.position.toArray(), t: this.controls.target.toArray() }; }

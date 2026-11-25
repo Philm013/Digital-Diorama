@@ -124,7 +124,7 @@ if (URLP.get('q')) S.q = URLP.get('q') as Quality;
 if (URLP.get('tab')) S.tab = URLP.get('tab')!;
 if (URLP.has('true')) S.trueScale = URLP.get('true') !== '0';
 if (URLP.get('clip')) S.clip = URLP.get('clip')!;
-const startView = URLP.get('view') as ViewName | null;
+const startView = URLP.get('view');
 const bare = URLP.get('ui') === '0';
 
 /* ───────────────────────── layout ───────────────────────── */
@@ -164,7 +164,8 @@ const playBtn = btn('⏸', 'Play / pause (space)', () => { vp.playing = !vp.play
 const speedSel = sel([['0.25', '¼×'], ['0.5', '½×'], ['1', '1×'], ['2', '2×']], String(S.speed), (v) => { S.speed = Number(v); vp.speed = S.speed; persist(); }, 'Playback speed');
 
 const toolbar = h('div', { class: 'toolbar' },
-  h('span', { class: 'grp' }, ...(['front34', 'front', 'side', 'right', 'back', 'top', 'low'] as ViewName[]).map((v) => btn(v === 'front34' ? '¾' : v, `Camera: ${v} (${'1234567'[['front34', 'front', 'side', 'right', 'back', 'top', 'low'].indexOf(v)]})`, () => vp.view(v)))),
+  h('span', { class: 'grp' }, ...(['front34', 'front', 'side', 'right', 'back', 'top', 'low'] as ViewName[]).map((v) => btn(v === 'front34' ? '¾' : v, `Camera: ${v} (${'1234567'[['front34', 'front', 'side', 'right', 'back', 'top', 'low'].indexOf(v)]})`, () => vp.view(v))),
+    btn('face', 'Close-up of the head (8; 9 from the side)', () => vp.view('head'))),
   h('span', { class: 'grp' }, clipSel, playBtn, scrub, speedSel),
   h('span', { class: 'grp' },
     sel([['low', 'Fast (phones)'], ['medium', 'Balanced'], ['high', 'Detailed']], S.q, (v) => { S.q = v as Quality; persist(); rebuild(); }, 'Graphics tier (what the app builds on each setting)'),
@@ -384,7 +385,16 @@ function rebuild(fresh = false): Promise<void> {
   return building;
 }
 function disposeModel(m: BuiltModel) {
-  m.object.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) mesh.geometry?.dispose(); });
+  m.object.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.geometry?.dispose();
+    // uncached builds own their coat textures (module-level shared materials have none)
+    for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      const map = (mat as THREE.MeshStandardMaterial).map;
+      if (map && map.name === 'coat-atlas') map.dispose();
+    }
+  });
 }
 
 function updateClips(m: BuiltModel) {
@@ -717,7 +727,8 @@ function snapshot(label?: string) {
   return url;
 }
 /** A composite image: the reference photo and the model from several views. */
-async function sheet(views: ViewName[] = ['front34', 'side', 'front', 'top'], w = 420, hgt = 320): Promise<string> {
+type AnyView = ViewName | 'head' | 'headside';
+async function sheet(views: AnyView[] = ['front34', 'side', 'front', 'top'], w = 420, hgt = 320): Promise<string> {
   await building;
   const cam = vp.cameraState();
   const shots: [string, string][] = [];
@@ -783,6 +794,7 @@ window.addEventListener('keydown', (e) => {
   }
   const views: ViewName[] = ['front34', 'front', 'side', 'right', 'back', 'top', 'low'];
   if (/^[1-7]$/.test(e.key)) { vp.view(views[Number(e.key) - 1]); return; }
+  if (e.key === '8' || e.key === '9') { vp.view(e.key === '8' ? 'head' : 'headside'); return; }
   if (e.key === '/') { e.preventDefault(); search.focus(); return; }
   if (e.key === ' ') { e.preventDefault(); playBtn.click(); return; }
   if (e.key === 'w') { S.wire = !S.wire; vp.setWire(S.wire); persist(); return; }
@@ -819,7 +831,7 @@ const api = {
     await setParams(next); await api.ready();
   },
   resetParams: async () => { resetParams(); await api.ready(); },
-  view: (v: ViewName) => vp.view(v),
+  view: (v: AnyView) => vp.view(v),
   views: () => Object.keys(VIEW_DIRS),
   clip: (name: string, phase?: number) => { S.clip = name; vp.playClip(name); clipSel.value = name; if (phase !== undefined) { vp.playing = false; vp.scrub(phase); } },
   pause: (on = true) => { vp.playing = !on; },
@@ -827,7 +839,7 @@ const api = {
   trueScale: async (on: boolean) => { S.trueScale = on; await rebuild(); await api.ready(); },
   tab: (t: string) => setTab(t),
   capture: (w?: number, hh?: number) => vp.capture(w, hh),
-  sheet: (views?: ViewName[], w?: number, hh?: number) => sheet(views, w, hh),
+  sheet: (views?: AnyView[], w?: number, hh?: number) => sheet(views, w, hh),
   saveShot: (name: string, dataUrl: string) => saveShot(name, dataUrl),
   info: () => ({ id: def.id, triangles: vp.model?.triangles, bounds: vp.bounds()?.toArray(), buildMs: lastBuildMs, clips: vp.model?.clips.map((c) => c.name), error: errBox.classList.contains('hidden') ? null : errBox.textContent }),
   hotSwap: (path: string) => hotSwap(path),
@@ -849,7 +861,7 @@ mediaReady.then(() => renderList());
 renderList();
 setTab(S.tab);
 select(def.id).then(() => {
-  if (startView) vp.view(startView);
+  if (startView) vp.view(startView as AnyView);
   const ph = URLP.get('phase');
   if (ph !== null) api.clip(S.clip || vp.clipName, Number(ph));
   if (URLP.get('overlay')) { S.overlay.on = true; S.overlay.opacity = Number(URLP.get('overlay')); applyOverlay(); }

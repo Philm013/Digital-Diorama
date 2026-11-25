@@ -23,7 +23,7 @@ for (const m of MAMMALS) {
   add({
     id: `mammal/${m.key}`, name: m.name, emoji: m.emoji, category: 'animals', group: 'Mammals', family: 'mammal', path: P.mammal,
     params: { species: m.key, rigMode: 'skinned', mergeForProduction: true, ...MAMMAL_EXTRA[m.key] },
-    hidden: ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'hide', 'specOverride'],
+    hidden: ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'hide', 'specOverride', 'coat', 'coatGrain', 'shading'],
     loco: m.key === 'otter' || m.key === 'beaver' || m.key === 'hippo' ? 'walk' : 'walk', biomes: m.biomes, info: m.info,
     speed: MAMMAL_SPEED[m.key] ?? 1.2,
   });
@@ -34,7 +34,7 @@ for (const b of BIRDS) {
   add({
     id: `bird/${b.key}`, name: b.name, emoji: b.emoji, category: 'animals', group: 'Birds', family: 'bird', path: P.bird,
     params: { species: b.key, rigMode: 'skinned', mergeForProduction: true },
-    hidden: ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'bodyForm'],
+    hidden: ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'bodyForm', 'specOverride', 'coat', 'coatGrain', 'shading'],
     loco: ground ? 'walk' : 'fly', biomes: b.biomes, info: b.info, speed: ground ? 0.8 : 3.5, lift: ground ? 0 : 0,
   });
 }

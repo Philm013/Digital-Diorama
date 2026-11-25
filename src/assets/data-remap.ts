@@ -11,8 +11,8 @@ import { MODULE_PATHS as P } from './modules';
  * models, using colours and anatomy taken from field guides. Asset ids stay the same, so
  * saved dioramas keep working.
  */
-const MAMMAL_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'hide', 'specOverride'];
-const BIRD_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'bodyForm', 'specOverride'];
+const MAMMAL_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'hide', 'specOverride', 'coat', 'coatGrain', 'shading'];
+const BIRD_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'bodyForm', 'specOverride', 'coat', 'coatGrain', 'shading'];
 
 const mammal = (species: string, extra: Record<string, unknown>): Partial<AssetDef> => ({
   family: 'mammal', path: P.mammal, yaw: 0, hidden: MAMMAL_HIDDEN,

@@ -91,7 +91,14 @@ async function render(id: string): Promise<string> {
   S.scene.remove(obj);
   obj.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (m.isMesh) { m.geometry?.dispose(); for (const mat of Array.isArray(m.material) ? m.material : [m.material]) mat?.dispose(); }
+    if (!m.isMesh) return;
+    m.geometry?.dispose();
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+      if (!mat) continue;
+      // per-model textures (the rigs' painted coats) go too
+      for (const v of Object.values(mat)) if (v && (v as THREE.Texture).isTexture) (v as THREE.Texture).dispose();
+      mat.dispose();
+    }
   });
   return url;
 }
