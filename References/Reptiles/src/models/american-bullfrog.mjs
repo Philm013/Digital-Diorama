@@ -20,7 +20,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const SURFACE = { roughness: 0.4, metalness: 0.04 };
 
-const BASE = { skin: '#6a8a3a', head: '#8fb146', mottle: '#4e6430', belly: '#efe8c8', throat: '#e8dc98', tymp: '#7a6a3a', web: '#5a7034', iris: '#c89a3a', pupil: '#080806', lip: '#2a3018' };
+// Digital Diorama revision: olive-brown with dark mottling, a greener face (it was bright leaf green)
+const BASE = { skin: '#5f6634', head: '#7d8a3e', mottle: '#33331c', belly: '#eee6c4', throat: '#e6d88e', tymp: '#6e5e34', web: '#4e5630', iris: '#c89a3a', pupil: '#080806', lip: '#2a2a18' };
 export const COLORWAYS = {
   default: { ...BASE },
   olive:   { skin: '#6a6a3a', head: '#7c7a40', mottle: '#3e3e24', belly: '#ece4c4', throat: '#e0d8a0', tymp: '#5e5430', web: '#5a5a34', iris: '#b8903a', pupil: '#080806', lip: '#2a2a18' },
@@ -504,11 +505,11 @@ export function createAsset(userParams = {}) {
 
   const color = (t, a, P, part) => {
     const sa = Math.sin(a);
-    const m = smooth(clamp((fbm(P, 1 / (0.09 * L), 2) - 0.52) / 0.2, 0, 1));
+    const m = smooth(clamp((fbm(P, 1 / (0.07 * L), 3) - 0.5) / 0.08, 0, 1));
     if (sa < -0.45) return mixHex(C.belly, C.mottle, m * 0.1);
     if (part === 'leg') return mixHex(C.skin, C.mottle, m * 0.85 + 0.1 * softBand(P.z, 0.026 * L, 0.22));
-    if (t > 0.6) return mixHex(C.head, C.skin, 0.35);
-    return mixHex(C.skin, C.mottle, m * 0.6);
+    if (t > 0.6) return mixHex(mixHex(C.head, C.skin, 0.35), C.mottle, m * 0.35 * (1 - smooth(clamp((t - 0.6) / 0.2, 0, 1))));
+    return mixHex(C.skin, C.mottle, m * 0.75);
   };
   const F = buildAnuran(R, {
     L, W: 0.24 * L, H: 0.15 * L, stretch: p.stretch, eyeR: 0.072 * L, eyeT: 0.72, eyeElev: 1.0, legR: 0.082 * L,

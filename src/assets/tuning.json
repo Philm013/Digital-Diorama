@@ -1,1 +1,12 @@
-{}
+{
+  "reptile/galapagos-tortoise": {
+    "params": {
+      "shell": "#4b463d"
+    }
+  },
+  "reptile/green-iguana": {
+    "params": {
+      "colorway": "adult"
+    }
+  }
+}

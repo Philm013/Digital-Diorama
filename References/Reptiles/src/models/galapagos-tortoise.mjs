@@ -535,7 +535,9 @@ function shellGeo(o) {
     const P = V[i][j];
     const base = (hv % 2 ? cA : cB).clone();
     const grain = fbm([P[0] * 9, P[1] * 9, P[2] * 9], 3.4, 2);
-    const c = seam ? cS.clone().lerp(base, 0.5) : base.lerp(cL, 0.12 + grain * 0.42 + 0.18 * Math.cos(j * 1.1));
+    // Digital Diorama revision: gentler grain and row shading (each mesh quad is one colour, so strong per-quad
+    // variation read as a checkerboard)
+    const c = seam ? cS.clone().lerp(base, 0.5) : base.lerp(cL, 0.1 + grain * 0.16 + 0.05 * Math.cos(j * 1.1));
     const a = V[i][j], b = V[i + 1][j], cc = V[i + 1][j + 1], d = V[i][j + 1];
     push(a, c); push(b, c); push(cc, c); push(a, c); push(cc, c); push(d, c);
   }

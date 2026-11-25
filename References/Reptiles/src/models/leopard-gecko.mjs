@@ -583,8 +583,19 @@ export function createAsset(userParams = {}) {
       return mixHex(mixHex(C.skin, C.band, band * 0.8), C.spot, smooth(clamp((freckle - 0.55) * 4, 0, 1)) * 0.7);
     }
     if (part === 'leg' && sa < -0.1) return mixHex(C.skin, C.spot, blotch(P, 1 / (0.009 * k), 4) * 0.35);
-    const field = fbm(P, 1 / (0.0095 * k), 3);
-    return mixHex(C.skin, C.spot, smooth(clamp((field - (0.6 - p.spots * 0.55)) / 0.08, 0, 1)));
+    // Digital Diorama revision: an adult's many small, separate black spots (a jittered grid of dots, ~3-5 mm on a
+    // 20 cm gecko) over faint broad bands, instead of a noise field that merged into big blotches
+    const sx = _px(P) / (0.0058 * k), sy = _py(P) / (0.0058 * k), sz = _pz(P) / (0.0058 * k);
+    const ix = Math.floor(sx), iy = Math.floor(sy), iz = Math.floor(sz);
+    let d = 9;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      const cx = ix + dx, cy = iy + dy, cz = iz + dz;
+      if (_h(cx, cy, cz + 5) > 0.35 + p.spots) continue;
+      const qx = cx + _h(cx, cy, cz), qy = cy + _h(cy, cz, cx), qz = cz + _h(cz, cx, cy);
+      d = Math.min(d, Math.hypot(sx - qx, sy - qy, sz - qz) / (0.42 + 0.18 * _h(cx, cz, cy)));
+    }
+    const base = mixHex(C.skin, C.band, softBand(_pz(P), 0.045 * k, 0.28) * 0.18);
+    return mixHex(base, C.spot, smooth(clamp((1 - d) / 0.25, 0, 1)));
   };
 
   const S = buildSaurian(R, {

@@ -298,7 +298,9 @@ async function select(id: string, keepEdits = true) {
   def = d; S.id = id; persist();
   for (const [k, el] of itemEls) el.classList.toggle('sel', k === id);
   itemEls.get(id)?.scrollIntoView({ block: 'nearest' });
-  const stored = keepEdits ? storedParams(id) : null;
+  let stored = keepEdits ? storedParams(id) : null;
+  // edits that match the catalog (e.g. just saved to tuning.json) are not edits
+  if (stored !== null) { try { if (same(evalParams(stored), d.params)) { storeParams(id, null); stored = null; } } catch { /* keep */ } }
   let text = stored ?? toJS(d.params);
   try { params = evalParams(text); } catch { text = toJS(d.params); params = { ...d.params }; }
   paramsEd.open(id, text, true);
@@ -312,7 +314,10 @@ async function select(id: string, keepEdits = true) {
   await rebuild(true);
 }
 
+/** set while saving to tuning.json: the page reloads with the new catalog, so nothing is "unsaved" */
+let savingTuning = false;
 function persistParamsNow() {
+  if (savingTuning) return;
   const text = paramsEd.text(S.id);
   if (!text) return;
   try { const p = evalParams(text); storeParams(S.id, same(p, def.params) ? null : text); } catch { storeParams(S.id, text); }
@@ -486,6 +491,7 @@ async function saveTuning() {
   let json: Record<string, { params?: Record<string, unknown> }> = {};
   try { json = JSON.parse(await res.text()); } catch { json = {}; }
   if (Object.keys(delta).length) json[S.id] = { params: delta }; else delete json[S.id];
+  savingTuning = true;
   const sorted = Object.fromEntries(Object.keys(json).sort().map((k) => [k, json[k]]));
   storeParams(S.id, null);
   persist();
