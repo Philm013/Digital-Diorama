@@ -1,10 +1,5 @@
 import { clsx } from 'clsx';
-import { X } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type ReactNode, type ButtonHTMLAttributes } from 'react';
-import { createPortal } from 'react-dom';
-import { useBackLayer } from './backStack';
-import { useMedia } from './hooks';
-import { useSheetDrag } from './sheetDrag';
+import type { ReactNode, ButtonHTMLAttributes } from 'react';
 
 export function Btn({ className, variant = 'soft', size = 'md', active, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'soft' | 'solid' | 'ghost' | 'danger' | 'go' | 'stop'; size?: 'sm' | 'md' | 'lg'; active?: boolean }) {
   return (
@@ -98,61 +93,6 @@ export function Section({ title, children, right, defaultOpen = true, tour }: { 
       </summary>
       <div className="space-y-3">{children}</div>
     </details>
-  );
-}
-
-/**
- * A dialog: centred on wide screens, a sheet from the bottom on phones that can be dragged down
- * by its header to close. Escape (when it is on top) and the phone's Back button close it too.
- *
- * It is drawn at the top of the page (a portal into <body>), so a dialog opened from inside a
- * tray, a sheet or another dialog always covers the whole screen and keeps its close button,
- * instead of being boxed in (and cut off) by the panel it was opened from.
- */
-export function Modal({ open, onClose, title, children, wide, sheet: asSheet, closeOnCoach, label }: {
-  open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; wide?: boolean | 'xl';
-  /** always a panel from the bottom of the screen, even where there is room to centre it */
-  sheet?: boolean;
-  /** close when a lesson card is tapped (the lesson has moved on to something this covers) */
-  closeOnCoach?: boolean;
-  /** the dialog's name for screen readers when the title is not plain text */
-  label?: string;
-}) {
-  const isTop = useBackLayer(open, onClose);
-  const close = useRef(onClose);
-  close.current = onClose;
-  const titleId = useId();
-  const sheet = useMedia('(max-width: 639px)') || !!asSheet;
-  const [leaving, setLeaving] = useState(false);
-  const drag = useSheetDrag(() => { setLeaving(true); window.setTimeout(() => close.current(), 180); }, open && sheet);
-  useEffect(() => { if (!open) setLeaving(false); }, [open]);
-  useEffect(() => {
-    if (!open) return;
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && isTop()) close.current(); };
-    window.addEventListener('keydown', k);
-    // (the lesson card sits above every dialog, so its taps never reach the backdrop; a click
-    // rather than a press, so a key on the card's buttons counts too)
-    const coach = (e: MouseEvent) => { if (closeOnCoach && (e.target as Element | null)?.closest?.('[data-coach]')) close.current(); };
-    window.addEventListener('click', coach, true);
-    return () => { window.removeEventListener('keydown', k); window.removeEventListener('click', coach, true); };
-  }, [open, isTop, closeOnCoach]);
-  if (!open) return null;
-  return createPortal(
-    <div className={clsx('dd-modal-bg fixed inset-0 z-[65] flex justify-center bg-black/45 backdrop-blur-[3px] transition-opacity duration-200', sheet ? 'items-end p-0' : 'items-center p-6', leaving && 'opacity-0')} onClick={onClose}>
-      <div data-sheet role="dialog" aria-modal="true" aria-labelledby={label ? undefined : titleId} aria-label={label} onClick={(e) => e.stopPropagation()}
-        className={clsx('dd-panel dd-modal flex max-h-[92vh] max-h-[92dvh] w-full flex-col overflow-hidden', sheet ? 'rounded-t-[28px]' : 'rounded-[28px]', !drag.dragging && 'dd-sheet-snap', wide === 'xl' ? 'sm:max-w-6xl' : wide ? 'sm:max-w-4xl' : 'sm:max-w-lg')}
-        style={leaving ? { transform: 'translateY(105%)' } : drag.dy ? { transform: `translateY(${drag.dy}px)` } : undefined}>
-        <div className={clsx(sheet && 'touch-none select-none')} {...drag.handlers}>
-          {sheet && <div className="flex justify-center pt-2"><span className="h-1.5 w-11 rounded-full bg-black/15" /></div>}
-          <div className="flex items-center justify-between gap-3 border-b border-black/5 px-5 py-3">
-            <h2 id={titleId} className="min-w-0 font-display text-xl font-bold">{title}</h2>
-            <IconBtn label="Close" onClick={onClose} className="bg-black/[0.05] hover:bg-black/10"><X size={20} /></IconBtn>
-          </div>
-        </div>
-        <div className="overflow-y-auto overscroll-contain px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-4 sm:px-5">{children}</div>
-      </div>
-    </div>,
-    document.body,
   );
 }
 

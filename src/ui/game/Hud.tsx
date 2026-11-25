@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { clsx } from 'clsx';
 import { starGoals, type Health } from '../../game/ecology';
-import { Modal } from '../common';
+import { Modal } from '../Modal';
 import { FEATURES, needFor, nextStage, type Stage } from '../../game/unlocks';
 import { BIOME_BY_ID } from '../../biomes/templates';
 import { useProfile } from './useGame';
@@ -17,9 +17,10 @@ export function Popover({ open, onClose, children, className, align = 'right' }:
     if (!open) return;
     const fn = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('[data-popover-anchor]')) onClose(); };
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    setTimeout(() => window.addEventListener('pointerdown', fn), 0);
+    // (after the press that opened it; cancelled with it, so a quick re-render can't leave a listener behind)
+    const t = setTimeout(() => window.addEventListener('pointerdown', fn), 0);
     window.addEventListener('keydown', k);
-    return () => { window.removeEventListener('pointerdown', fn); window.removeEventListener('keydown', k); };
+    return () => { clearTimeout(t); window.removeEventListener('pointerdown', fn); window.removeEventListener('keydown', k); };
   }, [open, onClose]);
   if (!open) return null;
   return <div ref={ref} className={clsx('dd-pop absolute top-[calc(100%+10px)] z-50', align === 'right' ? 'right-0' : align === 'left' ? 'left-0' : 'left-1/2 -translate-x-1/2', className)}>{children}</div>;
@@ -59,15 +60,26 @@ export function XpChip({ profile, onClick, compact }: { profile: Profile; onClic
 /* ---------------- ecosystem health ---------------- */
 /**
  * The heart in the top bar. Tapping it explains the score: in a popover under it on wide screens,
- * and in a panel from the bottom of the screen on phones (where a popover would hang off the edge).
+ * and in a panel on phones and tablets (where a popover would hang off the edge), pulled out over
+ * the diorama above the tab bar. The studio can own whether it is open (`open` / `onOpen`), so it
+ * takes turns with the other panels.
  */
-export function HealthChip({ game, compact, sheet }: { game: GameState; compact?: boolean; /** phones: the details open as a bottom panel */ sheet?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
+export function HealthChip({ game, compact, sheet, open: shown, onOpen }: {
+  game: GameState; compact?: boolean;
+  /** phones and tablets: the details open as a panel */
+  sheet?: boolean;
+  open?: boolean; onOpen?: (open: boolean) => void;
+}) {
+  const [own, setOwn] = useState(false);
+  const open = shown ?? own;
+  const report = useRef(onOpen);
+  report.current = onOpen;
+  const setOpen = useCallback((v: boolean) => { if (report.current) report.current(v); else setOwn(v); }, []);
+  const close = useCallback(() => setOpen(false), [setOpen]);
   const h = game.health;
   return (
     <div className="relative">
-      <button onClick={() => setOpen((v) => !v)} className="dd-hudchip flex h-11 items-center gap-2 rounded-2xl px-2.5" title="Ecosystem health" aria-label={`Ecosystem health: ${h.score} out of 100, ${h.label}`} aria-expanded={open} aria-haspopup="dialog" data-popover-anchor data-tour="health">
+      <button onClick={() => setOpen(!open)} className="dd-hudchip flex h-11 items-center gap-2 rounded-2xl px-2.5" title="Ecosystem health" aria-label={`Ecosystem health: ${h.score} out of 100, ${h.label}`} aria-expanded={open} aria-haspopup="dialog" data-popover-anchor data-tour="health">
         <span className="relative grid h-7 w-7 place-items-center rounded-full" style={{ background: h.color + '33' }}>
           <Heart size={16} fill={h.color} stroke={h.color} className={h.score >= 85 ? 'dd-beat' : ''} />
         </span>
@@ -77,8 +89,8 @@ export function HealthChip({ game, compact, sheet }: { game: GameState; compact?
         </span>
       </button>
       {sheet ? (
-        <Modal open={open} onClose={close} sheet closeOnCoach label="Ecosystem health"
-          title={<span className="flex items-center gap-2"><Heart size={20} fill={h.color} stroke={h.color} /> Ecosystem health</span>}>
+        <Modal open={open} onClose={close} closeOnCoach label="Ecosystem health" title="Ecosystem health" subtitle={`${h.score}/100 · ${h.label}`} accent={h.color}
+          icon={<Heart size={22} fill={h.color} stroke={h.color} />}>
           <div className="space-y-3" data-tour="health-pop">
             <div className="dd-card-dark rounded-3xl p-4 text-white"><HealthScore h={h} caption="How well your habitat can keep its plants and animals alive, out of 100." /></div>
             <HealthParts h={h} />
@@ -212,7 +224,8 @@ export function QuestLog({ game, learnable }: { game: GameState; learnable?: (qu
           <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#ffe066] to-[#ffb020] transition-all" style={{ width: `${(game.done / Math.max(1, game.quests.length)) * 100}%` }} /></div>
         </div>
       </div>
-      <ExpeditionStrip game={game} big />
+      {/* (the strip is drawn for dark cards, like the tracker's) */}
+      {game.quests.length > 0 && <div className="dd-card-dark rounded-3xl p-2"><ExpeditionStrip game={game} big /></div>}
       <div className="dd-card-dark grid gap-1.5 rounded-3xl p-2 sm:grid-cols-2">
         {game.quests.map((q) => <QuestRow key={q.id} q={q} onLearn={learnable?.(q.id)} />)}
       </div>

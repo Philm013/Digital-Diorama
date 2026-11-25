@@ -3,7 +3,8 @@ import type { AssetDef } from '../../assets/types';
 import { CATALOG } from '../../assets/catalog';
 import { ROLE_META, dietText, feedsOn, partnersOf, roleOf } from '../../assets/foodweb';
 import { BIOMES } from '../../biomes/templates';
-import { Chip, Modal, statusColor } from '../common';
+import { Chip, statusColor } from '../common';
+import { Modal } from '../Modal';
 import { useSpeciesMedia } from './media';
 import { Credit, SpeciesMore, SpeciesPhoto, StatusScale } from './SpeciesInfo';
 
@@ -21,15 +22,16 @@ function wildLinks(d: AssetDef) {
 }
 
 /**
- * A species from the Field journal, as a sheet from the bottom on phones (a dialog on wide
- * screens): a real photo beside its 3D model, what it is and does, who eats whom in its
- * habitats, how it is doing in the wild, a description, where in the world it lives and where to
- * find out more. It closes with ✕, by dragging it down, tapping outside, Escape or Back.
+ * A species from the Field journal, as a panel on top of the journal on phones and tablets (a
+ * dialog on wide screens): a real photo beside its 3D model, what it is and does, who eats whom in
+ * its habitats, how it is doing in the wild, a description, where in the world it lives and where
+ * to find out more. It closes with ✕, by dragging it down, tapping outside, Escape or Back, which
+ * leaves the journal open underneath; a tab leaves both.
  */
 export function SpeciesSheet({ def, onClose }: { def: AssetDef | null; onClose: () => void }) {
   return (
-    <Modal open={!!def} onClose={onClose} label={def?.name}
-      title={def ? <span className="flex min-w-0 items-center gap-2"><span className="shrink-0">{def.emoji}</span><span className="truncate">{def.name}</span></span> : ''}>
+    <Modal open={!!def} onClose={onClose} label={def?.name} icon={def?.emoji} accent={def ? ROLE_META[roleOf(def)].color : undefined}
+      title={def?.name ?? ''}>
       {def && <SpeciesBody def={def} />}
     </Modal>
   );

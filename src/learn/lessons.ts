@@ -265,7 +265,8 @@ export const LESSONS: Lesson[] = [
     steps: [
       { id: 'open', title: 'Open your quests', body: 'Tap the quest count under your diorama’s name.', targets: [T('quests-link'), T('quest-tracker')], done: (c) => c.shown('quest-log') },
       { id: 'stars', title: 'Stars and expeditions', body: '5 quests earn ⭐, 10 earn ⭐⭐ and complete the expedition — that unlocks new habitats and tools. All of them earn ⭐⭐⭐.', targets: [T('quest-log')] },
-      { id: 'name', title: 'Name your diorama', body: 'Close the quests, tap the title at the top and type a name of your own.', targets: [T('title')], done: (c) => { const t = c.now.title.trim(); return !!t && t !== (BIOME_BY_ID[c.engine.doc.biome]?.name ?? ''); } },
+      // (phones and tablets: the quests are a panel under the top bar, so the title is there to tap)
+      { id: 'name', title: 'Name your diorama', body: (c) => `${c.wide ? 'Close the quests, tap' : 'Tap'} the title at the top and type a name of your own.`, targets: [T('title')], done: (c) => { const t = c.now.title.trim(); return !!t && t !== (BIOME_BY_ID[c.engine.doc.biome]?.name ?? ''); } },
     ],
     recap: ['5, 10 and all quests earn ⭐, ⭐⭐ and ⭐⭐⭐', '⭐⭐ on your own diorama completes an expedition', 'Each expedition unlocks the next step of the ranger path'],
   },

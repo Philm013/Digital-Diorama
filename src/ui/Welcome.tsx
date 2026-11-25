@@ -6,7 +6,8 @@ import { importProjectFile, listProjects, loadProject, saveSettings, type Projec
 import type { DioramaDoc } from '../engine/types';
 import { CATALOG } from '../assets/catalog';
 import { BADGES, updateProfile, type Profile } from '../game/progress';
-import { Btn, IconBtn, Modal, Segmented, Toggle } from './common';
+import { Btn, IconBtn, Segmented, Toggle } from './common';
+import { Modal, PanelHost, closePanels } from './Modal';
 import { RangerCard, Journal } from './game/Journal';
 import { Stars, XpChip } from './game/Hud';
 import { useProfile } from './game/useGame';
@@ -50,6 +51,8 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
   const [shownTray, setShownTray] = useState<TrayId>('expeditions');
   if (tray && tray !== shownTray) setShownTray(tray);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** where panels (Settings, a locked habitat's explanation) pull out: over the home, above the tab bar */
+  const [hostEl, setHostEl] = useState<HTMLElement | null>(null);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   // the room the home really has: what is left between the top bar and the tab bar (and any notch)
@@ -62,6 +65,8 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
 
   const updateSettings = (s: Settings) => { setSettings(s); saveSettings(s); };
   const go = (id: TabId) => {
+    // a tab leaves any panel open over the home or a tray
+    closePanels();
     // tapping the open tray's tab again puts it away
     const next = id === 'home' || id === tray ? null : id;
     if (next !== tray) { uiSound(next && !tray ? 'open' : 'tab'); haptic(6); }
@@ -106,6 +111,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
   }[shownTray];
 
   return (
+    <PanelHost value={hostEl}>
     <div className="flex h-full flex-col bg-[#16211b]">
       <AppBar tall={wide}>
         <button type="button" onClick={() => go('home')} className="flex min-w-0 items-center gap-2 rounded-xl py-1 pl-1 pr-2 transition hover:bg-white/10" aria-label="Digital Diorama home">
@@ -126,6 +132,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
           className={wide ? 'h-[min(86%,800px)] max-w-[1180px] [--tray-pb:max(env(safe-area-inset-bottom),20px)]' : landscape ? 'top-1.5 [--tray-pb:max(env(safe-area-inset-bottom),12px)]' : 'top-2.5 [--tray-pb:16px]'}>
           <div key={shownTray} className="dd-swap absolute inset-0">{content}</div>
         </Tray>
+        <div ref={setHostEl} className="contents" />
       </main>
 
       {phone && <TabBar label="Main" tabs={TABS} active={tray === 'learn' ? null : tray ?? 'home'} onSelect={go} />}
@@ -138,7 +145,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
       }} />
 
       <LockedNotice />
-      <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Settings">
+      <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} icon="⚙️" accent="#5a6b7d" title="Settings" subtitle="For everyone using this device">
         <div className="space-y-4">
           <div>
             <div className="mb-1 text-[13px] font-semibold text-ink/70">Graphics quality</div>
@@ -163,6 +170,7 @@ export function Welcome({ settings, setSettings, onOpen }: { settings: Settings;
         </div>
       </Modal>
     </div>
+    </PanelHost>
   );
 }
 
