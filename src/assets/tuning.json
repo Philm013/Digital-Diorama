@@ -8,5 +8,12 @@
     "params": {
       "colorway": "adult"
     }
+  },
+  "wild/american-alligator": {
+    "params": {
+      "skin": "#3b3f37",
+      "accent": "#4c5146",
+      "detail": "#62645a"
+    }
   }
 }

@@ -1354,17 +1354,20 @@ function snake(parts, glass, p, C, config) {
   const curve = new THREE.CatmullRomCurve3(pts.map(v => new THREE.Vector3(...v)), false, 'catmullrom', 0.45);
   const radii = [girth * 0.16, girth * 0.62, girth * 0.98, girth, girth * 0.95, girth * 0.66, girth * 0.30];
   sweep(parts, pts, radii, C.skin, 'body', { curve, steps: 72, radial: seg });
-  // Long lateral stripes are the classic garter-snake marking.
+  // Long lateral stripes are the classic garter-snake marking. (Digital Diorama revision: they sat inside the
+  // body, centred at 0.79 of its radius with a 0.16 tube, so none showed; now they lie on the surface, following
+  // the body's taper.)
+  const bodyR = (t) => { const f = Math.min(1, Math.max(0, t)) * (radii.length - 1), i = Math.min(radii.length - 2, Math.floor(f)); return radii[i] + (radii[i + 1] - radii[i]) * (f - i); };
   for (const lane of [-1, 0, 1]) {
-    const laneRadius = lane === 0 ? girth * 0.96 : girth * 0.80;
-    const stripe = [];
+    const stripe = [], rs = [];
     for (let i = 2; i <= 24; i++) {
       const t = i / 26, pt = curve.getPoint(t), tan = curve.getTangent(t).normalize();
-      const side = new THREE.Vector3(0, 1, 0).cross(tan).normalize();
-      const scale = Math.sin(Math.PI * Math.min(1, Math.max(0, (t - 0.04) / 0.92))) ** 0.35;
-      stripe.push([pt.x + side.x * lane * laneRadius * 0.82, pt.y + (lane === 0 ? laneRadius * 0.82 : laneRadius * 0.18) * scale, pt.z + side.z * lane * laneRadius * 0.82]);
+      const side = new THREE.Vector3(0, 1, 0).cross(tan).normalize(), r = bodyR(t);
+      const off = lane === 0 ? [0, r * 0.9, 0] : [side.x * lane * r * 0.84, -r * 0.05, side.z * lane * r * 0.84];
+      stripe.push([pt.x + off[0], pt.y + off[1], pt.z + off[2]]);
+      rs.push(r * 0.17);
     }
-    sweep(parts, stripe, [girth * 0.05, girth * 0.16, girth * 0.16, girth * 0.05], lane === 0 ? C.accent : C.underside, 'stripe-' + lane, { steps: 48, radial: 5 });
+    sweep(parts, stripe, rs, lane === 0 ? C.accent : C.underside, 'stripe-' + lane, { steps: 48, radial: 6 });
   }
   const head = curve.getPoint(1), neck = curve.getPoint(0.955);
   const dir = new THREE.Vector3().subVectors(head, neck).normalize();
