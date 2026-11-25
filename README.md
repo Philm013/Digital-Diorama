@@ -4,7 +4,7 @@
 
 Students pick a biome, shape the land with landforms, sculpting and painting, fill it with real species from a library of nearly 350 procedural plants, animals, fungi and habitat features, label what they learned on toothpick flags, then bring it to life with Scratch-style block code — and finally present it with a narrated guided tour. Along the way they earn XP and badges, fill a field journal with the species they discover, and complete habitat quests for up to three stars. Runs in any modern desktop or mobile browser, and feels like an app on phones (top bar, bottom tab bar, pull-out trays; it can be added to the home screen to run full screen). Projects and progress save on the device, with no accounts.
 
-Most 3D models come from the procedural three.js assets in [`References/`](References), imported in place and code-split so each one only loads when used. Trees, wildflowers, grasses and a few marine animals and fungi come from the app's own procedural generators in `src/assets/flora` and `src/assets/builtin`. The reference modules are unchanged except for a small `specOverride` hook in the mammal and bird rigs (marked *Digital Diorama extension*), which lets related species such as a Bactrian camel or a blue jay share one rig.
+Most 3D models come from the procedural three.js assets in [`References/`](References), imported in place and code-split so each one only loads when used. Trees, wildflowers, grasses and a few marine animals, fish and fungi come from the app's own procedural generators in `src/assets/flora` and `src/assets/builtin`. The animal modules carry this app's revisions, each marked in the code (*Digital Diorama extension* / *Digital Diorama revision*): a `specOverride` hook that lets related species such as a Bactrian camel or a blue jay share one rig, painted coat textures, smooth shading and glossy eyes in the mammal and bird rigs, and species-by-species accuracy fixes made in the [animal workbench](#animal-workbench).
 
 ---
 
@@ -191,7 +191,8 @@ src/
                  mesh consolidation, rig discovery), foodweb, proc/kit (vertex-coloured geometry toolkit:
                  sweeps, lathes, leaves, petals, lofts), flora/ (trees & herbs: recursive branching, bark
                  paint, crown shading, seasons, three detail tiers), builtin/ (fungi, fallen log, termite
-                 mound, nest, seal, dolphin/orca/humpback, man o' war, sea hare)
+                 mound, nest, seal, dolphin/orca/humpback, man o' war, sea hare; fish: great white, manta,
+                 yellow tang, clownfish, lionfish), tuning.json (per-animal params saved from the workbench)
   biomes/        templates (14 dioramas + guides), factory (template → document with seeded scatter)
   code/          Blockly blocks & async JS generators, toolbox, theme, compile (workspace → async
                  functions), runtime (threads, events, clones, snapshot/restore, block API), recipes,
@@ -222,6 +223,9 @@ src/
                  tips and the end of a lesson; place: where the card goes; LearnHub: lessons, How do I…?,
                  shortcuts, teachers). Controls a lesson can point at carry `data-tour` names.
   review/        asset review harness (review.html)
+  workbench/     the animal workbench (workbench.html): main (UI, params as code, snapshots & sheets, the
+                 window.wb API), viewport (3D view, clips, views), sources (each animal's files & code regions),
+                 editor (CodeMirror), devServer (dev-only Vite plugin: read/write sources, hot-swap modules)
 ```
 
 **How the reference assets are used.** Every module in `References/` exports `createAsset(params)`, a `params` schema and usually `rig`, `COLORWAYS` and `userData.update/setNight`. `src/assets/modules.ts` registers them with `import.meta.glob`, so each becomes its own chunk. `builder.ts` adds per-quality parameters (e.g. draft rigs and lighter plant foliage on phones), turns Wildform animals to face +Z, consolidates their meshes per animated joint, caches a prototype per parameter set and clones it (skinned rigs via `SkeletonUtils`), and discovers animation clips (mammal & bird rigs), rig pivots (reptiles, Wildform) and update hooks (water-world, aquarium). The inspector UI is generated from each module's own `params` schema.
@@ -232,8 +236,26 @@ src/
 - **Species:** add a row to the matching `src/assets/data-*.ts` table (or an `add({...})` entry in `catalog.ts`) with its asset module, params, biomes, taxonomy, diet, food tags (`tags` it *is*, `eats` it eats) and a fact. A new tree or herb is a species entry in `src/assets/flora/trees.ts` or `herbs.ts` plus an `FL(...)` / `HB(...)` line in `catalog.ts`.
 - **Biome:** add a template to `src/biomes/templates.ts` with a terrain recipe or a habitat tile, environment, placements (fixed `at` or scattered `count` + `area` with `where: 'dry' | 'wet'`) and a guide. Attach starter scripts with `scriptsFor(['wander', 'hello'], name)`.
 
+### Animal workbench
+A live view and code editor for every animal in the library, for checking and improving their accuracy:
+
+```bash
+npm run workbench
+```
+
+It opens `workbench.html` on the dev server (dev only; it is not part of the app build).
+
+- **Pick an animal** from the library on the left (search by name, scientific name or family; ↑ ↓ step through). It is built through the app's own builder, so what you see is what the app makes: orbit it, jump to the camera views (`1`–`7`, `8`/`9` for a close-up of the face), play and scrub its clips, see the wireframe, skeleton and bounds, change the lighting and the graphics tier, and switch between its true size and the magnified size small animals get in the app. A grid and a red marker (the way it should face) give scale and direction.
+- **Compare it with the real animal:** its photo, taxonomy, real size and description sit beside the view, and *Overlay on 3D* lays the photo over the model (drag to move, wheel to scale, flip) to match silhouettes. *Snapshot* keeps captures to compare against later; *Sheet* makes one image of the photo beside the model from several views.
+- **Params** shows the exact parameters the app builds it with, as editable code (for rigged mammals and birds, `specOverride` reaches every anatomical and colour setting of the species preset), plus controls generated from the module's own schema. Every change rebuilds the model live; edits are kept per animal until you *Save to tuning.json*, which writes the differences to `src/assets/tuning.json` for the app.
+- **Code** opens the source that defines it — the asset module, its species preset, the family defaults it inherits, the painter that colours it, its catalog rows and any remap onto another rig — with buttons that jump to each part. `Ctrl`/`Cmd`+`S` writes the file; an asset module is re-imported in place and the model rebuilds in under a second, without reloading the page. *Revert to HEAD* restores the committed text.
+- **Spec** lists what the build produced (size, triangles, clips, rig pivots, colour zones, the resolved anatomy) and **Diff** shows `git diff` of this animal's files.
+- **From scripts:** the page exposes `window.wb` (select, setParams/patchParams, view, clip, capture, sheet, code.open/setText/save…), and `node tools/workbench.mjs` drives it with Playwright: `sheet --ids mammal/zebra,bird/owl --views front34,side,head --out shots/wb` saves photo-and-model sheets (`--group Mammals` for a whole library group, `--params '{"specOverride":{…}}'` to try a change without saving it), and `ui --id mammal/lion --tab code --out shots/wb.png` captures the whole workbench. It starts its own dev server, or uses one given with `--url`.
+
 ### Developer tools
 Run these with `npm run dev` stopped (the review and UI scripts start their own Vite server); they use the Playwright Chromium already on the machine.
+
+- **Animal workbench** — see [above](#animal-workbench); `node tools/workbench.mjs` renders it from scripts.
 
 - **Asset review harness** — `review.html` renders catalog assets through the app's own builder from several views (front ¾, side, top, with a marker showing which way is forward). Query parameters pick what to show: `ids=`, `cat=`, `group=`, `family=`, `match=`, `views=`, `clip=`, `season=`, `q=` (quality), or variants of one asset with `base=<id>&v=[{…},…]`. `node tools/review-assets.mjs --query "cat=animals&cols=3" --per 15 --out shots/animals` saves contact sheets.
 - **App icon** — `node tools/make-icons.mjs` draws the icon (a shoebox diorama: an open cardboard box with a tree, a fox and a painted sky inside) and writes `public/favicon.svg`, `public/icons/icon.svg` and the PNG icons for the manifest and iOS, including a maskable one whose art stays inside Android's safe zone. `--out dir` writes a preview set elsewhere.
@@ -254,7 +276,7 @@ Run these with `npm run dev` stopped (the review and UI scripts start their own 
 - Touch: a bottom tab bar, undo/redo in the Build panel, one-finger orbit / two-finger pan-zoom, long-press to pick up, two-finger twist and pinch on a held object, forgiving taps on thin things like legs and branches, short haptic ticks where the device supports them, and safe-area padding for notched phones.
 - Three graphics tiers (Fast / Balanced / Detailed) pick model detail, shadow resolution and grass density; the renderer also adapts its resolution to keep the frame rate up. Phones default to Fast. In Roam they also set how far you can see (about 145, 175 or 210 m) and how many plants and animals fill the world; its land is built a few milliseconds per frame, nearest first, coarser further away.
 - Land grids are 25 cm for most dioramas and a little coarser for huge ones, so every size stays smooth to sculpt; huge dioramas keep a shorter undo history.
-- All geometry is procedural and texture-free (the ground shader's speckle comes from a small noise texture generated at start-up); the only network requests are fonts (optional — system fonts are the fallback). The species photos and range maps ship with the app (about 300 small WebP pictures in `public/species/`, loaded only when a card opens), so they work offline too; their links to Wikipedia, iNaturalist, Commons and the IUCN Red List open in a new tab. Library thumbnails are rendered in the background on first view and cached in IndexedDB.
+- All geometry is procedural and needs no image files (the ground shader's speckle comes from a small noise texture generated at start-up, and the rigged mammals and birds paint their coat patterns into a small texture as they are built); the only network requests are fonts (optional — system fonts are the fallback). The species photos and range maps ship with the app (about 300 small WebP pictures in `public/species/`, loaded only when a card opens), so they work offline too; their links to Wikipedia, iNaturalist, Commons and the IUCN Red List open in a new tab. Library thumbnails are rendered in the background on first view and cached in IndexedDB.
 
 ## Licences
 
