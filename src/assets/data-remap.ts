@@ -101,6 +101,8 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
     specOverride: {
       beak: { len: 1.0, w: 0.24, h: 0.28, style: 'cone' }, crest: { h: 0.95 },
       pattern: { mask: true, maskShape: 'stripe', chin: false, collar: true, cheek: 'belly', throat: 'belly', wingBar: true, tail: 'wing' },
+      // black bars across the wings and tail
+      marks: { wing: 'bars', tail: 'bars', zone: 'face', freq: 1.6 },
       palette: { body: '#3e72c2', belly: '#f2f2ee', wing: '#3b70c4', flight: '#2b4d8d', head: '#4a7ed0', face: '#141416', accent: '#3e72c3', beak: '#18181a', jaw: '#18181a', leg: '#2e2f36', eye: '#141010' },
     },
   }),
@@ -117,6 +119,8 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
     size: 0.9, tailLength: 1.65, tailStyle: 'wedge', headSize: 0.86,
     specOverride: {
       pattern: { neck: false, wingBands: false, wingBar: false },
+      // black spots on the wing coverts
+      marks: { wing: 'spots', spotZone: 'face', freq: 0.8 },
       palette: { body: '#a8917a', belly: '#d9c0a8', wing: '#9e886f', flight: '#6e6357', head: '#a99a87', face: '#c6ae95', accent: '#6a5a4a', beak: '#2b2624', jaw: '#2b2624', leg: '#c97b6b', eye: '#1c1410' },
     },
   }),
@@ -124,6 +128,8 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   'downy-woodpecker': bird('woodpecker', {
     size: 0.7, beakLength: 0.58,
     specOverride: {
+      // a white stripe down the back and white-spotted wings
+      marks: { back: 'stripe', wing: 'spots', tail: 'bars', light: 'belly', zone: 'body', freq: 1.4 },
       palette: { body: '#18181b', belly: '#f3f1eb', wing: '#1b1b1f', flight: '#26262b', head: '#18181b', face: '#f2efe8', accent: '#d32f29', beak: '#2b2b2d', jaw: '#2b2b2d', leg: '#5d5a62' },
     },
   }),
@@ -132,6 +138,8 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
     size: 1.05, legLength: 1.9, eyeSize: 0.82,
     specOverride: {
       crest: null, eyeRing: 0.75,
+      // white underparts with a few small dark spots; golden-buff back finely dotted (not the horned owl's barring)
+      marks: { belly: 'spots', back: 'spots', wing: 'spots', tail: 'bars', zone: 'accent', light: 'belly', freq: 2.4 },
       pattern: { mask: 'face', throat: 'belly', barred: false },
       palette: { body: '#c79a58', belly: '#f5f0e7', wing: '#cfa263', flight: '#dccaa6', head: '#c79a58', face: '#f8f5ee', accent: '#8a6440', beak: '#dccdb6', jaw: '#dccdb6', leg: '#cfbba3', eye: '#120c08' },
     },

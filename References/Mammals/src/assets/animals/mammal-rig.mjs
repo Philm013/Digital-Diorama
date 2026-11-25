@@ -170,8 +170,9 @@ class Part {
   constructor(name, opt = {}) {
     this.name = name; this.glass = !!opt.glass; this.group = opt.group || name;
     this.p = []; this.z = []; this.si = []; this.sw = [];
-    // coat atlas: per-vertex (s, t) inside each face's patch, and the patch per face (null = flat colour)
-    this.uv = []; this.pt = []; this.coat = false;
+    // coat atlas: per-vertex (s, t) inside each face's patch, and the patch per face (null = flat colour);
+    // coatK > 1 paints this part's patches coarser (parts only seen briefly, such as spread wings)
+    this.uv = []; this.pt = []; this.coat = false; this.coatK = opt.coatK ?? 1;
   }
   get count() { return this.p.length / 3; }
   v(P, W) {
@@ -613,17 +614,19 @@ function sheetPatch(G, zf, face) {
 /** Paints every patch used by `parts` into one atlas; returns the texture and each patch's tile. */
 function paintAtlas(parts, cfg, hexOf) {
   const patches = [], seen = new Set();
-  for (const part of parts) for (const pt of part.pt) if (pt && !seen.has(pt)) { seen.add(pt); patches.push(pt); }
+  for (const part of parts) for (const pt of part.pt) if (pt && !seen.has(pt)) { seen.add(pt); pt.k = part.coatK || 1; patches.push(pt); }
   if (!patches.length) return null;
   const mn = V3(Infinity, Infinity, Infinity), mx = V3(-Infinity, -Infinity, -Infinity), q = V3();
   for (const part of parts) for (let i = 0; i < part.p.length; i += 3) { q.set(part.p[i], part.p[i + 1], part.p[i + 2]); mn.min(q); mx.max(q); }
-  const D = Math.max(1e-6, mx.distanceTo(mn));
+  // texel size: from a reference length when the rig gives one (birds: the body, since the spread wings that
+  // are hidden while perched would otherwise set it), else from the bounding diagonal
+  const D = cfg.ref ?? Math.max(1e-6, mx.distanceTo(mn));
   let tau = D / (cfg.res || 420), AW = 256, AH = 0, place = null;
   for (let attempt = 0; attempt < 8; attempt++) {
     let area = 0;
     for (const pt of patches) {
-      pt.tw = clamp(Math.ceil(pt.per / tau), 2, COAT_MAX - 2 * COAT_PAD);
-      pt.th = clamp(Math.ceil(pt.len / tau), 2, COAT_MAX - 2 * COAT_PAD);
+      pt.tw = clamp(Math.ceil(pt.per / (tau * pt.k)), 2, COAT_MAX - 2 * COAT_PAD);
+      pt.th = clamp(Math.ceil(pt.len / (tau * pt.k)), 2, COAT_MAX - 2 * COAT_PAD);
       area += (pt.tw + 2 * COAT_PAD) * (pt.th + 2 * COAT_PAD);
     }
     AW = clamp(2 ** Math.ceil(Math.log2(Math.sqrt(area * 1.2) + 1)), 128, COAT_MAX);

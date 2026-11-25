@@ -154,8 +154,9 @@ class Part {
   constructor(name, opt = {}) {
     this.name = name; this.glass = !!opt.glass; this.group = opt.group || name;
     this.p = []; this.z = []; this.si = []; this.sw = [];
-    // coat atlas: per-vertex (s, t) inside each face's patch, and the patch per face (null = flat colour)
-    this.uv = []; this.pt = []; this.coat = false;
+    // coat atlas: per-vertex (s, t) inside each face's patch, and the patch per face (null = flat colour);
+    // coatK > 1 paints this part's patches coarser (parts only seen briefly, such as spread wings)
+    this.uv = []; this.pt = []; this.coat = false; this.coatK = opt.coatK ?? 1;
   }
   get count() { return this.p.length / 3; }
   v(P, W) {
@@ -601,17 +602,19 @@ function sheetPatch(G, zf, face) {
 /** Paints every patch used by `parts` into one atlas; returns the texture and each patch's tile. */
 function paintAtlas(parts, cfg, hexOf) {
   const patches = [], seen = new Set();
-  for (const part of parts) for (const pt of part.pt) if (pt && !seen.has(pt)) { seen.add(pt); patches.push(pt); }
+  for (const part of parts) for (const pt of part.pt) if (pt && !seen.has(pt)) { seen.add(pt); pt.k = part.coatK || 1; patches.push(pt); }
   if (!patches.length) return null;
   const mn = V3(Infinity, Infinity, Infinity), mx = V3(-Infinity, -Infinity, -Infinity), q = V3();
   for (const part of parts) for (let i = 0; i < part.p.length; i += 3) { q.set(part.p[i], part.p[i + 1], part.p[i + 2]); mn.min(q); mx.max(q); }
-  const D = Math.max(1e-6, mx.distanceTo(mn));
+  // texel size: from a reference length when the rig gives one (birds: the body, since the spread wings that
+  // are hidden while perched would otherwise set it), else from the bounding diagonal
+  const D = cfg.ref ?? Math.max(1e-6, mx.distanceTo(mn));
   let tau = D / (cfg.res || 420), AW = 256, AH = 0, place = null;
   for (let attempt = 0; attempt < 8; attempt++) {
     let area = 0;
     for (const pt of patches) {
-      pt.tw = clamp(Math.ceil(pt.per / tau), 2, COAT_MAX - 2 * COAT_PAD);
-      pt.th = clamp(Math.ceil(pt.len / tau), 2, COAT_MAX - 2 * COAT_PAD);
+      pt.tw = clamp(Math.ceil(pt.per / (tau * pt.k)), 2, COAT_MAX - 2 * COAT_PAD);
+      pt.th = clamp(Math.ceil(pt.len / (tau * pt.k)), 2, COAT_MAX - 2 * COAT_PAD);
       area += (pt.tw + 2 * COAT_PAD) * (pt.th + 2 * COAT_PAD);
     }
     AW = clamp(2 ** Math.ceil(Math.log2(Math.sqrt(area * 1.2) + 1)), 128, COAT_MAX);
@@ -1292,7 +1295,7 @@ function birdBuild(B, S) {
   const T = S.tail, tb = bp(0, 0.12), defLift = Math.max(0, S.pitch * 0.8 + 2);
   const tdir = fwd.clone().multiplyScalar(-1).addScaledVector(upb, Math.tan((T.lift ?? defLift) * DEG)).normalize();
   rig.add('Tail', 'Hips', tb);
-  const tl = T.len * L, nT = T.n ?? 10, tpart = B.part('tail', { group: 'tail' });
+  const tl = T.len * L, nT = T.n ?? 10, tpart = B.part('tail', { group: 'tail', coatK: 1.6 });
   const side = new THREE.Vector3().crossVectors(upb, tdir).normalize();
   for (let i = 0; i < nT; i++) {
     const t = nT === 1 ? 0 : i / (nT - 1) - 0.5, ang = t * (T.fan ?? 40) * DEG, d = tdir.clone().applyAxisAngle(upb, ang);
@@ -1323,7 +1326,7 @@ function birdBuild(B, S) {
     const slotted = Wg.tip === 'slotted', tipK = Wg.tip === 'pointed' ? 0.12 : 0.45;
     const rootChord = Math.min(0.72, (0.45 * L) / Math.max(chord, 1e-6));
     const cP = prof([[0, rootChord], [ku[1], 0.94], [ku[2], 0.96], [ku[3], 0.88], [0.86, slotted ? 0.55 : 0.7], [1, slotted ? 0.3 : tipK]]);
-    const wpart = B.part('wings', { group: 'wingSpread' });
+    const wpart = B.part('wings', { group: 'wingSpread', coatK: 3 });
     sheet(wpart, { nu: Math.round(18 * det), nv: Math.round(4 * det),
       f: (u, v) => {
         const p = le.getPointAt(u), c = chord * cP(u) * (1 - 0.07 * Math.abs(Math.sin(u * Math.PI * (Wg.feathers ?? 9))) * v ** 3);
@@ -1344,7 +1347,7 @@ function birdBuild(B, S) {
         const hit = body.at(clamp(s, 0.03, 0.97), sd > 0 ? ang : Math.PI - ang), P2 = hit.p.addScaledVector(hit.n, bodyW * 0.035);
         if (s < 0.03) P2.addScaledVector(fwd, (s - 0.03) * L).addScaledVector(upb, (0.03 - s) * L * 0.15);
         return P2; },
-      th: (u, v) => bodyH * 0.06 * (1 - 0.6 * u), zone: (u, v) => paint({ part: 'fold', u, a: v, P: shoulderY }), skin: rig.W('WingFold' + sfx) });
+      th: (u, v) => bodyH * 0.06 * (1 - 0.6 * u), zone: (u, v, face, Pp) => paint({ part: 'fold', u, a: v, P: Pp || shoulderY }), skin: rig.W('WingFold' + sfx) });
   }
   // legs: hidden thigh, feathered drumstick, scaly tarsus and toes
   const lp = B.part('legs', { group: 'legs' }), fpart = B.part('feet', { group: 'feet' });
@@ -1411,6 +1414,8 @@ const BP = (body, belly, wing, flight, head, face, accent, beak, leg, eye = '#1a
 const SPECIES = {
   sparrow: { label: 'House Sparrow', sci: 'Passer domesticus', bodyForm: 'songbird', L: 0.075, headR: 0.21, neckLen: 0.08, neckThin: 0.8, neckNape: 1.0, neckAng: 70, eye: 0.21, maskW: 0.16, maskWBill: 0.5,
     beak: { len: 0.75, w: 0.24, h: 0.32, style: 'cone' }, pattern: { mask: true, maskShape: 'stripe', throat: 'face', cap: 'head', cheek: 'accent', nape: 'body', wingBar: true },
+    // Digital Diorama revision: black-streaked brown back and edged wing feathers
+    marks: { back: 'streaks', wing: 'edged', zone: 'face', light: 'accent', freq: 1.3 },
     palette: BP('#8a6a48', '#c9c0b0', '#7a5432', '#4a3a2a', '#7d7d78', '#2a2420', '#e8e0d0', '#3a3530', '#c49a7a') },
   robin: { label: 'European Robin', sci: 'Erithacus rubecula', bodyForm: 'robin', L: 0.07, bodyH: 0.68, bodyW: 0.66, headR: 0.21, neckLen: 0.08, neckThin: 0.82, neckNape: 1.0, neckAng: 72, eye: 0.22,
     beak: { len: 0.88, w: 0.15, h: 0.17, style: 'cone' }, pattern: { breast: 'accent', face: 'accent', faceU: 0.4, faceTop: 0.45, forehead: 'accent', foreheadU: 0.72, throat: 'accent' },
@@ -1422,18 +1427,23 @@ const SPECIES = {
     pattern: { mask: true, maskShape: 'stripe', chin: 'face', chinU: 0.55 }, palette: BP('#c22a24', '#d63a2c', '#a8221e', '#8a1c18', '#c8261f', '#141010', '#d8322a', '#e8742c', '#9a6a5a') },
   pigeon: { label: 'Rock Pigeon', sci: 'Columba livia', bodyForm: 'waterfowl', skullForm: 'songbird', L: 0.2, pitch: 24, bodyH: 0.62, bodyW: 0.66, headR: 0.2, neckLen: 0.3, neckAng: 66, neckThin: 0.7,
     beak: { len: 0.72, w: 0.25, h: 0.28, style: 'cone' }, eye: 0.17, legLen: 0.24, legThk: 0.035, wing: { span: 2.2, chord: 0.64, tip: 'pointed', fold: 0.38 }, tail: { len: 0.62, fan: 34, n: 10 },
-    pattern: { neck: 'accent', wingBands: true }, palette: BP('#78808a', '#aeb2b6', '#707780', '#3d4148', '#7e858d', '#d8d5c8', '#367b68', '#4a4b50', '#c66f75', '#e86f44') },
+    // Digital Diorama revision: pale grey wings with two black bars (not dark bands), green-purple sheen only on the lower neck
+    pattern: { neck: 'accent', wingBands: false }, marks: { wing: 'bars', zone: 'flight', freq: 0.45 },
+    palette: BP('#8d949c', '#b5b9bd', '#a5abb1', '#3d4148', '#7e858d', '#d8d5c8', '#5b7d72', '#4a4b50', '#c66f75', '#e86f44') },
   woodpecker: { label: 'Great Spotted Woodpecker', sci: 'Dendrocopos major', bodyForm: 'corvid', skullForm: 'corvid', L: 0.15, pitch: 50, bodyH: 0.56, bodyW: 0.54, headR: 0.22, neckLen: 0.12, neckThin: 0.72,
     beak: { len: 1.65, w: 0.22, h: 0.25, style: 'cone' }, eye: 0.16, feet: 'zygo', legLen: 0.18, crest: { h: 0.45, style: 'peak', base: 0.25, thk: 0.12, sweep: 22 }, wing: { span: 1.85, chord: 0.6, tip: 'round', fold: 0.34 }, tail: { len: 0.9, fan: 20, n: 10, style: 'wedge', lift: 35 },
-    pattern: { mask: 'face', maskShape: 'stripe', wingBar: true, cheek: 'belly' }, palette: BP('#171719', '#eeeae0', '#202024', '#f0ece2', '#171719', '#171719', '#d12b27', '#343338', '#65616a', '#a13b32') },
+    pattern: { mask: 'face', maskShape: 'stripe', wingBar: true, cheek: 'belly' }, marks: { wing: 'spots', tail: 'bars', light: 'belly', zone: 'body', freq: 1.2 },
+    palette: BP('#171719', '#eeeae0', '#202024', '#f0ece2', '#171719', '#171719', '#d12b27', '#343338', '#65616a', '#a13b32') },
   kingfisher: { label: 'Common Kingfisher', sci: 'Alcedo atthis', bodyForm: 'songbird', skullForm: 'wader', L: 0.14, pitch: 28, bodyH: 0.54, bodyW: 0.58, headR: 0.25, neckLen: 0.08, neckThin: 0.8,
     beak: { len: 2.25, w: 0.2, h: 0.22, style: 'cone' }, eye: 0.17, legLen: 0.12, wing: { span: 1.65, chord: 0.55, tip: 'round', fold: 0.35 }, tail: { len: 0.35, fan: 26, n: 8 },
     pattern: { headAll: true, face: 'belly', breast: 'accent' }, palette: BP('#147da0', '#e8a14d', '#1687ad', '#205c79', '#146e91', '#f0e5d0', '#d97f32', '#25292c', '#c56d52', '#2a1b12') },
   macaw: { label: 'Scarlet Macaw', sci: 'Ara macao', bodyForm: 'parrot', L: 0.26, pitch: 50, bodyH: 0.55, headR: 0.28, headAng: 20, neckLen: 0.14, neckThin: 0.8, maskW: 0.5, maskWBill: 0.8, beak: { len: 0.85, w: 0.55, h: 1.0, style: 'hook', hook: 0.42, lower: 0.62, lowerStyle: 'scoop', keel: 0.15, y: 0.05 }, feet: 'zygo', legLen: 0.18,
-    wing: { span: 1.9, chord: 0.62, tip: 'pointed', fold: 0.55 }, tail: { len: 2.8, fan: 16, n: 8, style: 'long', lift: 45 }, eye: 0.16, pattern: { face: 'face', faceU: 0.5, faceTop: 0.8, faceSlope: 0.25, mask: 'face', maskShape: 'stripe', wingBands: true },
+    wing: { span: 1.9, chord: 0.62, tip: 'pointed', fold: 0.55 }, tail: { len: 2.8, fan: 16, n: 8, style: 'long', lift: 45 }, eye: 0.16, pattern: { face: 'face', faceU: 0.5, faceTop: 0.8, faceSlope: 0.25, mask: 'face', maskShape: 'stripe', wingBands: true, tail: 'body' },
     palette: BP('#d8241e', '#d8241e', '#f2c21a', '#2a5ad8', '#d8241e', '#f2ede6', '#2a8a3a', '#efe6d0', '#5a5a60', '#e8e0b0', { flight: '#2a5ad8', jaw: '#1d1a1a' }) },
-  owl: { label: 'Great Horned Owl', sci: 'Bubo virginianus', bodyForm: 'owl', L: 0.32, pitch: 72, bodyH: 0.85, bodyW: 0.8, neckLen: 0.08, headR: 0.44, headW: 1.0, headAng: -4, eye: 0.3, eyeYaw: 16, eyeInset: 0.35, pupilBig: true, eyeRing: 0.55,
-    beak: { len: 0.45, w: 0.28, h: 0.4, style: 'hook', hook: 0.5, y: 0.25 }, crest: { h: 0.75, n: 2, style: 'tuft', thk: 0.16, curl: -0.3, pair: true }, feet: 'zygo', talons: 1.4, feathered: true, legLen: 0.12, fluff: 0.05,
+  // Digital Diorama revision: eyes set into the facial disc (huge bulging black eyes), barred underparts, mottled back
+  owl: { label: 'Great Horned Owl', sci: 'Bubo virginianus', bodyForm: 'owl', L: 0.32, pitch: 72, bodyH: 0.85, bodyW: 0.8, neckLen: 0.08, headR: 0.44, headW: 1.0, headAng: -4, eye: 0.22, eyeYaw: 16, eyeInset: 0.55, eyeRing: 0.4,
+    marks: { belly: 'bars', back: 'streaks', wing: 'bars', tail: 'bars', freq: 1.6, zone: 'accent', light: 'face' },
+    beak: { len: 0.32, w: 0.22, h: 0.3, style: 'hook', hook: 0.5, y: 0.25 }, crest: { h: 0.75, n: 2, style: 'tuft', thk: 0.16, curl: -0.3, pair: true }, feet: 'zygo', talons: 1.4, feathered: true, legLen: 0.12, fluff: 0.05,
     wing: { span: 1.9, chord: 0.75, tip: 'round', fold: 0.25 }, tail: { len: 0.6, fan: 40, n: 10, lift: 35 }, pattern: { mask: 'face', throat: 'belly', barred: true },
     palette: BP('#7a5e40', '#c9b08a', '#6a5034', '#4a3a28', '#7a5e40', '#d8b88a', '#3a2c1e', '#3a3632', '#c9b08a', '#f2a81a') },
   eagle: { label: 'Bald Eagle', sci: 'Haliaeetus leucocephalus', bodyForm: 'raptor', L: 0.45, pitch: 35, headR: 0.24, beak: { len: 1.05, w: 0.42, h: 0.62, style: 'hook', hook: 0.42 }, eye: 0.15, eyeYaw: 50, talons: 1.6, feathered: true, legLen: 0.22,
@@ -1441,7 +1451,9 @@ const SPECIES = {
     palette: BP('#3a2a1c', '#3e2e20', '#3a2a1c', '#2a1e14', '#f4f2ec', '#f4f2ec', '#f4f2ec', '#f2c21a', '#f2c21a', '#f2d24a') },
   falcon: { label: 'Peregrine Falcon', sci: 'Falco peregrinus', bodyForm: 'raptor', L: 0.38, pitch: 34, bodyH: 0.55, bodyW: 0.54, headR: 0.22, neckLen: 0.14, neckThin: 0.68,
     beak: { len: 0.72, w: 0.34, h: 0.5, style: 'hook', hook: 0.55 }, eye: 0.16, eyeYaw: 48, talons: 1.55, feathered: true, legLen: 0.24, wing: { span: 2.85, chord: 0.52, tip: 'pointed', fold: 0.62, sweep: 0.25 }, tail: { len: 0.78, fan: 28, n: 10 },
-    pattern: { mask: 'face', throat: 'belly', barred: true }, palette: BP('#46515d', '#e6dfcf', '#3e4853', '#252b31', '#3f4852', '#1d252c', '#c9b68e', '#60636a', '#e3b52b', '#33251a') },
+    // Digital Diorama revision: a black hood and moustache over a white throat and cheek, finely barred underparts
+    pattern: { mask: 'face', throat: 'belly', cheek: 'belly', barred: true }, maskR: 0.5, marks: { belly: 'bars', back: 'bars', tail: 'bars', freq: 3.2, barW: 0.13, zone: 'accent', throatPlain: true },
+    palette: BP('#5a6672', '#f0ebe0', '#4f5a66', '#2a3036', '#262b31', '#171b20', '#4a5058', '#60636a', '#e3b52b', '#33251a') },
   flamingo: { label: 'Greater Flamingo', sci: 'Phoenicopterus roseus', bodyForm: 'flamingo', L: 0.36, pitch: 8, legLen: 1.1, thigh: 2.1, legThk: 0.036, bareTibia: 0.78, heelAng: 5, footFwd: 0.02, neckLen: 1.6, neckAng: 70, neckThin: 0.42, neckBase: 1.4, neckNape: 1.2,
     neckShape: [[0, 30], [0.22, 78], [0.5, 116], [0.74, 98], [0.9, 58], [1, 32]], headR: 0.16, headAng: 8, headW: 0.84,
     beak: { len: 1.95, w: 0.56, h: 0.78, style: 'cone', droop: 0.8, tip: 'face', y: 0.18 }, eye: 0.18, feet: 'webbed', wing: { span: 2.0, chord: 0.62, tip: 'round', fold: 0.35 }, tail: { len: 0.4, fan: 30, n: 8 },
@@ -1452,7 +1464,8 @@ const SPECIES = {
     palette: BP('#8a8e94', '#e8e8e4', '#7a7e84', '#2a2c30', '#f0f0ec', '#1d1d20', '#1d1d20', '#d8b03a', '#b8a060', '#f2d24a') },
   crane: { label: 'Sandhill Crane', sci: 'Antigone canadensis', bodyForm: 'wader', skullForm: 'wader', L: 0.48, pitch: 15, bodyH: 0.58, bodyW: 0.58, legLen: 0.75, thigh: 1.25, legThk: 0.04, bareTibia: 0.55, neckLen: 1.35, neckAng: 78, neckThin: 0.42, neckBase: 1.35,
     neckShape: [[0, 54], [0.4, 82], [0.75, 88], [1, 70]], headR: 0.14, headW: 0.78, beak: { len: 2.4, w: 0.28, h: 0.3, style: 'cone' }, eye: 0.19, wing: { span: 2.5, chord: 0.7, tip: 'slotted', fold: 0.4 }, tail: { len: 0.45, fan: 35, n: 10 },
-    pattern: { neck: 'head', forehead: 'accent', headAll: true }, palette: BP('#8d9295', '#b8b5ae', '#83898d', '#3a3b3d', '#9a9b96', '#e8e0d2', '#b92f2c', '#565453', '#333638', '#c9883b') },
+    pattern: { neck: 'head', forehead: 'accent', cheek: 'face', headAll: true }, marks: { back: 'scaled', wing: 'edged', zone: 'flight', light: 'belly', freq: 0.9 },
+    palette: BP('#97948c', '#b8b5ae', '#8f8c84', '#3a3b3d', '#9a9b96', '#e8e0d2', '#b92f2c', '#565453', '#333638', '#c9883b') },
   spoonbill: { label: 'Roseate Spoonbill', sci: 'Platalea ajaja', bodyForm: 'spoonbill', L: 0.4, pitch: 14, bodyH: 0.6, bodyW: 0.66, legLen: 0.42, thigh: 1.15, legThk: 0.042, bareTibia: 0.5, heelAng: 9, neckLen: 0.9, neckAng: 67, neckBase: 1.25, neckThin: 0.46, neckRootR: 0.27, neckFlare: 0.24,
     neckShape: [[0, 40], [0.35, 84], [0.7, 88], [1, 52]], headR: 0.16, headW: 0.8, headAng: 16,
     beak: { len: 3.6, w: 0.24, h: 0.25, style: 'spoon', spoon: 2.9, curve: 0.08, tip: 'beak' }, eye: 0.19, feet: 'webbed', toeLen: 0.3, wing: { span: 2.05, chord: 0.66, tip: 'round', fold: 0.38 }, tail: { len: 0.42, fan: 32, n: 8 }, pattern: { neck: 'head', headAll: true },
@@ -1469,7 +1482,7 @@ const SPECIES = {
     feet: 'webbed', toeLen: 0.22, wing: { span: 1.7, chord: 0.6, tip: 'pointed', fold: 0.25 }, tail: { len: 0.35, fan: 44, n: 10, lift: 15 }, crest: { h: 0.0 },
     pattern: { headAll: true, neck: 'head', collar: true, breast: 'accent', speculum: true }, palette: BP('#8a8a86', '#d8d4cc', '#7a766e', '#5a5650', '#1e6a3a', '#f4f2ec', '#6a3a2a', '#e8c43a', '#e8823a') },
   puffin: { label: 'Atlantic Puffin', sci: 'Fratercula arctica', bodyForm: 'penguin', skullForm: 'parrot', L: 0.25, pitch: 58, bodyH: 0.64, bodyW: 0.58, headR: 0.27, neckLen: 0.1, neckThin: 0.84,
-    beak: { len: 1.05, w: 0.32, h: 0.95, style: 'big', decurve: 0.12, tip: 'face', tipFrom: 0.75 }, eye: 0.15, feet: 'webbed', legLen: 0.1, wing: { span: 1.45, chord: 0.48, tip: 'pointed', fold: 0.3 }, tail: { len: 0.22, fan: 30, n: 8 },
+    beak: { len: 0.82, w: 0.28, h: 0.78, style: 'big', decurve: 0.12, tip: 'face', tipFrom: 0.75 }, eye: 0.15, feet: 'webbed', legLen: 0.1, wing: { span: 1.45, chord: 0.48, tip: 'pointed', fold: 0.3 }, tail: { len: 0.22, fan: 30, n: 8 },
     pattern: { headAll: true, face: 'belly', bellyFront: true }, palette: BP('#1b2024', '#f0eee5', '#22282d', '#31363b', '#171a1d', '#ded9ca', '#e46d35', '#e8832f', '#e36b3d', '#59402d') },
   penguin: { label: 'Emperor Penguin', sci: 'Aptenodytes forsteri', bodyForm: 'penguin', L: 0.78, pitch: 84, bodyH: 0.52, bodyW: 0.5, legLen: 0.03, thigh: 0.12, footFwd: 0.2, heelAng: 40, bareTibia: 0, thighK: 1.7, groundClear: 0.01, legThk: 0.05, neckLen: 0.14, neckAng: 85, headR: 0.17, headAng: 10, beak: { len: 1.5, w: 0.3, h: 0.32, style: 'cone', curve: -0.4 }, eye: 0.12,
     feet: 'webbed', toeLen: 0.12, wing: { span: 0.62, chord: 0.24, tip: 'round', fold: 0.0, foldH: 0.6, foldReach: 0.55 }, tail: { len: 0.12, fan: 30, n: 6 }, pattern: { headAll: true, neck: 'head', face: 'face', bellyFront: true },
@@ -1480,10 +1493,12 @@ const SPECIES = {
     palette: BP('#1d1b1a', '#1d1b1a', '#1d1b1a', '#f2f0ea', '#c8a49a', '#d8b0a4', '#f2f0ea', '#c89a7a', '#d8a098') },
   kiwi: { label: 'North Island Brown Kiwi', sci: 'Apteryx mantelli', bodyForm: 'ratite', skullForm: 'wader', L: 0.35, pitch: 22, bodyH: 0.78, bodyW: 0.72, legLen: 0.32, thigh: 0.65, legThk: 0.065, neckLen: 0.2, neckAng: 55, headR: 0.16, headW: 0.78,
     beak: { len: 3.1, w: 0.18, h: 0.2, style: 'cone', curve: 0.12 }, eye: 0.13, feet: 'ratite', toeLen: 0.42, wing: { span: 0.12, chord: 0.12, tip: 'round', fold: 0, foldLength: 0.14, foldH: 0.2 }, tail: { len: 0, fan: 20, n: 1 }, fluff: 0.08,
-    pattern: { headAll: true, neck: 'head' }, palette: BP('#65503c', '#755e47', '#594532', '#493929', '#6c5540', '#705944', '#8b7459', '#b79b79', '#8f7b64', '#2b2118') },
+    pattern: { headAll: true, neck: 'head' }, marks: { back: 'streaks', belly: 'streaks', zone: 'flight', freq: 1.5 },
+    palette: BP('#65503c', '#755e47', '#594532', '#493929', '#6c5540', '#705944', '#8b7459', '#b79b79', '#8f7b64', '#2b2118') },
   turkey: { label: 'Wild Turkey', sci: 'Meleagris gallopavo', bodyForm: 'galliform', skullForm: 'galliform', L: 0.68, pitch: 24, bodyH: 0.76, bodyW: 0.75, headR: 0.17, neckLen: 0.48, neckAng: 70, neckThin: 0.48, legLen: 0.42, legThk: 0.06, bareTibia: 0.25,
     beak: { len: 0.75, w: 0.38, h: 0.42, style: 'cone', hook: 0.12 }, eye: 0.16, wattle: 1.5, wattleZone: 'face', wing: { span: 1.75, chord: 0.7, tip: 'round', fold: 0.25 }, tail: { len: 1.0, fan: 110, n: 18, lift: 65 },
-    pattern: { neck: 'face', headAll: true, barred: true }, palette: BP('#3b2b21', '#46352a', '#514031', '#2a2420', '#4c6e83', '#9c3c3c', '#c09a55', '#d6b45f', '#b66d63', '#2a1a12') },
+    pattern: { neck: 'face', headAll: true, barred: true }, marks: { back: 'scaled', belly: 'chevrons', wing: 'bars', tail: 'bars', zone: 'flight', light: 'jaw', freq: 2.2 },
+    palette: BP('#3b2b21', '#46352a', '#514031', '#2a2420', '#4c6e83', '#9c3c3c', '#c09a55', '#d6b45f', '#b66d63', '#2a1a12', { jaw: '#7a5a34' }) },
   rooster: { label: 'Rooster', sci: 'Gallus gallus domesticus', bodyForm: 'galliform', L: 0.38, pitch: 28, bodyH: 0.7, headR: 0.2, beak: { len: 0.8, w: 0.4, h: 0.5, style: 'cone', hook: 0.12 }, crest: { h: 1.2, style: 'comb', zone: 'face' }, wattle: 1.0, wattleZone: 'face', maskR: 0.42, eye: 0.16,
     wing: { span: 1.6, chord: 0.62, tip: 'round', fold: 0.2 }, tail: { len: 1.6, fan: 40, n: 10, style: 'long', lift: 28, droop: 0.5 }, legLen: 0.4, legThk: 0.05, thigh: 0.5, thighK: 1.15, bareTibia: 0.2,
     pattern: { neck: 'accent', headAll: true, mask: 'face' }, palette: BP('#a8381e', '#1d2a22', '#8a2a14', '#1d2a22', '#d8742a', '#d8241e', '#e88a2a', '#e8c43a', '#e8c43a', '#d8742a', { tail: '#1d3a2a' }) },
@@ -1509,7 +1524,8 @@ const SPECIES = {
     palette: BP('#17181b', '#ece8dc', '#1b1c1f', '#efe9d6', '#1b1c1f', '#101012', '#ede0a2', '#f0c033', '#55524c', '#c8352a', { jaw: '#efd57c' }) },
   albatross: { label: 'Wandering Albatross', sci: 'Diomedea exulans', bodyForm: 'gull', skullForm: 'pelican', L: 0.62, pitch: 12, bodyH: 0.52, bodyW: 0.58, headR: 0.18, neckLen: 0.38, neckAng: 58,
     beak: { len: 1.9, w: 0.34, h: 0.42, style: 'flat', hook: 0.2, hookPow: 8, tip: 'face', tipFrom: 0.88 }, eye: 0.14, feet: 'webbed', legLen: 0.16, wing: { span: 3.8, chord: 0.44, tip: 'pointed', fold: 0.72, sweep: 0.3 }, tail: { len: 0.48, fan: 28, n: 10 },
-    pattern: { headAll: true, neck: 'head', wingTips: true }, palette: BP('#f4f2e9', '#f7f5ed', '#ece9df', '#24262a', '#f7f5ed', '#f5f1e6', '#d6c7ab', '#e1c7a8', '#c8b59c', '#3c2c20') },
+    pattern: { headAll: true, neck: 'head', wingTips: true }, marks: { wing: 'edged', light: 'belly', freq: 1 },
+    palette: BP('#f4f2e9', '#f7f5ed', '#4a4b4e', '#24262a', '#f7f5ed', '#f5f1e6', '#d6c7ab', '#e1c7a8', '#c8b59c', '#3c2c20') },
   seagull: { label: 'Herring Gull', sci: 'Larus argentatus', bodyForm: 'gull', L: 0.32, pitch: 15, headR: 0.22, beak: { len: 1.2, w: 0.3, h: 0.38, style: 'cone', hook: 0.12, tip: 'accent', tipUpper: false }, eye: 0.14, feet: 'webbed', legLen: 0.32,
     wing: { span: 2.6, chord: 0.55, tip: 'pointed', fold: 0.6 }, tail: { len: 0.6, fan: 36, n: 10 }, pattern: { headAll: true, neck: 'head', wingTips: true },
     palette: BP('#a8b0b8', '#f6f6f4', '#a8b0b8', '#1d1d20', '#f6f6f4', '#f6f6f4', '#d8241e', '#f2c21a', '#e8a8a0', '#f2e6a0') },
@@ -1712,8 +1728,61 @@ function resolveSpec(p) {
   S.pattern = { ...(S.pattern || {}) };
   return S;
 }
+/**
+ * Plumage markings (Digital Diorama revision). Now that plumage is painted into a texture, fine feather
+ * patterns are possible. S.marks = { belly: 'bars' | 'streaks' | 'spots' | 'chevrons', back: 'scaled' |
+ * 'streaks' | 'spots' | 'bars', wing: 'edged' | 'spots' | 'bars', tail: 'bars', breast: 'spots', freq, zone }.
+ * Coordinates are surface (u, a) plus world position scaled by body length, so marks scale with the bird.
+ */
+function birdMarks(S, base) {
+  const M = S.marks;
+  if (!M) return base;
+  const k = 1 / Math.max(1e-6, S.L), f = M.freq ?? 1, seed = 7 + (S.seed ?? 1);
+  const dark = M.zone ?? 'accent', lightZ = M.light ?? 'face';
+  const bars = (t, n, w) => Math.cos(TAU * t * n) > 1 - 2 * w;
+  return (c) => {
+    const z0 = base(c), { part, u = 0, a = 0, P } = c, sa = typeof a === 'number' ? Math.sin(a) : 0;
+    if (!P) return z0;
+    const x = P.x * k, y = P.y * k, zz = P.z * k, n = fbm(x * 4, y * 4, zz * 4, seed) - 0.5;
+    const under = (part === 'body' && sa < 0.05) || (part === 'neck' && sa < -0.15);
+    const upper = (part === 'body' || part === 'neck') && !under;
+    if (under && (z0 === 'belly' || z0 === S.pattern.breast || z0 === 'body')) {
+      if (part === 'neck' && M.throatPlain) return z0;
+      switch (M.belly) {
+        case 'bars': return bars(y * 7 * f + n * 0.5, 1, (M.barW ?? 0.22) + 0.1 * n) ? dark : z0;
+        case 'chevrons': return bars(y * 7 * f + Math.abs(x) * 2.2 + n * 0.4, 1, 0.2) ? dark : z0;
+        case 'streaks': { const [d] = worley(x * 9 * f, y * 3 * f, zz * 9 * f, seed); return d < 0.17 + 0.05 * n ? dark : z0; }
+        case 'spots': { const [d] = worley(x * 11 * f, y * 11 * f, zz * 11 * f, seed); return d < 0.2 ? dark : z0; }
+      }
+    }
+    if (upper && z0 === 'body') {
+      switch (M.back) {
+        case 'scaled': { const [d1, d2] = worley(x * 10 * f, y * 6 * f, zz * 10 * f, seed + 3); return d2 - d1 < 0.1 ? lightZ : d1 < 0.18 ? dark : z0; }
+        case 'streaks': { const [d] = worley(x * 12 * f, y * 9 * f, zz * 3.2 * f, seed + 3); return d < 0.22 + 0.06 * n ? dark : z0; }
+        case 'spots': { const [d] = worley(x * 12 * f, y * 12 * f, zz * 12 * f, seed + 3); return d < 0.17 ? lightZ : z0; }
+        case 'bars': return bars(zz * 8 * f + n * 0.4, 1, 0.2) ? dark : z0;
+        case 'stripe': return Math.abs(Math.cos(a)) < 0.2 && sa > 0.75 ? lightZ : z0;
+      }
+    }
+    if (part === 'fold' || part === 'wing') {
+      const v = a;
+      switch (M.wing) {
+        case 'edged': return Math.abs(fract(v * (part === 'fold' ? 5 : 9) + n * 0.2) - 0.5) > 0.38 && z0 !== 'flight' ? lightZ : z0;
+        case 'spots': return Math.cos(TAU * u * 9 * f) > 0.5 && Math.cos(TAU * v * 6) > 0.55 ? (M.spotZone ?? lightZ) : z0;
+        case 'bars': return bars(u * 8 * f + v * 0.6 + n * 0.3, 1, 0.2) ? dark : z0;
+      }
+    }
+    if (part === 'tail' && M.tail === 'bars') return bars(u * 6 * f + n * 0.2, 1, 0.22) ? dark : z0;
+    if (part === 'body' && M.breast === 'spots' && sa < 0.2 && u > 0.55) { const [d] = worley(x * 13 * f, y * 13 * f, zz * 13 * f, seed + 5); return d < 0.2 ? dark : z0; }
+    return z0;
+  };
+}
+
 /** Plumage painter: back/belly countershading, caps, masks, collars, wing bars and speculum. */
 function birdPaint(S) {
+  return birdMarks(S, birdPaintBase(S));
+}
+function birdPaintBase(S) {
   const P = S.pattern;
   const angDist = (x, y) => Math.abs(Math.atan2(Math.sin(x - y), Math.cos(x - y)));
   return (c) => {
@@ -1771,7 +1840,7 @@ export function createAsset(userParams = {}) {
   // keys handle the fold/swap for skinned playback, so static mode only needs the clip name.
   const flying = p.pose === 'flap' || p.pose === 'glide' || (pose.WingL && pose.WingL.s > 0.5);
   if (p.rigMode === 'static') B.parts = parts.filter(pt => pt.group !== (flying ? 'wingFold' : 'wingSpread'));
-  const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, grain: p.coatGrain, grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat' };
+  const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, ref: S.L * 1.5, grain: p.coatGrain, grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat' };
   const { root } = finish(B, { name: `bird-${p.species}`, merge: p.mergeForProduction, skinned: p.rigMode !== 'static', zones: C, pose, coat: coatOn || coat.smooth ? coat : null });
   root.userData = {
     asset: 'bird-rig', species: p.species, label: SPECIES[p.species].label, scientific: SPECIES[p.species].sci, dimensions: measure(root),
