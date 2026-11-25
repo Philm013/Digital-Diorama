@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { ANIMALS as WILDFORM } from '@ref/Animals/src/data/catalog';
+import { WILDFORM_SIZE_FIX } from './data-wildform';
 import type { AssetDef } from './types';
 import { loadModule, type AssetModule } from './modules';
 import { BUILTINS } from './builtin';
@@ -140,6 +141,12 @@ async function buildRaw(def: AssetDef, params: Record<string, unknown>): Promise
     if (mod.getSchema) schema = mod.getSchema(cfg);
   } else if (def.family === 'flora' && mod.getSchema) schema = mod.getSchema(p);
   const raw = mod.createAsset(p);
+  if (def.family === 'wildform') {
+    // some Wildform plans are built at the wrong real size (see WILDFORM_SIZE_FIX); scale about the origin and
+    // scale the ground offset with it, so the model still stands on y = 0
+    const fix = WILDFORM_SIZE_FIX[String(def.params.__animal)];
+    if (fix && fix !== 1) { raw.scale.multiplyScalar(fix); raw.position.multiplyScalar(fix); }
+  }
   let clips: THREE.AnimationClip[] = [];
   if ((def.family === 'mammal' || def.family === 'bird') && mod.createClips) clips = mod.createClips(raw);
   else if (raw.animations?.length) clips = raw.animations;

@@ -550,13 +550,14 @@ export function createAsset(userParams = {}) {
     const r = Rb * (t < 0.12 ? 0.08 + 0.92 * Math.pow(t / 0.12, 0.8) : 1) * (t > 0.95 ? lerp(1, 0.62, (t - 0.95) / 0.05) : 1);
     return { w: r * 1.05, h: r, flat: 0.62 };
   }, C.base, {
-    seg: Math.round(len / Rb * 2.4), rad: 12, cap0: Rb * 0.05, cap1: false,
+    // Digital Diorama revision: 24 around (was 12) so the reticulated net, about as fine as the mesh, shows up
+    seg: Math.round(len / Rb * 3), rad: 24, cap0: Rb * 0.05, cap1: false,
     color: (t, a) => {
       const sa = Math.sin(a);
       if (sa < -0.4) return C.belly;
       const u = (t * len) / (Rb * 3.2), w = a / Math.PI;
       const q1 = ((u + w * 1.4) % 1 + 1) % 1, q2 = ((u - w * 1.4) % 1 + 1) % 1;
-      const free = Math.min(clamp((Math.min(Math.abs(q1 - 0.5), Math.abs(q2 - 0.5)) - 0.3) / 0.09, 0, 1), 1);
+      const free = Math.min(clamp((Math.min(Math.abs(q1 - 0.5), Math.abs(q2 - 0.5)) - 0.27) / 0.07, 0, 1), 1);
       let col = mixHex(C.base, C.saddle, smooth(clamp((sa - 0.55) / 0.25, 0, 1)) * 0.8);
       if (sa < 0.3) col = mixHex(col, C.spot, clamp(1 - Math.max(Math.abs(q1 - 0.5), Math.abs(q2 - 0.5)) / 0.2, 0, 1) * 0.8);
       return mixHex(col, C.net, free * 0.92);

@@ -156,3 +156,19 @@ export const WILDFORM_STATUS: Record<string, string> = {
   'common-toad': 'Least Concern', 'glass-frog': 'Least Concern', 'alpine-newt': 'Least Concern', 'great-white-shark': 'Vulnerable', 'manta-ray': 'Endangered',
   'yellow-tang': 'Least Concern', seahorse: 'Vulnerable', lionfish: 'Least Concern', 'monarch-butterfly': 'Vulnerable', 'blue-crab': 'Least Concern', 'american-lobster': 'Least Concern',
 };
+
+/**
+ * Size corrections for Wildform models: a factor on the built model so it matches the real adult. Its builders
+ * read `length` as a body unit, and some plans come out much longer than the animal (the lizard plan adds a
+ * tail about as long as `length` again, so the "3.4 m" alligator was built 8.3 m long). Measured in the animal
+ * workbench; the comment gives the built size and the real one it now matches.
+ */
+export const WILDFORM_SIZE_FIX: Record<string, number> = {
+  'american-alligator': 0.41, // 8.3 m → 3.4 m total
+  'green-anole': 0.46, // 0.40 m → 18 cm total
+  'sand-lizard': 0.76, // 0.26 m → 20 cm total
+  'alpine-newt': 0.56, // 0.20 m → 11 cm
+  'common-garter-snake': 0.52, // ~1.25 m along the body → 65 cm
+  'blue-dragon': 0.59, // 5.1 cm → 3 cm
+  'stag-beetle': 0.68, // 9.5 cm → 6.5 cm with mandibles
+};

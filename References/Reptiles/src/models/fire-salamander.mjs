@@ -576,8 +576,19 @@ export function createAsset(userParams = {}) {
     const sa = Math.sin(a), ca = Math.abs(Math.cos(a));
     if (sa < -0.55) return C.belly;
     if (p.pattern === 'striped' && part !== 'leg') return sa > 0.25 && ca > 0.3 && ca < 0.3 + p.coverage ? C.mark : C.skin;
-    const field = fbm(P, 1 / (0.035 * k), 3);
-    return mixHex(C.skin, C.mark, smooth(clamp((field - (0.66 - p.coverage * 0.6)) / 0.1, 0, 1)));
+    // Digital Diorama revision: two irregular rows of discrete yellow spots along the back (and onto the legs and
+    // tail), with a black midline, instead of a noise field that painted broad bands (it was mostly yellow)
+    if (sa < -0.2 && part !== 'leg') return C.skin;
+    const zc = _pz(P) / (0.019 * k), side = Math.cos(a) >= 0 ? 1 : -1, zi = Math.floor(zc);
+    const warp = (fbm(P, 1 / (0.006 * k), 2) - 0.5) * 0.7, lat = part === 'leg' ? 0.5 : Math.abs(Math.cos(a));
+    let d = 9;
+    for (let dz = -1; dz <= 1; dz++) {
+      const c = zi + dz, cz = c + 0.5 + (_h(c, side, 3) - 0.5) * 0.7, cl = 0.4 + (_h(c, side, 7) - 0.5) * 0.4;
+      const r = (0.22 + 0.5 * p.coverage) * (0.75 + 0.5 * _h(c, side, 11));
+      if (_h(c, side, 13) < 0.12) continue; // the odd gap in a row
+      d = Math.min(d, Math.hypot((zc - cz) / r, (lat - cl) / (r * 0.55)));
+    }
+    return mixHex(C.skin, C.mark, smooth(clamp((1 - (d + warp)) / 0.12, 0, 1)));
   };
   const S = buildSaurian(R, {
     L: p.length, tailFrac: 0.42, headL: 0.033 * k, neckL: 0.01 * k,

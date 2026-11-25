@@ -542,7 +542,8 @@ export function createAsset(userParams = {}) {
     color: (t, a, P) => {
       const sa = Math.sin(a);
       if (sa < -0.4) return C.belly;
-      if (sa > -0.1) return mixHex(C.sand, C.blotch, smooth(clamp((fbm(P, 1 / (0.09 * k), 2) - 0.42) / 0.08, 0, 1)));
+      // Digital Diorama revision: a pale sandy snake with a row of soft darker blotches (it was boldly banded)
+      if (sa > -0.1) return mixHex(C.sand, C.blotch, smooth(clamp((fbm(P, 1 / (0.06 * k), 2) - 0.55) / 0.08, 0, 1)) * 0.65 * smooth(clamp((sa + 0.1) / 0.5, 0, 1)));
       return mixHex(C.sand, C.blotch, blotch(P, 1 / (0.05 * k), 5) * 0.5);
     }
   });

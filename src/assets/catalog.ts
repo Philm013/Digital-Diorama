@@ -7,6 +7,7 @@ import { REPTILES } from './data-reptiles';
 import { WILDFORM_AUG, WILDFORM_FACTS, WILDFORM_STATUS, wildformGroup } from './data-wildform';
 import { WILDFORM_REMAP } from './data-remap';
 import { DIET_FIX, MASS, massFromLength } from './data-diet';
+import TUNING_JSON from './tuning.json';
 
 const defs: AssetDef[] = [];
 const add = (d: AssetDef) => { defs.push({ living: d.category === 'animals' || d.category === 'plants' || d.category === 'fungi', ...d }); };
@@ -22,7 +23,7 @@ for (const m of MAMMALS) {
   add({
     id: `mammal/${m.key}`, name: m.name, emoji: m.emoji, category: 'animals', group: 'Mammals', family: 'mammal', path: P.mammal,
     params: { species: m.key, rigMode: 'skinned', mergeForProduction: true, ...MAMMAL_EXTRA[m.key] },
-    hidden: ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'hide', 'specOverride'],
+    hidden: ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'hide', 'specOverride', 'coat', 'coatGrain', 'shading'],
     loco: m.key === 'otter' || m.key === 'beaver' || m.key === 'hippo' ? 'walk' : 'walk', biomes: m.biomes, info: m.info,
     speed: MAMMAL_SPEED[m.key] ?? 1.2,
   });
@@ -33,7 +34,7 @@ for (const b of BIRDS) {
   add({
     id: `bird/${b.key}`, name: b.name, emoji: b.emoji, category: 'animals', group: 'Birds', family: 'bird', path: P.bird,
     params: { species: b.key, rigMode: 'skinned', mergeForProduction: true },
-    hidden: ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'bodyForm'],
+    hidden: ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'bodyForm', 'specOverride', 'coat', 'coatGrain', 'shading'],
     loco: ground ? 'walk' : 'fly', biomes: b.biomes, info: b.info, speed: ground ? 0.8 : 3.5, lift: ground ? 0 : 0,
   });
 }
@@ -299,6 +300,17 @@ for (const d of defs) {
     if (fix.addEats) d.info.eats = [...new Set([...(d.info.eats ?? []), ...fix.addEats])];
   }
   d.mass = MASS[d.id] ?? massFromLength(d);
+}
+
+/* ---------------- tuning saved from the animal workbench (workbench.html) ---------------- */
+// Per-asset parameter overrides, keyed by asset id; each top-level key replaces the catalog's value.
+const TUNING = TUNING_JSON as Record<string, { params?: Record<string, unknown> }>;
+/** each asset's params before tuning (the workbench saves only what differs from these) */
+export const UNTUNED_PARAMS: Record<string, Record<string, unknown>> = {};
+for (const d of defs) {
+  UNTUNED_PARAMS[d.id] = d.params;
+  const t = TUNING[d.id];
+  if (t?.params) d.params = { ...d.params, ...t.params };
 }
 
 export const CATALOG: AssetDef[] = defs;
