@@ -15,5 +15,45 @@
       "accent": "#4c5146",
       "detail": "#62645a"
     }
+  },
+  "wild/barrel-sponge": {
+    "params": {
+      "skin": "#c9714a",
+      "accent": "#9a4a33",
+      "detail": "#d98a62"
+    }
+  },
+  "wild/blue-crab": {
+    "params": {
+      "skin": "#6b6f4c"
+    }
+  },
+  "wild/giant-centipede": {
+    "params": {
+      "skin": "#7a2e1e",
+      "accent": "#d9a441",
+      "detail": "#e0b04c"
+    }
+  },
+  "wild/giant-clam": {
+    "params": {
+      "skin": "#bfb49a",
+      "detail": "#8f8670",
+      "underside": "#e8e2d2"
+    }
+  },
+  "wild/jumping-spider": {
+    "params": {
+      "skin": "#272421",
+      "underside": "#efe9dc",
+      "accent": "#c8642a"
+    }
+  },
+  "wild/staghorn-coral": {
+    "params": {
+      "skin": "#a88a55",
+      "underside": "#eee4c8",
+      "accent": "#cdb98c"
+    }
   }
 }

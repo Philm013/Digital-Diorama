@@ -97,9 +97,11 @@ function zonesFor(name, overrides = {}, config = ASSET) {
   return out;
 }
 
-function prep(geo, hex) {
+function prep(geo, hex, keepColors = false) {
   if (geo.index) { const original = geo; geo = geo.toNonIndexed(); original.dispose(); }
   geo.deleteAttribute('uv'); geo.deleteAttribute('normal');
+  // Digital Diorama revision: parts flagged `vc` bring their own painted vertex colours
+  if (keepColors && geo.attributes.color) return geo;
   const c = new THREE.Color(hex), n = geo.attributes.position.count, col = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -111,7 +113,7 @@ const GLASS_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShadi
 function finish(list, material = MAT, name = 'solid', merge = true) {
   if (!list.length) return null;
   if (merge) {
-    const prepared = list.map(p => prep(p.g, p.c));
+    const prepared = list.map(p => prep(p.g, p.c, p.vc));
     const merged = mergeGeometries(prepared);
     prepared.forEach(g => g.dispose());
     if (!merged) return null;
@@ -124,7 +126,7 @@ function finish(list, material = MAT, name = 'solid', merge = true) {
   const group = new THREE.Group(), pivots = {}, usedNames = new Map();
   group.name = name;
   list.forEach((part, i) => {
-    const geo = prep(part.g, part.c); geo.computeVertexNormals();
+    const geo = prep(part.g, part.c, part.vc); geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, material);
     const originalName = part.n || `${name}_part_${i + 1}`, occurrences = usedNames.get(originalName) || 0;
     mesh.name = originalName + (occurrences ? '-' + (occurrences + 1) : ''); usedNames.set(originalName, occurrences + 1);
@@ -853,14 +855,15 @@ function arthropod(parts, glass, p, C, config) {
     return;
   }
   if (bee && config.id === 'bumblebee') {
-    // Rounder and furrier than a honeybee, with a wide banded abdomen.
-    ellipsoid(parts, -0.16 * u, y + 0.08 * v, 0, 0.30 * u, 0.22 * mass * v, 0.21 * mass * v, C.skin, 'furry-abdomen', p.seg);
-    for (const bx of [-0.30, -0.14, 0.01]) {
-      const g = new THREE.TorusGeometry(0.205 * mass * v, 0.034 * v, 7, 20);
-      g.rotateY(Math.PI / 2); g.translate(bx * u, y + 0.08 * v, 0);
-      parts.push({ g, c: bx === -0.14 ? C.underside : C.dark, n: 'band-' + bx });
-    }
-    ellipsoid(parts, 0.19 * u, y + 0.09 * v, 0, 0.20 * u, 0.20 * v, 0.20 * v, C.accent, 'fuzzy-thorax', p.seg);
+    // Rounder and furrier than a honeybee. (Digital Diorama revision: Bombus terrestris is black with one yellow
+    // band at the front of the abdomen, a yellow collar on the thorax and a white tail; it was drawn as a yellow
+    // abdomen ringed in black.)
+    ellipsoid(parts, -0.16 * u, y + 0.08 * v, 0, 0.30 * u, 0.22 * mass * v, 0.21 * mass * v, C.dark, 'furry-abdomen', p.seg);
+    const ring = (bx, r, t, c, n) => { const g = new THREE.TorusGeometry(r, t, 7, 22); g.rotateY(Math.PI / 2); g.translate(bx * u, y + 0.08 * v, 0); parts.push({ g, c, n }); };
+    ring(-0.02, 0.168 * mass * v, 0.05 * v, C.skin, 'abdomen-band');
+    ellipsoid(parts, -0.4 * u, y + 0.08 * v, 0, 0.075 * u, 0.15 * mass * v, 0.14 * mass * v, C.glass, 'white-tail', p.seg);
+    ellipsoid(parts, 0.19 * u, y + 0.09 * v, 0, 0.20 * u, 0.20 * v, 0.20 * v, C.dark, 'fuzzy-thorax', p.seg);
+    ring(0.29, 0.135 * v, 0.055 * v, C.skin, 'collar');
     ellipsoid(parts, 0.38 * u, y + 0.075 * v, 0, 0.12 * v, 0.11 * v, 0.12 * v, C.dark, 'head', 10);
     for (const s of [-1, 1]) {
       ellipsoid(parts, 0.38 * u + 0.05 * v, y + 0.085 * v, s * 0.095 * v, 0.045 * v, 0.058 * v, 0.032 * v, C.dark, 'compound-eye-' + s, 10);
@@ -974,14 +977,17 @@ function arthropod(parts, glass, p, C, config) {
         sweep(parts, [[lx, y - 0.02 * v, s * 0.09 * v], [lx - 0.05 * v, y * 0.55, s * 0.19 * v], [lx - 0.02 * v, 0.014 * v, s * 0.25 * v]], [0.020 * v, 0.013 * v, 0.004 * v], i % 2 ? C.accent : C.skin, `walking-leg-${s}-${i + 1}`, { steps: 8, radial: 5 });
         continue;
       }
-      sweep(parts, [[x, y, s * (crab ? 0.26 : 0.11) * mass * v], [x + drift * 0.7, y + (spider ? 0.13 : 0.035) * v, s * reach * 0.61], [x + drift, 0.11 * v, s * reach], [x + drift * 1.25, 0.016 * v, s * reach * 1.12]], [0.042 * v, 0.033 * v, 0.021 * v, 0.002 * v], i % 2 ? C.accent : C.skin, `walking-leg-${s}-${i + 1}`, { steps: 10, radial: 6 });
+      sweep(parts, [[x, y, s * (crab ? 0.26 : 0.11) * mass * v], [x + drift * 0.7, y + (spider ? 0.13 : 0.035) * v, s * reach * 0.61], [x + drift, 0.11 * v, s * reach], [x + drift * 1.25, 0.016 * v, s * reach * 1.12]], [0.042 * v, 0.033 * v, 0.021 * v, 0.002 * v], lady ? C.dark : i % 2 ? C.accent : C.skin, `walking-leg-${s}-${i + 1}`, { steps: 10, radial: 6 }); // Digital Diorama revision: a ladybird's legs are black
     }
     if ((crab && !horseshoe) || scorpion || lobster) {
       const z = s * (lobster ? 0.22 : 0.48) * v;
       if (lobster) {
-        sweep(parts, [[0.15 * u, y - 0.02 * v, s * 0.15 * v], [0.30 * u, y + 0.04 * v, s * 0.28 * v], [0.45 * u, y + 0.08 * v, s * 0.20 * v]], [0.03 * v, 0.04 * v, 0.06 * v], C.accent, 'cheliped-arm-' + s, { steps: 8, radial: 6 });
-        ellipsoid(parts, 0.45 * u + 0.07 * v, y + 0.09 * v, s * 0.18 * v, 0.14 * v, 0.07 * v, 0.10 * v, C.skin, 'claw-palm-' + s, 10);
-        for (const jaw of [-1, 1]) sweep(parts, [[0.45 * u + 0.15 * v, y + 0.09 * v, s * (0.18 + jaw * 0.04) * v], [0.45 * u + 0.27 * v, y + 0.09 * v, s * (0.18 + jaw * 0.05) * v], [0.45 * u + 0.35 * v, y + 0.09 * v, s * (0.18 + jaw * 0.01) * v]], [0.04 * v, 0.02 * v, 0.002 * v], C.detail, `claw-finger-${s}-${jaw}`, { steps: 6, radial: 5 });
+        // Digital Diorama revision: an American lobster's claws are massive (a heavy crusher and a slimmer
+        // cutter, each about a third of the body long); they were small pincers
+        const k = s > 0 ? 1.15 : 0.9;
+        sweep(parts, [[0.15 * u, y - 0.02 * v, s * 0.15 * v], [0.30 * u, y + 0.04 * v, s * 0.28 * v], [0.45 * u, y + 0.08 * v, s * 0.22 * v]], [0.04 * v, 0.055 * v, 0.07 * v], C.accent, 'cheliped-arm-' + s, { steps: 8, radial: 7 });
+        ellipsoid(parts, 0.45 * u + 0.13 * v, y + 0.09 * v, s * 0.22 * v, 0.2 * v * k, 0.085 * v * k, 0.12 * v * k, C.skin, 'claw-palm-' + s, 12);
+        for (const jaw of [-1, 1]) sweep(parts, [[0.45 * u + 0.28 * v * k, y + 0.09 * v, s * (0.22 + jaw * 0.045 * k) * v], [0.45 * u + 0.44 * v * k, y + 0.09 * v, s * (0.22 + jaw * 0.05 * k) * v], [0.45 * u + 0.56 * v * k, y + 0.09 * v, s * (0.22 + jaw * 0.012) * v]], [0.055 * v * k, 0.03 * v * k, 0.003 * v], C.detail, `claw-finger-${s}-${jaw}`, { steps: 7, radial: 6 });
         sweep(parts, [[0.28 * u, y + 0.05 * v, s * 0.06 * v], [0.28 * u + 0.22 * v, y + 0.2 * v, s * 0.18 * v], [0.28 * u + 0.52 * v, y + 0.4 * v, s * 0.3 * v], [0.28 * u + 0.82 * v, y + 0.3 * v, s * 0.5 * v]], [0.012 * v, 0.008 * v, 0.004 * v, 0.001 * v], C.dark, 'antenna-' + s, { steps: 12, radial: 4 });
       } else {
         sweep(parts, [[0.2 * u, y, s * 0.20 * mass * v], [0.44 * u, y + 0.06 * v, s * 0.4 * v], [0.64 * u, y + 0.12 * v, z]], [0.061 * v, 0.052 * v, 0.065 * v], C.accent, 'pincer-arm-' + s, { steps: 10, radial: 8 });
@@ -1159,14 +1165,25 @@ function sponge(parts, glass, p, C, config) {
     for (let i = 0; i < density; i++) for (const sign of [-1, 1]) { const points = []; for (let j = 0; j <= 24; j++) { const t = j / 24, a = (i / density + sign * t * 0.5) * Math.PI * 2, r = radiusAt(t); points.push([Math.cos(a) * r, (0.04 + t * 0.94) * u, Math.sin(a) * r]); } sweep(parts, points, [0.006 * u, 0.006 * u], i % 2 ? C.skin : C.underside, `silica-strut-${i}-${sign}`, { steps: 24, radial: 5 }); }
     for (let j = 0; j <= 10; j++) { const t = j / 10, geo = new THREE.TorusGeometry(radiusAt(t), 0.007 * u, 5, density * 2); geo.rotateX(Math.PI / 2); geo.translate(0, (0.04 + t * 0.94) * u, 0); parts.push({ g: geo, c: C.skin, n: 'lattice-ring-' + j }); }
   } else {
-    const rows = 10, point = (row, i, inner = false) => { const y = row / rows, a = i / density * Math.PI * 2, r = radiusAt(y) - (inner ? 0.06 * u : 0); return [Math.cos(a) * r, (0.025 + y * 0.90) * u, Math.sin(a) * r]; };
-    for (let row = 0; row < rows; row++) for (let i = 0; i < density; i++) {
-      if (row > 0 && row < 9 && (i * 3 + row * 7) % 8 === 0) continue;
-      addQuad(parts, point(row, i), point(row + 1, i), point(row + 1, i + 1), point(row, i + 1), (i + row) % 4 ? C.skin : C.accent, `outer-wall-${row}-${i}`);
-      addQuad(parts, point(row, i, true), point(row, i + 1, true), point(row + 1, i + 1, true), point(row + 1, i, true), C.accent, `inner-wall-${row}-${i}`);
-      for (const edge of [[[row, i], [row + 1, i]], [[row + 1, i], [row + 1, i + 1]], [[row + 1, i + 1], [row, i + 1]], [[row, i + 1], [row, i]]]) addQuad(parts, point(...edge[0]), point(...edge[1]), point(...edge[1], true), point(...edge[0], true), C.detail, `pore-edge-${row}-${i}`);
-    }
-    const rim = new THREE.TorusGeometry(radiusAt(1) - 0.03 * u, 0.03 * u, Math.max(5, Math.round(p.seg / 2)), density * 2 + p.seg); rim.rotateX(Math.PI / 2); rim.translate(0, 0.925 * u, 0); parts.push({ g: rim, c: C.detail, n: 'osculum-rim' });
+    // Digital Diorama revision: a thick-walled vase whose outer wall is folded into deep vertical ridges with a
+    // knobbly surface, open only at the top (the osculum). It was flat quads with some left out as "pores",
+    // which read as a wooden barrel with windows.
+    const N = 72, R = 22, ridges = 14, wall = 0.055 * u, top = 0.925 * u;
+    const lathe = (fn, name, color, flip = false) => {
+      const vertices = [], indices = [];
+      for (let r = 0; r <= R; r++) for (let i = 0; i <= N; i++) vertices.push(...fn(r / R, (i / N) * Math.PI * 2));
+      for (let r = 0; r < R; r++) for (let i = 0; i < N; i++) {
+        const a = r * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1;
+        if (flip) indices.push(a, c, b, b, c, d); else indices.push(a, b, c, b, d, c);
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); g.setIndex(indices);
+      parts.push({ g, c: color, n: name });
+    };
+    const ridge = (t, a) => 0.13 * Math.pow(Math.abs(Math.sin(a * ridges / 2 + t * 0.6)), 0.55) * (0.35 + 0.65 * t)
+      + 0.035 * Math.sin(a * 41 + t * 29) * Math.sin(t * 53 + a * 7);
+    lathe((t, a) => { const r = radiusAt(t) * (1 + ridge(t, a)); return [Math.cos(a) * r, (0.025 + t * 0.9) * u, Math.sin(a) * r]; }, 'outer-wall', C.skin);
+    lathe((t, a) => { const r = Math.max(0.02 * u, radiusAt(t) - wall); return [Math.cos(a) * r, (0.06 + t * 0.865) * u, Math.sin(a) * r]; }, 'inner-wall', C.accent, true);
+    lathe((t, a) => { const r = THREE.MathUtils.lerp(radiusAt(1) * (1 + ridge(1, a)), radiusAt(1) - wall, t); return [Math.cos(a) * r, top + Math.sin(Math.PI * t) * 0.012 * u, Math.sin(a) * r]; }, 'osculum-rim', C.detail);
     addCylinder(parts, radiusAt(0) * 0.9, radiusAt(0), 0.04 * u, density, 0, 0.024 * u, 0, 0, 0, 0, C.accent, 'base');
   }
 }
@@ -1249,11 +1266,14 @@ function colony(parts, glass, p, C, config) {
   if (b === 'coral') {
     const branch = (start, end, radius, depth, index) => {
       const mid = new THREE.Vector3(...start).lerp(new THREE.Vector3(...end), 0.5); mid.x += radius * 0.3;
-      sweep(parts, [start, mid.toArray(), end], [radius, radius * 0.8, radius * 0.45], depth % 2 ? C.skin : C.accent, 'branch-' + index, { steps: 8, radial: Math.max(6, Math.round(p.seg * 0.6)) });
-      if (depth <= 0) { ellipsoid(parts, ...end, radius * 0.58, radius * 0.7, radius * 0.58, C.underside, 'growing-tip-' + index, 8); return; }
-      for (let j = 0; j < 3; j++) { const a = index * 1.37 + j * 2.1, length = (0.15 + depth * 0.07) * u; branch(end, [end[0] + Math.cos(a) * length * 0.68, end[1] + length, end[2] + Math.sin(a) * length * 0.68], radius * 0.62, depth - 1, index * 3 + j + 1); }
+      // Digital Diorama revision: staghorn branches stay thick and nearly cylindrical, one tan-brown with pale
+      // growing tips (they tapered to hair-thin twigs in two alternating colours)
+      sweep(parts, [start, mid.toArray(), end], [radius, radius * 0.95, radius * 0.85], C.skin, 'branch-' + index, { steps: 8, radial: Math.max(6, Math.round(p.seg * 0.6)) });
+      if (depth <= 0) { ellipsoid(parts, ...end, radius * 0.86, radius * 1.1, radius * 0.86, C.underside, 'growing-tip-' + index, 8); return; }
+      const n = depth >= 2 ? 3 : 2;
+      for (let j = 0; j < n; j++) { const a = index * 1.37 + j * (Math.PI * 2 / n) + depth, length = (0.13 + depth * 0.05) * u, out = depth === 3 ? 0.9 : 0.55; branch(end, [end[0] + Math.cos(a) * length * out, end[1] + length * (depth === 3 ? 0.55 : 0.85), end[2] + Math.sin(a) * length * out], radius * 0.86, depth - 1, index * 3 + j + 1); }
     };
-    branch([0, 0.02 * u, 0], [0.025 * u, 0.25 * u, 0], 0.071 * mass * u, 3, 0);
+    branch([0, 0.02 * u, 0], [0.025 * u, 0.16 * u, 0], 0.05 * mass * u, 3, 0);
     ellipsoid(parts, 0, 0.02 * u, 0, 0.16 * u, 0.034 * u, 0.14 * u, C.accent, 'holdfast', 12);
     return;
   }
@@ -1275,7 +1295,8 @@ function colony(parts, glass, p, C, config) {
   ellipsoid(parts, 0, 0.025 * u, 0, 0.16 * mass * u, 0.025 * u, 0.14 * mass * u, C.detail, 'attachment-disk', 12);
 }
 
-function bivalve(parts, glass, p, C) {
+function bivalve(parts, glass, p, C, config) {
+  if (config && config.id === 'giant-clam') return giantClam(parts, p, C);
   const u = p.bodyLength, mass = p.bodyMass, opening = p.valveOpening;
   for (const upper of [false, true]) {
     const extra = upper ? { rig: 'valve', pivot: [-0.39 * u, 0.17 * u, 0] } : {}, list = [], rings = Math.max(5, Math.round(p.seg * 0.6)), slices = p.seg * 2;
@@ -1286,6 +1307,52 @@ function bivalve(parts, glass, p, C) {
   }
   sweep(parts, [[-0.3 * u, 0.17 * u, 0], [-0.53 * u, 0.11 * u, 0], [-0.57 * u, 0.03 * u, 0]], [0.038 * u, 0.029 * u, 0.021 * u], C.accent, 'pedicle', { steps: 10, radial: 8 });
   for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; sweep(parts, [[0.02 * u, 0.17 * u, 0], [Math.cos(a) * 0.14 * u, 0.19 * u, Math.sin(a) * 0.13 * u], [Math.cos(a) * 0.23 * u, (0.19 + opening * 0.09) * u, Math.sin(a) * 0.20 * u]], [0.007 * u, 0.005 * u, 0.001 * u], C.underside, 'lophophore-' + i, { steps: 8, radial: 5 }); }
+}
+
+/**
+ * Giant clam (Digital Diorama revision). Tridacna sits hinge-down in the reef with its two heavy valves gaping
+ * upward; their rims are thrown into 4-6 big wavy folds with scalloped ribs, and the gape is filled by the
+ * fleshy mantle, mottled teal, blue and gold. (It was drawn as a lamp shell: a flat lid on a stalk.)
+ */
+function giantClam(parts, p, C) {
+  const u = p.bodyLength, mass = p.bodyMass, gape = 0.42 + 0.3 * p.valveOpening;
+  const L = 0.5 * u, Hh = 0.36 * u * mass, folds = 5, N = 64, R = 14;
+  const mantle = ['#2f7f86', '#3fa6a6', '#5d8fc9', '#b8a24a', '#253f5b'];
+  const valve = (side) => {
+    const vertices = [], colors = [], indices = [], col = new THREE.Color();
+    for (let r = 0; r <= R; r++) for (let i = 0; i <= N; i++) {
+      const t = r / R, a = (i / N) * Math.PI; // a: hinge end (0) round the rim to the other end (π)
+      const wave = Math.sin(a * folds * 2) * 0.12 * t * t;
+      const rad = (0.15 + 0.85 * Math.sqrt(t));
+      const x = -Math.cos(a) * L * rad, y = Math.sin(a) * Hh * rad * (1 + wave) + 0.02 * u;
+      const z = side * (t * gape * Hh + (1 - t) * 0.03 * u + Math.sin(a) * Math.sin(Math.PI * t) * 0.32 * Hh) + side * wave * Hh * 0.6;
+      vertices.push(x, y, z);
+      const rib = Math.abs(Math.sin(a * folds * 4)) > 0.85;
+      col.set(rib ? C.detail : C.skin).lerp(new THREE.Color(C.underside), t * 0.25);
+      colors.push(col.r, col.g, col.b);
+    }
+    for (let r = 0; r < R; r++) for (let i = 0; i < N; i++) {
+      const a = r * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1;
+      if (side > 0) indices.push(a, b, c, b, d, c); else indices.push(a, c, b, b, c, d);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); g.setIndex(indices);
+    parts.push({ g, c: C.skin, n: 'valve-' + (side > 0 ? 'L' : 'R'), vc: true });
+  };
+  valve(1); valve(-1);
+  // mantle: a fleshy, wavy surface filling the gape, mottled in bands
+  const vertices = [], colors = [], indices = [], col = new THREE.Color(), M = 10;
+  for (let r = 0; r <= M; r++) for (let i = 0; i <= N; i++) {
+    const t = r / M, a = (i / N) * Math.PI, z = (t * 2 - 1) * gape * Hh * 0.95;
+    const wave = Math.sin(a * folds * 2) * 0.12;
+    const x = -Math.cos(a) * L * 0.97, y = Math.sin(a) * Hh * 0.97 * (1 + wave * (1 - Math.abs(2 * t - 1) * 0.5)) + 0.02 * u + Math.sin(Math.PI * t) * 0.03 * u;
+    vertices.push(x, y, z);
+    const n = Math.sin(a * 23 + t * 9) * 0.5 + Math.sin(a * 7 - t * 13) * 0.5;
+    const k = Math.abs(2 * t - 1) > 0.82 ? 4 : Math.floor(((n + 1) / 2) * 3.999);
+    col.set(mantle[k]); colors.push(col.r, col.g, col.b);
+  }
+  for (let r = 0; r < M; r++) for (let i = 0; i < N; i++) { const a = r * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1; indices.push(a, c, b, b, c, d); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); g.setIndex(indices);
+  parts.push({ g, c: C.accent, n: 'mantle', vc: true });
 }
 
 function microscopic(parts, glass, p, C, config) {
