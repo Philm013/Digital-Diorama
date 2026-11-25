@@ -55,6 +55,16 @@ export function findShown(tour: string): HTMLElement | null {
 /** a target as the coach uses it: `force` shows its hint even as the first choice (switch modes first) */
 type Aim = Target & { force?: boolean; mode?: Mode };
 const box = (r: DOMRect): Box => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
+/** the part of `a` inside `b` (null when they don't meet) */
+function inside(a: Box, b: DOMRect): Box | null {
+  const left = Math.max(a.left, b.left), top = Math.max(a.top, b.top), right = Math.min(a.right, b.right), bottom = Math.min(a.bottom, b.bottom);
+  return right > left && bottom > top ? { left, top, right, bottom, width: right - left, height: bottom - top } : null;
+}
+/** the title bar of the panel on top, when one is open (phones and tablets) */
+function openPanelHead(): HTMLElement | null {
+  const open = [...document.querySelectorAll<HTMLElement>('[data-sheet]')].filter((d) => d.getAttribute('aria-hidden') !== 'true' && d.offsetHeight > 0 && !d.closest('[data-coach]'));
+  return open.pop()?.querySelector<HTMLElement>('[data-sheet-head]') ?? null;
+}
 
 /**
  * A card that points at a control: a glowing ring around it (dimming the rest when asked), the
@@ -96,7 +106,10 @@ function Spotlight({ engine, aims, ctx, gesture, gestureAt, dim, success, wide, 
       const key = found ? `${found.aim.tour}|${way}` : '';
       if (key !== lastAim) { lastAim = key; p.onAim?.(found ? { ...found.aim, hint: way ? found.aim.hint : undefined } : null); }
       const area = found?.aim.tour === 'viewport';
-      const r = found ? found.el.getBoundingClientRect() : null;
+      let r: Box | null = found ? box(found.el.getBoundingClientRect()) : null;
+      // a control in a panel: only the part of it the panel shows (a long list runs on below the tab bar)
+      const body = found?.el.closest('[data-panel-body]');
+      if (r && body) r = inside(r, body.getBoundingClientRect()) ?? r;
       // the ring
       const rg = ring.current;
       if (rg) {
@@ -115,8 +128,20 @@ function Spotlight({ engine, aims, ctx, gesture, gestureAt, dim, success, wide, 
       if (!cd) return;
       const bar = document.querySelector('.dd-topbar');
       const barRect = bar ? bar.getBoundingClientRect() : null;
-      const top = barRect && barRect.height > 0 && barRect.bottom > 0 ? barRect.bottom : 0;
-      const pl = placeCard(r ? box(r) : null, cd.offsetWidth, cd.offsetHeight, innerWidth, innerHeight, top, p.wide, area);
+      let top = barRect && barRect.height > 0 && barRect.bottom > 0 ? barRect.bottom : 0;
+      let bottom = innerHeight;
+      let near = r;
+      // phones and tablets: an open panel keeps its title bar (with its ✕) and the tab bar clear of
+      // the card, which fits in between — just under the title bar when the control is above the panel
+      const head = p.wide ? null : openPanelHead();
+      if (head) {
+        const hb = head.getBoundingClientRect();
+        top = Math.max(top, hb.bottom);
+        const nav = document.querySelector('nav[aria-label="Modes"]')?.getBoundingClientRect();
+        if (nav && nav.height > 0) bottom = Math.min(bottom, nav.top);
+        if (near && near.bottom <= hb.top + 1) near = null;
+      }
+      const pl = placeCard(near, cd.offsetWidth, cd.offsetHeight, innerWidth, bottom, top, p.wide, area);
       const tf = `translate(${Math.round(pl.x)}px, ${Math.round(pl.y)}px)`;
       if (cd.style.transform !== tf) cd.style.transform = tf;
       cd.dataset.side = pl.side ?? '';
@@ -514,8 +539,8 @@ function Finished({ lesson, first, onClose, onNext, onHub }: { lesson: Lesson; f
     return () => window.removeEventListener('keydown', k);
   }, [onClose]);
   return (
-    <div data-coach className="dd-modal-bg fixed inset-0 z-[87] grid place-items-center bg-black/45 p-3 backdrop-blur-[2px]" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="dd-lesson-done">
-      <div className="dd-card-dark dd-pop flex max-h-[calc(100dvh-24px)] w-[min(94vw,420px)] flex-col overflow-hidden rounded-[30px] text-center text-white" onClick={(e) => e.stopPropagation()}>
+    <div data-coach className="dd-modal-bg fixed inset-0 z-[87] flex items-center justify-center bg-black/45 p-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-[max(env(safe-area-inset-top),12px)] backdrop-blur-[2px]" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="dd-lesson-done">
+      <div className="dd-card-dark dd-pop flex max-h-full w-[min(94vw,420px)] flex-col overflow-hidden rounded-[30px] text-center text-white" onClick={(e) => e.stopPropagation()}>
         <div className="min-h-0 overflow-y-auto overscroll-contain px-5 pt-5">
           <div className="font-display text-[12px] font-bold uppercase tracking-[0.18em] text-amber-300">Lesson complete!</div>
           <div className="dd-bob mx-auto mt-3 grid h-16 w-16 place-items-center rounded-[22px] bg-white/10 text-[38px] leading-none">{lesson.emoji}</div>

@@ -5,6 +5,7 @@ import { playSound, audio } from '../../code/sound';
 import { FEATURES, STAGES, type Stage } from '../../game/unlocks';
 import { BIOME_BY_ID } from '../../biomes/templates';
 import { FEATURE_LESSON, LESSON_BY_ID } from '../../learn/lessons';
+import { useLayout } from '../shell';
 
 /* ---------------- confetti ---------------- */
 let fire: ((x: number, y: number, n?: number) => void) | null = null;
@@ -70,6 +71,9 @@ export function Celebrations({ sound, onLearn }: { sound: boolean; /** start a l
   const [opened, setOpened] = useState<Stage | null>(null);
   const soundRef = useRef(sound);
   soundRef.current = sound;
+  // phones and tablets: an open panel's title bar (with its ✕) sits just under the top bar, so
+  // banners and XP pop up over the top bar instead, smaller, and never in the way of closing it
+  const { wide } = useLayout();
   useEffect(() => onProgress((e: ProgressEvent) => {
     const key = Date.now() + Math.random();
     if (e.type === 'xp') {
@@ -116,17 +120,17 @@ export function Celebrations({ sound, onLearn }: { sound: boolean; /** start a l
   return (
     <>
       <ConfettiCanvas />
-      <div className="pointer-events-none fixed right-3 top-[calc(4rem+env(safe-area-inset-top))] z-[75] flex flex-col items-end gap-1 sm:right-5">
+      <div className={clsx('pointer-events-none fixed right-3 z-[75] flex flex-col items-end gap-1 sm:right-5', wide ? 'top-[calc(4rem+env(safe-area-inset-top))]' : 'top-[calc(0.5rem+env(safe-area-inset-top))]')}>
         {floaters.map((f) => <div key={f.key} className="dd-xp-floater rounded-full px-2.5 py-0.5 font-display text-sm font-bold">{f.text}</div>)}
       </div>
       {opened && <Unlocked stage={opened} onClose={() => setOpened(null)} onLearn={onLearn ? (id) => { setOpened(null); onLearn(id); } : undefined} />}
       {current && (
-        <div className="pointer-events-none fixed inset-x-0 top-[calc(70px+env(safe-area-inset-top))] z-[78] flex justify-center px-3">
-          <div key={current.key} onClick={() => setCurrent(null)} className={clsx('dd-banner pointer-events-auto flex max-w-[min(94vw,460px)] cursor-pointer items-center gap-3 rounded-[22px] py-2.5 pl-2.5 pr-5', current.kind === 'badge' || current.kind === 'level' ? 'dd-banner-big' : '')} style={{ ['--b' as string]: current.color }}>
-            <div className="dd-medal grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-3xl">{current.emoji}</div>
+        <div className={clsx('pointer-events-none fixed inset-x-0 z-[78] flex justify-center px-3', wide ? 'top-[calc(70px+env(safe-area-inset-top))]' : 'top-[calc(4px+env(safe-area-inset-top))]')}>
+          <div key={current.key} onClick={() => setCurrent(null)} className={clsx('dd-banner pointer-events-auto flex max-w-[min(94vw,460px)] cursor-pointer items-center gap-3 rounded-[22px] pl-2.5 pr-5', wide ? 'py-2.5' : 'py-2', current.kind === 'badge' || current.kind === 'level' ? 'dd-banner-big' : '')} style={{ ['--b' as string]: current.color }}>
+            <div className={clsx('dd-medal grid shrink-0 place-items-center rounded-2xl', wide ? 'h-14 w-14 text-3xl' : 'h-11 w-11 text-[26px]')}>{current.emoji}</div>
             <div className="min-w-0">
               <div className="font-display text-[11px] font-bold uppercase tracking-[0.12em] text-white/75">{current.title}</div>
-              <div className="font-display text-lg font-semibold leading-tight text-white">{current.sub}</div>
+              <div className={clsx('font-display font-semibold leading-tight text-white', wide ? 'text-lg' : 'line-clamp-2 text-[15px]')}>{current.sub}</div>
             </div>
           </div>
         </div>
@@ -139,8 +143,9 @@ export function Celebrations({ sound, onLearn }: { sound: boolean; /** start a l
 function Unlocked({ stage, onClose, onLearn }: { stage: Stage; onClose: () => void; onLearn?: (lessonId: string) => void }) {
   const habitats = stage.habitats.map((h) => BIOME_BY_ID[h]).filter(Boolean);
   return (
-    <div className="fixed inset-0 z-[81] grid place-items-center bg-black/50 p-3 backdrop-blur-[2px]" onClick={onClose} role="dialog" aria-modal="true" aria-label="New things unlocked">
-      <div className="dd-card-dark dd-pop flex max-h-[calc(100dvh-32px)] w-[min(94vw,480px)] flex-col rounded-[30px] p-5 text-center text-white" onClick={(e) => e.stopPropagation()}>
+    // (sized by the screen it covers, not viewport units: a flex item's max-h-full is that room)
+    <div className="fixed inset-0 z-[81] flex items-center justify-center bg-black/50 p-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-[max(env(safe-area-inset-top),12px)] backdrop-blur-[2px]" onClick={onClose} role="dialog" aria-modal="true" aria-label="New things unlocked">
+      <div className="dd-card-dark dd-pop flex max-h-full w-[min(94vw,480px)] flex-col rounded-[30px] p-5 text-center text-white" onClick={(e) => e.stopPropagation()}>
         <div className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">
         <div className="font-display text-[12px] font-bold uppercase tracking-[0.18em] text-amber-300">Expedition complete!</div>
         <div className="dd-bob mx-auto mt-3 grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-[26px] bg-white/10 text-5xl">{stage.emoji}</div>

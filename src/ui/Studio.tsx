@@ -7,7 +7,8 @@ import { ScriptRuntime } from '../code/runtime';
 import { Ambience, audio, playSound } from '../code/sound';
 import { exportProject, saveProject, makeThumb, downloadDataUrl, fileSafe, saveSettings, type Settings } from '../storage/projects';
 import { StudioContext, type StudioApi } from './store';
-import { IconBtn, Modal, Segmented, Toggle } from './common';
+import { IconBtn, Segmented, Toggle } from './common';
+import { Modal, PanelHost, closePanels } from './Modal';
 import { isTypingTarget } from './hooks';
 import { AppBar, TabBar, TopTabs, useLayout, type ShellTab } from './shell';
 import { Viewport } from './Viewport';
@@ -21,8 +22,6 @@ import { ContextBar } from './ContextBar';
 import { Celebrations } from './game/Celebrate';
 import { HealthChip, XpChip, QuestTracker, QuestLog, Stars, type QuestLearn } from './game/Hud';
 import { Journal, journalSummary } from './game/Journal';
-import { Tray, TrayHeader } from './Tray';
-import { useBackLayer } from './backStack';
 import { useGame, useProfile } from './game/useGame';
 import { awardBadge } from '../game/progress';
 import { flag } from '../game/ecology';
@@ -32,7 +31,7 @@ import { haptic, uiSound, setUiSound } from './feedback';
 import { Coach } from './learn/Coach';
 import { LearnHub } from './learn/LearnHub';
 import { startLesson, useLearn } from '../learn/store';
-import { LESSON_BY_ID, QUEST_LESSON, lessonOpen, nextLesson } from '../learn/lessons';
+import { LESSONS, LESSON_BY_ID, QUEST_LESSON, lessonOpen, nextLesson } from '../learn/lessons';
 import { learnSignal } from '../learn/signals';
 
 // the engine carries on a habitat's land (resizing, roaming) from its biome's recipe
@@ -41,6 +40,12 @@ Engine.recipeFor = (b) => BIOME_BY_ID[b]?.terrain;
 export interface Toast { id: number; text: string; kind: 'info' | 'error' | 'success' }
 interface MenuAction { icon: LucideIcon; label: string; hint?: string; run: () => void }
 type MenuEntry = MenuAction | 'sep';
+/**
+ * The studio's panels, one at a time: on phones and tablets each pulls out over the diorama
+ * between the top bar and the tab bar (both stay usable), on wide screens it is a dialog (the
+ * health score a popover, More a menu). Opening one puts away the one before.
+ */
+export type PanelId = 'more' | 'learn' | 'settings' | 'journal' | 'quests' | 'health' | 'web' | 'guide';
 
 const MODES = [['explore', 'Explore', Compass], ['build', 'Build', Hammer], ['code', 'Code', Blocks]] as const;
 const MODE_TABS: ShellTab<Mode>[] = MODES.map(([id, label, icon], k) => ({ id, label, icon, title: `${label} (${k + 1})` }));
@@ -53,21 +58,21 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState<{ done: number; total: number; label: string } | null>({ done: 0, total: 1, label: 'Opening the box…' });
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [menu, setMenu] = useState(false);
-  /** Learn & help: Ranger training's lessons and the reference */
-  const [hub, setHub] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [journal, setJournal] = useState(false);
-  const [questLog, setQuestLog] = useState(false);
+  /** the open panel (Learn & help is Ranger training's lessons and the reference) */
+  const [panel, setPanel] = useState<PanelId | null>(null);
+  /** the food web opened on one organism */
+  const [webAt, setWebAt] = useState<string | null>(null);
+  const openPanel = useCallback((p: PanelId, at?: string) => { if (p === 'web') setWebAt(at ?? null); setPanel(p); }, []);
+  /** (only if it is still the open one: a panel handing over to another closes itself as the next opens) */
+  const closePanel = useCallback((p: PanelId) => setPanel((cur) => (cur === p ? null : cur)), []);
+  const togglePanel = useCallback((p: PanelId) => setPanel((cur) => (cur === p ? null : p)), []);
+  const [hostEl, setHostEl] = useState<HTMLElement | null>(null);
   const [title, setTitle] = useState(doc.title);
   const [, force] = useState(0);
   const [libOpen, setLibOpen] = useState(true);
   const [inspOpen, setInspOpen] = useState(true);
   // phones on their side (landscape): the build/code panel moves beside the viewer and the mode tabs into the top bar
   const { wide, landscape, phone } = useLayout();
-  /** phones upright: the Journal is a tab of its own and a tray rather than a dialog */
-  const journalTray = phone;
-  const journalOnTop = useBackLayer(journal && journalTray, () => setJournal(false));
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   useEffect(() => { setUiSound(settings.sound); }, [settings.sound]);
@@ -139,7 +144,9 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
     if (engine.walk?.active) engine.walk.exit();
     engine.setMode(m);
     setModeState(m);
-    setMenu(false);
+    // another mode leaves any panel (and anything opened from one)
+    closePanels();
+    setPanel(null);
     uiSound('tab');
     haptic(6);
     // panels change the viewport shape: re-frame once the layout has settled
@@ -242,15 +249,15 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
       }
       else if (e.key.toLowerCase() === 'l' && !mod) engine.setEnv({ labels: !engine.env.labels }, false);
       else if (e.key.toLowerCase() === 'o' && !mod) { engine.frameCamera(); learnSignal('overview'); }
-      else if (e.key.toLowerCase() === 'h' && !mod) setHub((v) => !v);
-      else if (e.key.toLowerCase() === 'j' && !mod) setJournal((v) => !v);
-      else if (e.key.toLowerCase() === 'q' && !mod && mode !== 'code') setQuestLog((v) => !v);
+      else if (e.key.toLowerCase() === 'h' && !mod) togglePanel('learn');
+      else if (e.key.toLowerCase() === 'j' && !mod) togglePanel('journal');
+      else if (e.key.toLowerCase() === 'q' && !mod && mode !== 'code') togglePanel('quests');
     };
     const up = (e: KeyboardEvent) => runtime.key(e.key === ' ' ? ' ' : e.key, false);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
-  }, [engine, runtime, mode, saveNow, setMode]);
+  }, [engine, runtime, mode, saveNow, setMode, togglePanel]);
 
   const biome = BIOME_BY_ID[doc.biome];
   // dialogs are drawn at the top of the page, outside the studio: they find the habitat's colour on the root
@@ -278,12 +285,13 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   const learnable = useCallback((questId: string): QuestLearn => {
     const l = LESSON_BY_ID[QUEST_LESSON[questId] ?? ''];
     if (!l || !lessonOpen(l, profile) || learn.active?.id === l.id) return undefined;
-    return () => { uiSound('pop'); setQuestLog(false); startLesson(l.id); };
-  }, [profile, learn.active]);
+    return () => { uiSound('pop'); closePanel('quests'); startLesson(l.id); };
+  }, [profile, learn.active, closePanel]);
+  const lessonsDone = LESSONS.filter((l) => learn.done.includes(l.id)).length;
   const menuItems: MenuEntry[] = !engine ? [] : [
-    { icon: GraduationCap, label: 'Learn & help', hint: 'H', run: () => setHub(true) },
-    { icon: BookOpen, label: 'Field journal', hint: 'J', run: () => setJournal(true) },
-    { icon: Trophy, label: 'Quests', hint: 'Q', run: () => setQuestLog(true) },
+    { icon: GraduationCap, label: 'Learn & help', hint: 'H', run: () => openPanel('learn') },
+    { icon: BookOpen, label: 'Field journal', hint: 'J', run: () => openPanel('journal') },
+    { icon: Trophy, label: 'Quests', hint: 'Q', run: () => openPanel('quests') },
     'sep',
     { icon: Save, label: 'Save now', hint: 'Ctrl+S', run: () => void saveNow() },
     { icon: Download, label: 'Download project file', run: () => exportProject(engine.serialize()) },
@@ -291,10 +299,12 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
     { icon: Camera, label: 'Reset camera', hint: 'O', run: () => { engine.frameCamera(); learnSignal('overview'); } },
     ...(document.fullscreenEnabled ? [{ icon: Maximize, label: document.fullscreenElement ? 'Exit full screen' : 'Full screen', run: () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.().catch(() => {}); } }] : []),
     { icon: api?.ambience.enabled ? VolumeX : Volume2, label: api?.ambience.enabled ? 'Turn off nature sounds' : 'Play nature sounds', run: () => { audio(); if (api?.ambience.enabled) api.ambience.stop(); else api?.ambience.start(); force((x) => x + 1); } },
-    { icon: Settings2, label: 'Settings', run: () => setSettingsOpen(true) },
+    { icon: Settings2, label: 'Settings', run: () => openPanel('settings') },
   ];
 
   return (
+    // panels (and dialogs opened from them) pull out over the body, between the top bar and the tab bar
+    <PanelHost value={hostEl}>
     <div className="dd-studio flex h-full flex-col" style={{ ['--accent' as string]: biome?.accent ?? '#3f7d3a', ['--dd-safe-top' as string]: immersive ? 'env(safe-area-inset-top)' : '0px' }}>
       {/* ---------------- top bar ---------------- */}
       <AppBar tall={wide} hidden={immersive}>
@@ -311,7 +321,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
               aria-label="Diorama title"
               data-tour="title"
             />
-            <button onClick={() => setQuestLog(true)} className="flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap px-1.5 text-[11px] font-bold text-white/55 hover:text-white/85" title="Quests (Q)" data-tour="quests-link">
+            <button onClick={() => togglePanel('quests')} aria-expanded={panel === 'quests'} className="flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap px-1.5 text-[11px] font-bold text-white/55 hover:text-white/85" title="Quests (Q)" data-tour="quests-link">
               <Stars n={game.stars} size={10} /> <span className="tabular-nums">{game.done}/{game.quests.length || 16} quests</span>
             </button>
           </div>
@@ -319,19 +329,19 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         {!phone && <TopTabs tabs={modeTabs} active={mode} onSelect={setMode} compact={landscape} tour="modes" />}
         {!phone && <div className="flex-1" />}
         {engine && mode === 'build' && wide && <UndoRedo engine={engine} />}
-        {engine && !loading && <HealthChip game={game} compact={!wide} sheet={!wide} />}
+        {engine && !loading && <HealthChip game={game} compact={!wide} sheet={!wide} open={panel === 'health'} onOpen={(v) => (v ? openPanel('health') : closePanel('health'))} />}
         {/* on phones the level is shown in the Journal instead, leaving room for the title */}
-        {!phone && <XpChip profile={profile} compact={!wide} onClick={() => setJournal(true)} />}
-        <LearnButton active={hub} onClick={() => { uiSound('open'); setHub(true); }} labelled={wide} />
+        {!phone && <XpChip profile={profile} compact={!wide} onClick={() => openPanel('journal')} />}
+        <LearnButton active={panel === 'learn'} onClick={() => { if (panel !== 'learn') uiSound('open'); togglePanel('learn'); }} labelled={wide} />
         {(!codeLocked || playing || hasScripts) && <button onClick={togglePlay} data-tour="play" className={clsx('dd-3d flex h-11 min-w-[48px] shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3.5 font-display text-[15px] font-bold text-white', playing ? 'bg-[#e8453c] [--edge:#a5241e]' : 'bg-[#3bb34a] [--edge:#23802f]')} title={playing ? 'Stop and reset (Esc)' : 'Run all code'}>
           {playing ? <Square size={16} fill="currentColor" /> : <Play size={17} fill="currentColor" />}
           <span className="hidden sm:inline">{playing ? 'Stop' : 'Play'}</span>
         </button>}
         <div className="relative">
-          <IconBtn label="More" onClick={() => setMenu((v) => !v)} className="text-white hover:bg-white/10" aria-expanded={menu} data-tour="more"><MoreHorizontal size={21} /></IconBtn>
-          {menu && wide && engine && (
-            <div className="dd-glass dd-pop absolute right-0 top-12 z-50 w-64 rounded-3xl p-2 text-sm text-white" onMouseLeave={() => setMenu(false)}>
-              {menuItems.map((it, i) => it === 'sep' ? <div key={i} className="my-1 h-px bg-white/10" /> : <MenuItem key={it.label} icon={<it.icon size={16} />} label={it.label} hint={it.hint} onClick={() => { setMenu(false); it.run(); }} />)}
+          <IconBtn label="More" onClick={() => togglePanel('more')} className="text-white hover:bg-white/10" aria-expanded={panel === 'more'} data-tour="more"><MoreHorizontal size={21} /></IconBtn>
+          {panel === 'more' && wide && engine && (
+            <div className="dd-glass dd-pop absolute right-0 top-12 z-50 w-64 rounded-3xl p-2 text-sm text-white" onMouseLeave={() => closePanel('more')}>
+              {menuItems.map((it, i) => it === 'sep' ? <div key={i} className="my-1 h-px bg-white/10" /> : <MenuItem key={it.label} icon={<it.icon size={16} />} label={it.label} hint={it.hint} onClick={() => { closePanel('more'); it.run(); }} />)}
             </div>
           )}
         </div>
@@ -350,11 +360,11 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
           {ctx && (
             <StudioContext.Provider value={ctx}>
               <Viewport mode={mode} playing={playing} toast={toast} />
-              {mode === 'explore' && <ExploreLayer wide={wide} landscape={landscape} playing={playing} onJournal={() => setJournal(true)} />}
+              {mode === 'explore' && <ExploreLayer wide={wide} landscape={landscape} playing={playing} panel={panel} webAt={webAt} onPanel={openPanel} onClosePanel={closePanel} />}
               {/* (on phones it makes way for the lesson card while a lesson runs) */}
               {!loading && mode !== 'code' && !(mode === 'build' && !wide) && !(mode === 'explore' && !wide && selected) && !engine?.walk?.active && !(lessonOn && !wide) && (
                 <div className={clsx('pointer-events-none absolute z-20', wide ? 'left-3 top-3' : 'left-2 top-2')}>
-                  <QuestTracker game={game} mobile={!wide || mode === 'build'} onOpen={() => setQuestLog(true)} learnable={learnable} />
+                  <QuestTracker game={game} mobile={!wide || mode === 'build'} onOpen={() => openPanel('quests')} learnable={learnable} />
                 </div>
               )}
               {wide && mode === 'build' && !libOpen && (
@@ -378,24 +388,20 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
             <MobileSheet mode={mode} index={sheetIdx} setIndex={setSheetIdx} side={landscape} showActions={showContext} onCode={goCode} />
           </StudioContext.Provider>
         )}
-        {/* phones: the Journal is a tab, so it pulls out over the diorama like the home screen's trays,
-            leaving the top bar and the tab bar in place (tap Explore, Build or Code to go back) */}
-        {journalTray && (
-          <Tray open={journal} onClose={() => setJournal(false)} isTop={journalOnTop} labelId="dd-journal-title" layer="z-[35]" className="top-2 [--tray-pb:16px]"
-            header={<TrayHeader id="dd-journal-title" onClose={() => setJournal(false)} icon="📖" accent="#c98a00" title="Field journal" subtitle={journalSummary(profile)} />}>
-            <div className="absolute inset-0 overflow-y-auto overscroll-contain px-3 pb-[var(--tray-pb)] pt-1"><Journal /></div>
-          </Tray>
-        )}
+        {/* where panels go on phones and tablets: they pull out over the diorama like the home
+            screen's trays, leaving the top bar and the tab bar in place (any tab leaves them) */}
+        <div ref={setHostEl} className="contents" />
       </div>
 
       {/* ---------------- phone tab bar ---------------- */}
       {phone && !immersive && (
-        <TabBar label="Modes" tour="modes" tabs={phoneTabs} active={journal ? 'journal' : mode} onSelect={(id) => {
-          // the Journal tab opens the journal and, tapped again, puts it away
-          if (id === 'journal') { uiSound(journal ? 'tab' : 'open'); haptic(6); setJournal((v) => !v); return; }
+        <TabBar label="Modes" tour="modes" tabs={phoneTabs} active={panel === 'journal' ? 'journal' : mode} onSelect={(id) => {
+          // the Journal tab opens the journal (in place of any other panel) and, tapped again, puts it away
+          if (id === 'journal') { uiSound(panel === 'journal' ? 'tab' : 'open'); haptic(6); closePanels(); setPanel(panel === 'journal' ? null : 'journal'); return; }
           if (id === 'code' && codeLocked) { showLocked('code'); return; }
-          // any other tab leaves the journal for that mode
-          setJournal(false);
+          // any other tab leaves whatever panel is open, for that mode
+          closePanels();
+          setPanel(null);
           if (id === mode) return;
           setMode(id);
           if (id !== 'explore') setSheetIdx(1);
@@ -407,22 +413,24 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
       {ctx && (
         <StudioContext.Provider value={ctx}>
           <Coach mode={mode} setMode={setMode} game={game} wide={wide} ready={!loading} tips={settings.tips} sound={settings.sound}
-            model={doc.kind === 'model'} biome={{ name: biome?.name ?? 'diorama', emoji: biome?.emoji ?? '📦' }} onOpenHub={() => setHub(true)} />
+            model={doc.kind === 'model'} biome={{ name: biome?.name ?? 'diorama', emoji: biome?.emoji ?? '📦' }} onOpenHub={() => openPanel('learn')} />
         </StudioContext.Provider>
       )}
 
       {/* ---------------- toasts ---------------- */}
-      <div className="pointer-events-none fixed left-1/2 top-[calc(72px+env(safe-area-inset-top))] z-50 flex w-[min(92vw,420px)] -translate-x-1/2 flex-col gap-2">
+      {/* (phones and tablets: over the top bar, since a panel's title bar and its ✕ sit right under it) */}
+      <div className={clsx('pointer-events-none fixed left-1/2 z-50 flex w-[min(92vw,420px)] -translate-x-1/2 flex-col gap-2', wide ? 'top-[calc(72px+env(safe-area-inset-top))]' : 'top-[calc(6px+env(safe-area-inset-top))]')}>
         {toasts.map((t) => (
           <div key={t.id} className={clsx('dd-toast rounded-2xl px-4 py-2.5 text-sm font-semibold shadow-lg', t.kind === 'error' ? 'bg-red-600 text-white' : t.kind === 'success' ? 'bg-leaf text-white' : 'dd-glass text-white')}>{t.text}</div>
         ))}
       </div>
 
-      {/* phones: the More menu is a sheet of big buttons from the bottom */}
-      <Modal open={menu && !wide && !!engine} onClose={() => setMenu(false)} title="More">
+      {/* ---------------- panels ---------------- */}
+      {/* phones and tablets: the More menu is a panel of big buttons (wide screens: a menu under ⋯) */}
+      <Modal open={panel === 'more' && !wide && !!engine} onClose={() => closePanel('more')} title="More">
         <div className="grid grid-cols-3 gap-2 pb-1 sm:grid-cols-5">
           {menuItems.filter((it): it is MenuAction => it !== 'sep').map((it) => (
-            <button key={it.label} onClick={() => { uiSound('tick'); setMenu(false); it.run(); }}
+            <button key={it.label} onClick={() => { uiSound('tick'); closePanel('more'); it.run(); }}
               className="flex min-h-[92px] flex-col items-center justify-center gap-1.5 rounded-2xl bg-black/[0.04] px-1.5 py-2.5 text-center font-display text-[12.5px] font-semibold leading-tight text-ink/80 transition active:scale-95 active:bg-black/10">
               <span className="grid h-10 w-10 place-items-center rounded-2xl bg-white text-ink/75 shadow-sm ring-1 ring-black/5"><it.icon size={20} /></span>
               {it.label}
@@ -430,16 +438,17 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
           ))}
         </div>
       </Modal>
-      <Modal open={hub} onClose={() => setHub(false)} title={<span className="flex items-center gap-2"><GraduationCap size={22} className="text-amber-600" /> Learn & help</span>} wide>
-        <LearnHub onStart={(id, step) => { setHub(false); startLesson(id, step); }} tips={settings.tips} onTips={(v) => { const s = { ...settings, tips: v }; setSettings(s); saveSettings(s); }} />
+      <Modal open={panel === 'learn'} onClose={() => closePanel('learn')} wide icon="🎓" accent="#c98a00" title="Learn & help" subtitle={`Ranger training · ${lessonsDone}/${LESSONS.length} lessons`}>
+        <LearnHub onStart={(id, step) => { closePanel('learn'); startLesson(id, step); }} tips={settings.tips} onTips={(v) => { const s = { ...settings, tips: v }; setSettings(s); saveSettings(s); }} />
       </Modal>
-      <Modal open={journal && !journalTray} onClose={() => setJournal(false)} title="📖 Field journal" wide>
+      {/* phones: the Journal is a tab, so its panel keeps the Journal tab lit (tap Explore, Build or Code to go back) */}
+      <Modal open={panel === 'journal'} onClose={() => closePanel('journal')} wide titleId="dd-journal-title" icon="📖" accent="#c98a00" title="Field journal" subtitle={journalSummary(profile)}>
         <Journal />
       </Modal>
-      <Modal open={questLog} onClose={() => setQuestLog(false)} title={<span className="flex items-center gap-2"><Trophy size={20} className="text-amber-500" /> Quests for this diorama</span>} wide>
+      <Modal open={panel === 'quests'} onClose={() => closePanel('quests')} wide icon="🏆" accent="#e0a800" title="Quests" subtitle={`This diorama · ${game.done} of ${game.quests.length || 16} done`}>
         <QuestLog game={game} learnable={learnable} />
       </Modal>
-      <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Settings">
+      <Modal open={panel === 'settings'} onClose={() => closePanel('settings')} icon="⚙️" accent="#5a6b7d" title="Settings" subtitle="This device and this diorama">
         {engine && (
           <div className="space-y-4">
             <div>
@@ -462,6 +471,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         )}
       </Modal>
     </div>
+    </PanelHost>
   );
 }
 

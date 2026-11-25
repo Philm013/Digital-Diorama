@@ -1,17 +1,23 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { clsx } from 'clsx';
 import { X } from 'lucide-react';
 import { IconBtn } from './common';
 import { useSheetDrag } from './sheetDrag';
 
+/** inside a tray: a dialog opened from here stacks on top of it as a panel of its own */
+export const InTray = createContext(false);
+
 /**
  * A tray that pulls out from the bottom of its parent — on phones it slides out from behind the
  * bottom tab bar — to browse and pick from without leaving the screen. Drag it down by its
  * header (or fling it) to put it away; tap the dimmed backdrop or press Escape to close.
- * The parent decides how tall it is (`className`), and keeps Back wired up (`useBackLayer`).
+ * The parent decides how tall it is (`className`: `top-…` for a fixed height, or a `max-h-…` to
+ * fit its contents), and keeps Back wired up (`useBackLayer`).
  */
-export function Tray({ open, onClose, header, children, className, labelId, isTop, layer = 'z-30' }: {
+export function Tray({ open, onClose, header, children, className, labelId, label, isTop, layer = 'z-30' }: {
   open: boolean; onClose: () => void; header: ReactNode; children: ReactNode; className?: string; labelId?: string;
+  /** its name for screen readers, when there is no title element to point at */
+  label?: string;
   /** whether this tray is the top-most layer (Escape belongs to whatever is on top) */
   isTop?: () => boolean;
   /** how high it stacks over the screen it pulls out over */
@@ -47,18 +53,20 @@ export function Tray({ open, onClose, header, children, className, labelId, isTo
         ref={panel}
         data-sheet
         role="dialog"
-        aria-labelledby={labelId}
+        aria-labelledby={label ? undefined : labelId}
+        aria-label={label}
         aria-hidden={!open || undefined}
         tabIndex={-1}
         className={clsx('dd-tray absolute inset-x-0 bottom-0 mx-auto flex w-full flex-col overflow-hidden outline-none', !drag.dragging && 'dd-tray-anim', className)}
         style={{ transform: open ? `translate3d(0, ${drag.dy}px, 0)` : 'translate3d(0, calc(100% + 40px), 0)', visibility: visible ? 'visible' : 'hidden' }}
         onTransitionEnd={(e) => { if (e.target === e.currentTarget && e.propertyName === 'transform' && !open) setShown(false); }}
       >
-        <div className="shrink-0 cursor-grab touch-none select-none active:cursor-grabbing" {...drag.handlers}>
+        {/* (the grip and the title bar are the handle; `data-sheet-head` keeps lesson cards off it) */}
+        <div data-sheet-head className="shrink-0 cursor-grab touch-none select-none active:cursor-grabbing" {...drag.handlers}>
           <div className="flex justify-center pb-1.5 pt-2"><span className="h-1.5 w-10 rounded-full bg-black/20" /></div>
-          {header}
+          {visible && header}
         </div>
-        <div className="relative min-h-0 flex-1">{visible && children}</div>
+        <div className="relative flex min-h-0 flex-1 flex-col"><InTray.Provider value>{visible && children}</InTray.Provider></div>
       </div>
     </div>
   );
@@ -69,7 +77,8 @@ export function TrayHeader({ id, icon, title, subtitle, actions, onClose, accent
   id?: string; icon?: ReactNode; title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; onClose: () => void; accent?: string;
 }) {
   return (
-    <div className="flex items-center gap-2.5 px-3.5 pb-2.5 sm:px-5">
+    // (phones held sideways: clear of the notch)
+    <div className="flex items-center gap-2.5 pb-2.5 pl-[max(env(safe-area-inset-left),14px)] pr-[max(env(safe-area-inset-right),14px)] sm:pl-[max(env(safe-area-inset-left),20px)] sm:pr-[max(env(safe-area-inset-right),20px)]">
       {icon && <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-[22px] leading-none" style={{ background: `color-mix(in srgb, ${accent} 16%, white)`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 30%, transparent)` }}>{icon}</span>}
       <div className="min-w-0 flex-1">
         <h2 id={id} className="truncate font-display text-[19px] font-bold leading-tight sm:text-[21px]">{title}</h2>

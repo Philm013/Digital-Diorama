@@ -3,7 +3,9 @@ import { clsx } from 'clsx';
 import { X, Crosshair, Volume2, Footprints, Earth, Tag, Network, BookOpen, Presentation, Clock, CloudSun, ChevronLeft, ChevronRight, Pause, Play, Video, Maximize2, CheckCircle2, Circle, Glasses, Smartphone, Move, Library } from 'lucide-react';
 import { XRMode } from '../engine/XRMode';
 import { useEngine, useEngineEvent, useEngineVersion } from './store';
-import { Btn, Chip, IconBtn, Modal, Segmented, Slider, statusColor } from './common';
+import { Btn, Chip, IconBtn, Segmented, Slider, statusColor } from './common';
+import { Modal } from './Modal';
+import type { PanelId } from './Studio';
 import { ROLE_META, LINK_META, dietText, partnersOf } from '../assets/foodweb';
 import { dioramaWeb } from '../game/ecology';
 import { FoodWebView } from './FoodWebView';
@@ -25,16 +27,30 @@ import { learnSignal } from '../learn/signals';
 import { useSpeciesMedia } from './species/media';
 import { Credit, SpeciesMore, SpeciesPhoto, StatusScale } from './species/SpeciesInfo';
 
-export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; landscape?: boolean; playing?: boolean; onJournal?: () => void }) {
+export function ExploreLayer({ wide, landscape, panel, webAt, onPanel, onClosePanel }: {
+  wide: boolean; landscape?: boolean; playing?: boolean;
+  /** the studio's open panel (the food web, optionally opened on one organism, and the guide are two of them) */
+  panel: PanelId | null; webAt: string | null; onPanel: (p: PanelId, at?: string) => void; onClosePanel: (p: PanelId) => void;
+}) {
   const engine = useEngine();
   useEngineVersion();
   useProfile();
   const [card, setCard] = useState<string | null>(null);
-  // the food web, optionally opened on one species
-  const [web, setWeb] = useState<string | true | null>(null);
-  const [guide, setGuide] = useState(false);
   const [tour, setTour] = useState(false);
   const [pop, setPop] = useState<'time' | 'weather' | null>(null);
+  // the time and weather popovers close when the view or anything else is tapped (the hotbar's own
+  // buttons toggle them; the lesson card is left alone)
+  const popRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pop) return;
+    const away = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (!t || popRef.current?.contains(t) || t.closest?.('[data-tour="hotbar"], [data-coach]')) return;
+      setPop(null);
+    };
+    window.addEventListener('pointerdown', away, true);
+    return () => window.removeEventListener('pointerdown', away, true);
+  }, [pop]);
   useEngineEvent((e) => {
     if (e.type === 'tap') setCard(e.id);
     if (e.type === 'select' && e.id === null) setCard(null);
@@ -76,10 +92,10 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
     { key: 'labels', icon: <Tag size={20} />, label: 'Labels', on: engine.env.labels, fn: () => engine.setEnv({ labels: !engine.env.labels }, false) },
     { key: 'time', icon: <Clock size={20} />, label: timeLabel(engine.env.time), on: pop === 'time', fn: () => setPop(pop === 'time' ? null : 'time') },
     { key: 'weather', icon: <CloudSun size={20} />, label: 'Weather', on: pop === 'weather', fn: () => setPop(pop === 'weather' ? null : 'weather'), sep: true, needs: 'weather' },
-    { key: 'web', icon: <Network size={20} />, label: 'Food web', fn: () => setWeb(true) },
-    { key: 'guide', icon: <BookOpen size={20} />, label: 'Guide', fn: () => setGuide(true) },
+    { key: 'web', icon: <Network size={20} />, label: 'Food web', fn: () => onPanel('web') },
+    { key: 'guide', icon: <BookOpen size={20} />, label: 'Guide', fn: () => onPanel('guide') },
     // on phones the Journal is in the tab bar
-    ...(wide || landscape ? [{ key: 'journal', icon: <Library size={20} />, label: 'Journal', fn: () => onJournal?.() }] : []),
+    ...(wide || landscape ? [{ key: 'journal', icon: <Library size={20} />, label: 'Journal', fn: () => onPanel('journal') }] : []),
     { key: 'tour', icon: <Presentation size={20} />, label: 'Tour', fn: () => { audio(); engine.select(null); setTour(true); }, needs: 'tour' },
     { key: 'walk', icon: <Footprints size={20} />, label: 'Walk in', fn: () => walkIn(1.6) },
     ...(engine.terrain ? [{ key: 'roam', icon: <Earth size={20} />, label: 'Roam', fn: roam, needs: 'roam' as const }] : []),
@@ -89,13 +105,13 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
   ];
   return (
     <>
-      {actor && !walking && <InfoCard actor={actor} wide={wide} side={wide || !!landscape} onClose={() => { setCard(null); engine.select(null); }} onWalk={walkIn} onWeb={() => setWeb(actor.id)} />}
+      {actor && !walking && <InfoCard actor={actor} wide={wide} side={wide || !!landscape} onClose={() => { setCard(null); engine.select(null); }} onWalk={walkIn} onWeb={() => onPanel('web', actor.id)} />}
       {!walking && !(actor && !wide) && (
         <div className={clsx('pointer-events-none absolute inset-x-0 z-20 flex justify-center px-2', wide ? 'bottom-4' : 'bottom-2')}>
           <div className="dd-hotbar dd-scroll-x pointer-events-auto relative flex max-w-full items-center gap-1 overflow-x-auto rounded-[22px] p-1.5" data-tour="hotbar">
             {tools.map((t) => (
               <span key={t.key} className="flex shrink-0 items-center gap-1">
-                <button onClick={() => { if (t.needs && !isUnlocked(t.needs)) { setPop(null); showLocked(t.needs); return; } uiSound('tick'); haptic(6); t.fn(); }}
+                <button onClick={() => { if (t.key !== 'time' && t.key !== 'weather') setPop(null); if (t.needs && !isUnlocked(t.needs)) { showLocked(t.needs); return; } uiSound('tick'); haptic(6); t.fn(); }}
                   className={clsx('dd-hotkey relative flex h-[54px] min-w-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl px-2 font-display text-[11px] font-semibold transition', t.on ? 'on' : 'text-white/85', t.needs && !isUnlocked(t.needs) && 'opacity-55')}
                   aria-label={t.needs && !isUnlocked(t.needs) ? `${t.label} (locked)` : undefined} data-tour={`explore-${t.key}`}>
                   {t.icon}<span className="whitespace-nowrap">{t.label}</span>
@@ -106,7 +122,7 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
             ))}
           </div>
           {pop && (
-            <div className="dd-panel dd-pop pointer-events-auto absolute bottom-[calc(100%+10px)] w-[min(92vw,360px)] rounded-3xl p-3.5" onMouseLeave={() => setPop(null)}>
+            <div ref={popRef} className="dd-panel dd-pop pointer-events-auto absolute bottom-[calc(100%+10px)] w-[min(92vw,360px)] rounded-3xl p-3.5" onMouseLeave={() => setPop(null)}>
               {pop === 'time' && <div data-tour="time-pop"><TimePop /></div>}
               {pop === 'weather' && <div data-tour="weather-pop"><WeatherPop /></div>}
             </div>
@@ -114,8 +130,10 @@ export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; la
         </div>
       )}
       {xrOverlay}
-      <Modal open={web !== null} onClose={() => setWeb(null)} title="🕸️ Food web" wide="xl"><FoodWebView initial={typeof web === 'string' ? web : null} onVisit={(id) => { setWeb(null); engine.select(id); engine.focusActor(id); setCard(id); }} /></Modal>
-      <Modal open={guide} onClose={() => setGuide(false)} title={`${BIOME_BY_ID[engine.doc.biome]?.emoji ?? '📦'} Habitat guide`} wide><Guide /></Modal>
+      <Modal open={panel === 'web'} onClose={() => onClosePanel('web')} wide="xl" icon="🕸️" accent="#3d85c6" title="Food web" subtitle="Who eats whom in this diorama">
+        <FoodWebView initial={webAt} onVisit={(id) => { onClosePanel('web'); engine.select(id); engine.focusActor(id); setCard(id); }} />
+      </Modal>
+      <Modal open={panel === 'guide'} onClose={() => onClosePanel('guide')} wide icon={BIOME_BY_ID[engine.doc.biome]?.emoji ?? '📦'} accent={BIOME_BY_ID[engine.doc.biome]?.accent} title="Habitat guide" subtitle={BIOME_BY_ID[engine.doc.biome]?.name}><Guide /></Modal>
     </>
   );
 }
