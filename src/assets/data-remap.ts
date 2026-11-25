@@ -32,7 +32,8 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   'snow-leopard': mammal('leopard', {
     size: 0.95, legLen: 0.9, tailLen: 1.3,
     specOverride: {
-      tail: { style: 'bushy', thk: 0.1, bush: 0.6, curl: 40 }, ear: { len: 0.17 }, pawW: 1.25, cheek: 1.25,
+      // larger, open rosettes than a leopard's
+      tail: { style: 'bushy', thk: 0.1, bush: 0.6, curl: 40 }, ear: { len: 0.17 }, pawW: 1.25, cheek: 1.25, spotFreq: 7.5,
       palette: { body: '#cdc9be', belly: '#efece5', pattern: '#4b4c50', marking: '#77777a', eye: '#a3b4a2', nose: '#a08c88' },
     },
   }),
@@ -56,7 +57,7 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   // grizzled grey-buff, tawny legs and ears, black-tipped tail; a lighter build than a wolf
   coyote: mammal('wolf', {
     size: 0.74, earSize: 1.25, muzzleLen: 1.12,
-    specOverride: { saddle: 0.08, tailTip: 0.13, tailTipZone: 'marking', palette: { body: '#a58d6c', belly: '#ece3d3', marking: '#75674f', eye: '#c9a043' } },
+    specOverride: { saddle: 0.14, tailTip: 0.13, tailTipZone: 'marking', palette: { body: '#9d8c76', belly: '#ece3d3', marking: '#6f6352', mane: '#b8956a', eye: '#c9a043' } },
   }),
   'golden-jackal': mammal('wolf', {
     size: 0.56, earSize: 1.15, muzzleLen: 1.08,
@@ -90,7 +91,8 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   // grizzled grey body, white face, black ears and legs, long bare tail
   'virginia-opossum': mammal('raccoon', {
     size: 1.05, muzzleLen: 1.35, tailLen: 1.15, tailStyle: 'thin', coatPattern: 'none', earStyle: 'round',
-    specOverride: { points: 0.5, cheeks: false, palette: { body: '#a7a39c', belly: '#e9e6e0', marking: '#1d1b1a', skin: '#e1b2aa', nose: '#e4a6a0' } },
+    // black ears, and a bare pink tail (furred only at the base)
+    specOverride: { points: 0.5, cheeks: false, earZone: 'marking', tailTip: 0.72, tailTipZone: 'skin', grain: 2, palette: { body: '#a7a39c', belly: '#e9e6e0', marking: '#1d1b1a', skin: '#e1b2aa', nose: '#e4a6a0' } },
   }),
   /* ---------- birds ---------- */
   // crested songbird: blue above, white below, black necklace and eye-line, black bill
