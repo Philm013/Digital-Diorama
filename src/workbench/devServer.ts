@@ -11,6 +11,12 @@
  *   GET  /__wb/diff?path=a,b              → `git diff HEAD` of those files
  *   PUT  /__wb/shot?name=...  (PNG body)  → saves a capture to shots/workbench/<name>.png
  *
+ * Only requests from this machine may write (PUT): the dev server listens on the network
+ * (`server.host: true`) and this middleware runs before Vite's own host checks, so a write must come
+ * from a loopback address with a local Host header (and Origin, if sent). That also stops DNS-rebinding
+ * pages; a cross-site page can't write either, since its PUT needs a CORS preflight that gets no CORS
+ * headers here. Other devices on the network can still view the workbench.
+ *
  * A save from the workbench to a module the page can hot-swap (a References *.mjs asset or a
  * built-in model in src/assets/builtin) skips Vite's usual full reload: the page gets a
  * `wb:file` message instead, re-imports the module and rebuilds only the model on screen.
@@ -23,6 +29,15 @@ import type { Plugin, ViteDevServer } from 'vite';
 
 const WRITABLE = [/^References\/.+\.(mjs|js|ts)$/, /^src\/assets\/.+\.(ts|json)$/];
 const READABLE = [...WRITABLE, /^src\/.+\.(ts|tsx|json|css)$/, /^public\/species\/media\.json$/];
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+/** a request from this machine, addressed to it by a local name */
+function fromThisMachine(req: import('node:http').IncomingMessage) {
+  const ra = req.socket.remoteAddress ?? '';
+  const loopback = ra === '127.0.0.1' || ra === '::1' || ra === '::ffff:127.0.0.1';
+  const origin = req.headers.origin;
+  return loopback && LOCAL_HOST.test(req.headers.host ?? '') && (!origin || LOCAL_ORIGIN.test(origin));
+}
 /** modules the page re-imports in place (everything else needs a page reload) */
 export const HOT_SWAPPABLE = /^(References\/.+\.mjs|src\/assets\/builtin\/[^/]+\.ts)$/;
 
@@ -64,6 +79,7 @@ export function workbenchPlugin(): Plugin {
         if (!req.url?.startsWith('/__wb/')) return next();
         const url = new URL(req.url, 'http://x');
         const send = (code: number, body: string, type = 'text/plain; charset=utf-8') => { res.statusCode = code; res.setHeader('Content-Type', type); res.setHeader('Cache-Control', 'no-store'); res.end(body); };
+        if (req.method !== 'GET' && req.method !== 'HEAD' && !fromThisMachine(req)) return send(403, 'the workbench saves files only for requests from this machine (open it at localhost)');
         try {
           if (url.pathname === '/__wb/file') {
             const rel = safe(url.searchParams.get('path'), req.method === 'PUT' ? WRITABLE : READABLE);

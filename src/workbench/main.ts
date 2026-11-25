@@ -501,6 +501,7 @@ async function saveTuning() {
   paramsMsg.className = 'msg ' + (put.ok ? 'note' : 'error');
   // the catalog imports tuning.json, so the page reloads with it (Vite does this; this is a fallback)
   if (put.ok) setTimeout(() => location.reload(), 1500);
+  else savingTuning = false; // nothing was saved: keep remembering the edits
 }
 
 /* ───────────────────────── code files ───────────────────────── */

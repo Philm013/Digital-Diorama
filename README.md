@@ -243,7 +243,7 @@ A live view and code editor for every animal in the library, for checking and im
 npm run workbench
 ```
 
-It opens `workbench.html` on the dev server (dev only; it is not part of the app build).
+It opens `workbench.html` on the dev server (dev only; it is not part of the app build). It saves files only for requests from this machine: another device on the network can view it but not save.
 
 - **Pick an animal** from the library on the left (search by name, scientific name or family; ↑ ↓ step through). It is built through the app's own builder, so what you see is what the app makes: orbit it, jump to the camera views (`1`–`7`, `8`/`9` for a close-up of the face), play and scrub its clips, see the wireframe, skeleton and bounds, change the lighting and the graphics tier, and switch between its true size and the magnified size small animals get in the app. A grid and a red marker (the way it should face) give scale and direction.
 - **Compare it with the real animal:** its photo, taxonomy, real size and description sit beside the view, and *Overlay on 3D* lays the photo over the model (drag to move, wheel to scale, flip) to match silhouettes. *Snapshot* keeps captures to compare against later; *Sheet* makes one image of the photo beside the model from several views.
