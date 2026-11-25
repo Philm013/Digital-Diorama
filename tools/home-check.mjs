@@ -1,7 +1,8 @@
 // Home screen and Back-button check (dev tool), on a phone: opens each tray from the tab bar,
 // steps back through a habitat briefing, starts an expedition, opens and closes sheets in the
-// studio, reloads, drags trays and sheets closed, and checks that the phone's Back button always
-// closes the top-most layer and never leaves a dead history entry. Saves screenshots.
+// studio (the heart's panel, the journal and a species card on top of it), reloads, drags trays
+// and sheets closed, and checks that the phone's Back button always closes the top-most layer
+// and never leaves a dead history entry. Saves screenshots.
 //   node tools/home-check.mjs --out shots/home-check
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -16,7 +17,11 @@ const OUT = String(args.out ?? 'shots/home-check');
 fs.mkdirSync(OUT, { recursive: true });
 const vite = spawn('npx', ['vite', '--port', String(PORT), '--strictPort', '--clearScreen', 'false'], { stdio: ['ignore', 'pipe', 'pipe'] });
 async function up() { for (let k = 0; k < 120; k++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) return; } catch { /* wait */ } await new Promise((r) => setTimeout(r, 700)); } throw new Error('vite did not start'); }
-const init = `try { localStorage.setItem('dd-settings', JSON.stringify({ quality: 'low', author: '', sound: false, ambience: false, tips: false })); } catch {}`;
+// (one species already discovered, so the journal has a card to open)
+const init = `try {
+  localStorage.setItem('dd-settings', JSON.stringify({ quality: 'low', author: '', sound: false, ambience: false, tips: false }));
+  if (!localStorage.getItem('dd-profile')) localStorage.setItem('dd-profile', JSON.stringify({ discovered: ['mammal/rabbit'] }));
+} catch {}`;
 const failed = [];
 const check = (name, ok, detail = '') => { console.log(ok ? 'ok  ' : 'FAIL', name, ok ? '' : detail); if (!ok) failed.push(name); };
 
@@ -37,8 +42,13 @@ async function run() {
     studio: !!document.querySelector('[aria-label="Back to all dioramas"]'),
     tray: document.querySelector('.dd-tray-scrim.is-on') ? document.querySelector('#dd-tray-title')?.textContent : null,
     briefing: !!document.querySelector('[role=group][aria-label$=" expedition"]'),
-    sheets: [...document.querySelectorAll('[role=dialog][aria-modal=true] h2')].map((h) => h.textContent),
+    sheets: [...document.querySelectorAll('[role=dialog][aria-modal=true]')].map((d) => d.getAttribute('aria-label') || d.querySelector('h2')?.textContent),
+    // the studio's journal tray (phones), and its tab bar
+    journal: !!document.querySelector('.dd-tray-scrim.is-on') && !!document.querySelector('#dd-journal-title'),
+    tabbar: !!document.querySelector('nav[aria-label="Modes"]'),
   }));
+  // the top-most dialog's close button is on screen and nothing covers it
+  const closeReachable = () => pg.evaluate(() => { const d = [...document.querySelectorAll('[role=dialog][aria-modal=true]')].pop(); const b = d?.querySelector('[aria-label=Close]'); if (!b) return false; const r = b.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return r.top >= 0 && r.bottom <= innerHeight && !!hit && b.contains(hit); });
   const cdp = await ctx.newCDPSession(pg);
   const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
   const drag = async (sel, dy, steps = 10) => {
@@ -94,10 +104,39 @@ async function run() {
   await back();
   s = await state(); check('Back closes the sheet and stays in the studio', s.studio && !s.sheets.length, JSON.stringify(s));
   await pg.click('[aria-label="More"]'); await wait(400);
-  await pg.evaluate(() => [...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent.includes('Field journal'))?.click()); await wait(800);
-  s = await state(); check('a sheet can hand over to another sheet', s.sheets.some((t) => t.includes('Field journal')), JSON.stringify(s));
+  await pg.evaluate(() => [...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent.includes('Quests'))?.click()); await wait(800);
+  s = await state(); check('a sheet can hand over to another sheet', s.sheets.some((t) => t.includes('Quests')), JSON.stringify(s));
   await drag('[role=dialog][aria-modal=true]', 300); await wait(300);
   s = await state(); check('dragging a sheet down closes it', s.studio && !s.sheets.length, JSON.stringify(s));
+
+  // the heart: its details are a panel at the bottom of the screen, not a popover off the edge
+  await pg.click('[data-tour="health"]'); await wait(700);
+  await shot('4b-health');
+  const health = await pg.evaluate(() => { const d = document.querySelector('[role=dialog][aria-label="Ecosystem health"]'); if (!d) return null; const r = d.getBoundingClientRect(); return { left: r.left, right: r.right, bottom: r.bottom, w: innerWidth, h: innerHeight }; });
+  check('the heart opens a panel at the bottom of the screen', !!health && health.left >= 0 && health.right <= health.w && Math.abs(health.bottom - health.h) <= 1, JSON.stringify(health));
+  await back();
+  s = await state(); check('Back closes the health panel', s.studio && !s.sheets.length, JSON.stringify(s));
+
+  // the Journal is a tab: it pulls out over the diorama and keeps the top bar and the tab bar
+  await tab('Journal'); await wait(1000);
+  await shot('4c-journal');
+  s = await state(); check('the Journal tab pulls the journal out over the diorama, keeping the tab bar', s.journal && s.tabbar && s.studio && !s.sheets.length, JSON.stringify(s));
+  await pg.evaluate(() => [...document.querySelectorAll('[data-tour=journal] button')].find((b) => b.textContent.includes('European rabbit'))?.click()); await wait(900);
+  await shot('4d-species');
+  s = await state(); check('a discovered species opens its card over the journal', s.sheets.includes('European rabbit') && s.journal, JSON.stringify(s));
+  check('the species card keeps a close button that can be tapped', await closeReachable());
+  await back();
+  s = await state(); check('Back closes just the species card', !s.sheets.length && s.journal, JSON.stringify(s));
+  await tab('Explore'); await wait(700);
+  s = await state(); check('another tab leaves the journal', !s.journal && s.studio, JSON.stringify(s));
+  await tab('Journal'); await wait(900);
+  await drag('.dd-tray', 320);
+  s = await state(); check('dragging the journal down closes it', !s.journal && s.studio, JSON.stringify(s));
+  await pg.click('[aria-label="More"]'); await wait(400);
+  await pg.evaluate(() => [...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent.includes('Field journal'))?.click()); await wait(900);
+  s = await state(); check('More → Field journal opens the same journal', s.journal && !s.sheets.length, JSON.stringify(s));
+  await back();
+  s = await state(); check('Back closes the journal and stays in the studio', !s.journal && s.studio, JSON.stringify(s));
   await pg.reload({ waitUntil: 'load' });
   await pg.waitForFunction('window.__loaded === true', null, { timeout: 240000 }); await wait(1000);
   s = await state(); check('a reload reopens the diorama', s.studio && /#open=/.test(s.url), JSON.stringify(s));

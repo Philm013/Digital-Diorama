@@ -10,10 +10,12 @@ import { useSheetDrag } from './sheetDrag';
  * header (or fling it) to put it away; tap the dimmed backdrop or press Escape to close.
  * The parent decides how tall it is (`className`), and keeps Back wired up (`useBackLayer`).
  */
-export function Tray({ open, onClose, header, children, className, labelId, isTop }: {
+export function Tray({ open, onClose, header, children, className, labelId, isTop, layer = 'z-30' }: {
   open: boolean; onClose: () => void; header: ReactNode; children: ReactNode; className?: string; labelId?: string;
   /** whether this tray is the top-most layer (Escape belongs to whatever is on top) */
   isTop?: () => boolean;
+  /** how high it stacks over the screen it pulls out over */
+  layer?: string;
 }) {
   const panel = useRef<HTMLDivElement>(null);
   // keep the content mounted while the tray slides away
@@ -39,7 +41,7 @@ export function Tray({ open, onClose, header, children, className, labelId, isTo
   }, [open]);
   const visible = open || shown;
   return (
-    <div className={clsx('absolute inset-0 z-30 overflow-hidden', !open && 'pointer-events-none')}>
+    <div className={clsx('absolute inset-0 overflow-hidden', layer, !open && 'pointer-events-none')}>
       <div className={clsx('dd-tray-scrim absolute inset-0', open && 'is-on')} onClick={onClose} aria-hidden />
       <div
         ref={panel}

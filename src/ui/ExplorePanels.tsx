@@ -22,6 +22,8 @@ import { isUnlocked, showLocked, type FeatureId } from '../game/unlocks';
 import { useProfile } from './game/useGame';
 import { LockBadge } from './game/Locked';
 import { learnSignal } from '../learn/signals';
+import { useSpeciesMedia } from './species/media';
+import { Credit, SpeciesMore, SpeciesPhoto, StatusScale } from './species/SpeciesInfo';
 
 export function ExploreLayer({ wide, landscape, onJournal }: { wide: boolean; landscape?: boolean; playing?: boolean; onJournal?: () => void }) {
   const engine = useEngine();
@@ -193,46 +195,60 @@ function InfoCard({ actor, wide, side, onClose, onWalk, onWeb }: { actor: Actor;
   const eatsList = wnode ? web.food(wnode.id).map((e) => ({ n: web.byId.get(e.from)!, kind: e.kind })) : [];
   const eatenBy = wnode ? web.eaters(wnode.id).map((e) => ({ n: web.byId.get(e.to)!, kind: e.kind })) : [];
   const partners = partnersOf(d.id).filter((p) => engine.actorList.some((o) => o.def.id === p.other));
+  // a real photo, a description and a range map (scenery and rocks have none)
+  const media = useSpeciesMedia(d.living !== false ? d.id : undefined);
+  // room for the photo (kept while it loads, so nothing jumps); without one, the compact model header
+  const tall = d.living !== false && media !== null && (media === undefined || !!media.photo);
   return (
     <div ref={cardRef} data-tour="species-card" className={clsx('dd-species-card dd-pop absolute z-30 flex flex-col overflow-hidden rounded-[28px]', wide ? 'right-4 top-4 max-h-[calc(100%-32px)] w-[370px]' : side ? 'bottom-2 right-2 top-2 w-[min(370px,50%)]' : 'inset-x-2 bottom-2 max-h-[64%]')} style={{ ['--role' as string]: rm.color }}>
-      <div className="dd-species-hero relative flex items-end gap-3 px-4 pb-3 pt-3">
-        <div className="grid h-[92px] w-[92px] shrink-0 place-items-center rounded-3xl bg-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,.5)]"><AssetThumb id={d.id} emoji={d.emoji} size={88} /></div>
-        <div className="min-w-0 flex-1 pb-1 text-white [text-shadow:0_1px_3px_rgba(0,0,0,.35)]">
-          {isNew && <span className="dd-ribbon mb-1 inline-block rounded-full px-2 py-0.5 font-display text-[10.5px] font-bold uppercase tracking-wider">✨ New discovery +15 XP</span>}
-          <div className="font-display text-[22px] font-bold leading-tight">{actor.name}</div>
-          {info.scientific && <div className="text-sm italic text-white/85">{info.scientific}</div>}
-        </div>
-        <IconBtn label="Close" onClick={onClose} className="absolute right-2 top-2 bg-black/15 text-white hover:bg-black/25"><X size={18} /></IconBtn>
-      </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 pb-3 pt-3 text-sm">
-        <div className="flex flex-wrap gap-1">
-          <Chip color={rm.color}>{rm.emoji} {rm.label}</Chip>
-          {info.diet && info.diet !== 'none' && info.diet !== 'producer' && <Chip color="#5a6b7d">diet: {info.diet}</Chip>}
-          {info.status && <Chip color={statusColor(info.status)}>{info.status}</Chip>}
-        </div>
-        {(info.fact || info.blurb) && <p className="leading-relaxed text-ink/85">💡 {info.fact ?? info.blurb}</p>}
-        {actor.doc.note && <div className="rounded-2xl bg-amber-50 p-3 text-ink/85 ring-1 ring-amber-200"><div className="mb-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-700">My notes</div>{actor.doc.note}</div>}
-        <div className="grid grid-cols-2 gap-2 text-[12px]">
-          {info.habitat && <Fact k="Lives in" v={info.habitat} />}
-          {info.size && <Fact k="Real size" v={info.size} />}
-          {ex >= 1.05 && <Fact k="Shown at" v={`×${ex < 10 ? ex.toFixed(1) : Math.round(ex)} life size`} />}
-          {d.loco !== 'sessile' && d.loco !== 'scenery' && <Fact k="Moves by" v={{ walk: 'walking', fly: 'flying', swim: 'swimming', slither: 'slithering', hop: 'hopping', crawl: 'crawling' }[d.loco] ?? d.loco} />}
-        </div>
-        {d.living !== false && (
-          <div className="space-y-1.5 rounded-2xl bg-black/[0.03] p-3 text-[12.5px]">
-            {d.category === 'animals' && d.info.eats?.length ? <div className="text-ink/70"><b className="text-ink/85">Diet:</b> {dietText(d)}</div> : null}
-            {wnode?.hungry && <div className="rounded-xl bg-red-50 px-2.5 py-1.5 font-semibold text-red-800 ring-1 ring-red-200">⚠️ Nothing it can eat is here yet.</div>}
-            {eatsList.length > 0 && <FoodRow label={wnode?.role === 'decomposer' ? '♻ Breaks down:' : '🍽️ Eats here:'} items={eatsList} />}
-            {eatenBy.length > 0 && <FoodRow label={wnode?.source ? '♻ Recycled by:' : '⚠️ Eaten by:'} items={eatenBy} />}
-            {partners.map((p) => <div key={p.other} className="text-emerald-800"><b>🤝 Partner — {getDef(p.other)?.name}:</b> {p.how}</div>)}
-            <button type="button" onClick={onWeb} className="mt-0.5 flex items-center gap-1 font-display text-[12.5px] font-bold text-[#3d85c6] hover:underline">🕸️ See it in the food web →</button>
+      {/* (stays put while the card scrolls) */}
+      <IconBtn label="Close" onClick={onClose} className="absolute right-2 top-2 z-10 bg-black/30 text-white backdrop-blur-sm hover:bg-black/45"><X size={18} /></IconBtn>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <SpeciesPhoto def={d} media={media} fallbackModel={false} className={clsx('shrink-0 border-b-4', !tall ? 'h-[116px]' : wide ? 'h-[196px]' : side ? 'h-[150px]' : 'h-[168px]')}
+          overlay={(photo) => (
+            <>
+              {photo && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[72%] bg-gradient-to-t from-black/75 via-black/30 to-transparent" />}
+              {!photo && <span className="absolute bottom-2 left-2.5"><AssetThumb id={d.id} emoji={d.emoji} size={88} /></span>}
+              <div className={clsx('absolute inset-x-0 bottom-0 pb-2.5 pr-3 text-white [text-shadow:0_1px_3px_rgba(0,0,0,.45)]', photo ? 'pl-[76px]' : 'pl-[106px]')}>
+                {isNew && <span className="dd-ribbon mb-1 inline-block rounded-full px-2 py-0.5 font-display text-[10.5px] font-bold uppercase tracking-wider [text-shadow:none]">✨ New discovery +15 XP</span>}
+                <div className="font-display text-[22px] font-bold leading-tight">{actor.name}</div>
+                {info.scientific && <div className="truncate text-sm italic text-white/85">{info.scientific}</div>}
+              </div>
+            </>
+          )} />
+        {media?.photo && <Credit c={media.photo} className="px-4 pt-1.5" />}
+        <div className="space-y-3 px-4 pb-3 pt-3 text-sm">
+          <div className="flex flex-wrap gap-1">
+            <Chip color={rm.color}>{rm.emoji} {rm.label}</Chip>
+            {info.diet && info.diet !== 'none' && info.diet !== 'producer' && <Chip color="#5a6b7d">diet: {info.diet}</Chip>}
+            {info.status && <Chip color={statusColor(info.status)}>{info.status}</Chip>}
           </div>
-        )}
-        {chain.length > 1 && (
-          <div className="flex flex-wrap items-center gap-1 text-[11px] font-bold text-ink/55">
-            {chain.map((c, i) => <span key={c + i} className="flex items-center gap-1">{i > 0 && <span className="text-ink/30">›</span>}<span className="rounded-md bg-black/5 px-1.5 py-0.5">{c}</span></span>)}
+          {(info.fact || info.blurb) && <p className="leading-relaxed text-ink/85">💡 {info.fact ?? info.blurb}</p>}
+          {actor.doc.note && <div className="rounded-2xl bg-amber-50 p-3 text-ink/85 ring-1 ring-amber-200"><div className="mb-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-700">My notes</div>{actor.doc.note}</div>}
+          <div className="grid grid-cols-2 gap-2 text-[12px]">
+            {info.habitat && <Fact k="Lives in" v={info.habitat} />}
+            {info.size && <Fact k="Real size" v={info.size} />}
+            {ex >= 1.05 && <Fact k="Shown at" v={`×${ex < 10 ? ex.toFixed(1) : Math.round(ex)} life size`} />}
+            {d.loco !== 'sessile' && d.loco !== 'scenery' && <Fact k="Moves by" v={{ walk: 'walking', fly: 'flying', swim: 'swimming', slither: 'slithering', hop: 'hopping', crawl: 'crawling' }[d.loco] ?? d.loco} />}
           </div>
-        )}
+          {d.living !== false && (
+            <div className="space-y-1.5 rounded-2xl bg-black/[0.03] p-3 text-[12.5px]">
+              {d.category === 'animals' && d.info.eats?.length ? <div className="text-ink/70"><b className="text-ink/85">Diet:</b> {dietText(d)}</div> : null}
+              {wnode?.hungry && <div className="rounded-xl bg-red-50 px-2.5 py-1.5 font-semibold text-red-800 ring-1 ring-red-200">⚠️ Nothing it can eat is here yet.</div>}
+              {eatsList.length > 0 && <FoodRow label={wnode?.role === 'decomposer' ? '♻ Breaks down:' : '🍽️ Eats here:'} items={eatsList} />}
+              {eatenBy.length > 0 && <FoodRow label={wnode?.source ? '♻ Recycled by:' : '⚠️ Eaten by:'} items={eatenBy} />}
+              {partners.map((p) => <div key={p.other} className="text-emerald-800"><b>🤝 Partner — {getDef(p.other)?.name}:</b> {p.how}</div>)}
+              <button type="button" onClick={onWeb} className="mt-0.5 flex items-center gap-1 font-display text-[12.5px] font-bold text-[#3d85c6] hover:underline">🕸️ See it in the food web →</button>
+            </div>
+          )}
+          {d.living !== false && <StatusScale status={info.status} redlist={media?.redlist} iucn={media?.iucn} />}
+          <SpeciesMore media={media} name={d.name} />
+          {chain.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1 text-[11px] font-bold text-ink/55" aria-label="Classification">
+              {chain.map((c, i) => <span key={c + i} className="flex items-center gap-1">{i > 0 && <span className="text-ink/30">›</span>}<span className="rounded-md bg-black/5 px-1.5 py-0.5">{c}</span></span>)}
+            </div>
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-4 gap-1.5 border-t border-black/5 p-2.5">
         <CardBtn icon={<Crosshair size={18} />} label="Focus" onClick={() => engine.focusActor(actor.id)} />

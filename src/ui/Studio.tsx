@@ -20,7 +20,9 @@ import { BottomSheet } from './BottomSheet';
 import { ContextBar } from './ContextBar';
 import { Celebrations } from './game/Celebrate';
 import { HealthChip, XpChip, QuestTracker, QuestLog, Stars, type QuestLearn } from './game/Hud';
-import { Journal } from './game/Journal';
+import { Journal, journalSummary } from './game/Journal';
+import { Tray, TrayHeader } from './Tray';
+import { useBackLayer } from './backStack';
 import { useGame, useProfile } from './game/useGame';
 import { awardBadge } from '../game/progress';
 import { flag } from '../game/ecology';
@@ -63,6 +65,9 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   const [inspOpen, setInspOpen] = useState(true);
   // phones on their side (landscape): the build/code panel moves beside the viewer and the mode tabs into the top bar
   const { wide, landscape, phone } = useLayout();
+  /** phones upright: the Journal is a tab of its own and a tray rather than a dialog */
+  const journalTray = phone;
+  const journalOnTop = useBackLayer(journal && journalTray, () => setJournal(false));
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   useEffect(() => { setUiSound(settings.sound); }, [settings.sound]);
@@ -248,6 +253,12 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
   }, [engine, runtime, mode, saveNow, setMode]);
 
   const biome = BIOME_BY_ID[doc.biome];
+  // dialogs are drawn at the top of the page, outside the studio: they find the habitat's colour on the root
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--accent', biome?.accent ?? '#3f7d3a');
+    return () => { root.style.removeProperty('--accent'); };
+  }, [biome?.accent]);
   const ctx = useMemo(() => api, [api]);
   const codeLocked = !isUnlocked('code', profile);
   // (Play runs scripts: until coding is unlocked it only shows for dioramas that came with some)
@@ -308,7 +319,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
         {!phone && <TopTabs tabs={modeTabs} active={mode} onSelect={setMode} compact={landscape} tour="modes" />}
         {!phone && <div className="flex-1" />}
         {engine && mode === 'build' && wide && <UndoRedo engine={engine} />}
-        {engine && !loading && <HealthChip game={game} compact={!wide} />}
+        {engine && !loading && <HealthChip game={game} compact={!wide} sheet={!wide} />}
         {/* on phones the level is shown in the Journal instead, leaving room for the title */}
         {!phone && <XpChip profile={profile} compact={!wide} onClick={() => setJournal(true)} />}
         <LearnButton active={hub} onClick={() => { uiSound('open'); setHub(true); }} labelled={wide} />
@@ -367,13 +378,25 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
             <MobileSheet mode={mode} index={sheetIdx} setIndex={setSheetIdx} side={landscape} showActions={showContext} onCode={goCode} />
           </StudioContext.Provider>
         )}
+        {/* phones: the Journal is a tab, so it pulls out over the diorama like the home screen's trays,
+            leaving the top bar and the tab bar in place (tap Explore, Build or Code to go back) */}
+        {journalTray && (
+          <Tray open={journal} onClose={() => setJournal(false)} isTop={journalOnTop} labelId="dd-journal-title" layer="z-[35]" className="top-2 [--tray-pb:16px]"
+            header={<TrayHeader id="dd-journal-title" onClose={() => setJournal(false)} icon="📖" accent="#c98a00" title="Field journal" subtitle={journalSummary(profile)} />}>
+            <div className="absolute inset-0 overflow-y-auto overscroll-contain px-3 pb-[var(--tray-pb)] pt-1"><Journal /></div>
+          </Tray>
+        )}
       </div>
 
       {/* ---------------- phone tab bar ---------------- */}
       {phone && !immersive && (
-        <TabBar label="Modes" tour="modes" tabs={phoneTabs} active={mode} onSelect={(id) => {
-          if (id === 'journal') { uiSound('open'); setJournal(true); return; }
+        <TabBar label="Modes" tour="modes" tabs={phoneTabs} active={journal ? 'journal' : mode} onSelect={(id) => {
+          // the Journal tab opens the journal and, tapped again, puts it away
+          if (id === 'journal') { uiSound(journal ? 'tab' : 'open'); haptic(6); setJournal((v) => !v); return; }
           if (id === 'code' && codeLocked) { showLocked('code'); return; }
+          // any other tab leaves the journal for that mode
+          setJournal(false);
+          if (id === mode) return;
           setMode(id);
           if (id !== 'explore') setSheetIdx(1);
         }} />
@@ -410,7 +433,7 @@ export function Studio({ doc, settings, setSettings, onExit }: { doc: DioramaDoc
       <Modal open={hub} onClose={() => setHub(false)} title={<span className="flex items-center gap-2"><GraduationCap size={22} className="text-amber-600" /> Learn & help</span>} wide>
         <LearnHub onStart={(id, step) => { setHub(false); startLesson(id, step); }} tips={settings.tips} onTips={(v) => { const s = { ...settings, tips: v }; setSettings(s); saveSettings(s); }} />
       </Modal>
-      <Modal open={journal} onClose={() => setJournal(false)} title="📖 Field journal" wide>
+      <Modal open={journal && !journalTray} onClose={() => setJournal(false)} title="📖 Field journal" wide>
         <Journal />
       </Modal>
       <Modal open={questLog} onClose={() => setQuestLog(false)} title={<span className="flex items-center gap-2"><Trophy size={20} className="text-amber-500" /> Quests for this diorama</span>} wide>
