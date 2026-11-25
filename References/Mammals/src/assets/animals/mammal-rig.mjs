@@ -614,7 +614,7 @@ function sheetPatch(G, zf, face) {
 /** Paints every patch used by `parts` into one atlas; returns the texture and each patch's tile. */
 function paintAtlas(parts, cfg, hexOf) {
   const patches = [], seen = new Set();
-  for (const part of parts) for (const pt of part.pt) if (pt && !seen.has(pt)) { seen.add(pt); pt.k = part.coatK || 1; patches.push(pt); }
+  for (const part of parts) for (const pt of part.pt) if (pt && !seen.has(pt)) { seen.add(pt); pt.k = part.coatK || 1; pt.gloss = part.name === 'eyes' ? 0.2 : 1; patches.push(pt); }
   if (!patches.length) return null;
   const mn = V3(Infinity, Infinity, Infinity), mx = V3(-Infinity, -Infinity, -Infinity), q = V3();
   for (const part of parts) for (let i = 0; i < part.p.length; i += 3) { q.set(part.p[i], part.p[i + 1], part.p[i + 2]); mn.min(q); mx.max(q); }
@@ -673,7 +673,7 @@ function paintAtlas(parts, cfg, hexOf) {
 
 /** Rasterises one patch's painter into its tile (lattice-sampled; uniform blocks skip the painter). */
 function paintPatch(pt, tile, data, AW, shade, soft) {
-  const { grid, K, J, t, at, zoneAt, wrap } = pt, { x: X0, y: Y0, w, h } = tile;
+  const { grid, K, J, t, at, zoneAt, wrap } = pt, { x: X0, y: Y0, w, h } = tile, A = Math.round(255 * (pt.gloss ?? 1));
   const rowK = new Int32Array(h), rowF = new Float32Array(h), colJ = new Int32Array(w), colF = new Float32Array(w);
   let k = 0;
   for (let y = 0; y < h; y++) {
@@ -717,8 +717,20 @@ function paintPatch(pt, tile, data, AW, shade, soft) {
   for (let y = -COAT_PAD; y < h + COAT_PAD; y++) for (let x = -COAT_PAD; x < w + COAT_PAD; x++) {
     const sx = wrap ? ((x % w) + w) % w : clamp(x, 0, w - 1), sy = clamp(y, 0, h - 1);
     const si = (sy * w + sx) * 3, di = ((Y0 + y) * AW + (X0 + x)) * 4;
-    data[di] = clamp(Math.round(rgb[si]), 0, 255); data[di + 1] = clamp(Math.round(rgb[si + 1]), 0, 255); data[di + 2] = clamp(Math.round(rgb[si + 2]), 0, 255); data[di + 3] = 255;
+    data[di] = clamp(Math.round(rgb[si]), 0, 255); data[di + 1] = clamp(Math.round(rgb[si + 1]), 0, 255); data[di + 2] = clamp(Math.round(rgb[si + 2]), 0, 255); data[di + 3] = A;
   }
+}
+
+/**
+ * Gloss rides in the coat texture's alpha and scales the material's roughness, so wet eyes catch a highlight
+ * without a second material (or draw call). Opaque materials ignore the alpha otherwise. Clones keep the hook.
+ */
+function coatGloss(m) {
+  m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n#ifdef USE_MAP\n\troughnessFactor *= texture2D( map, vMapUv ).a;\n#endif'); };
+  m.customProgramCacheKey = () => 'coat-gloss';
+  const clone = m.clone.bind(m);
+  m.clone = () => coatGloss(clone());
+  return m;
 }
 
 /** Smooth vertex normals for non-indexed triangles: faces meeting at a point share a normal unless they crease more than `deg`. */
@@ -831,24 +843,21 @@ function finish(build, opt) {
     return m;
   };
   const live = build.parts.filter(p => p.count > 0);
-  let solid = MAT, eyeMat = null;
+  let solid = MAT;
   if (coat || smooth) {
-    solid = MAT.clone(); solid.flatShading = !smooth; solid.name = 'coat'; if (coat) solid.map = coat.tex;
-    // wet, glossy eyes that catch a highlight
-    eyeMat = solid.clone(); eyeMat.roughness = 0.16; eyeMat.name = 'eyes';
+    solid = MAT.clone(); solid.flatShading = !smooth; solid.name = 'coat';
+    if (coat) { solid.map = coat.tex; coatGloss(solid); }
   }
-  const isEye = (p) => !!eyeMat && !p.glass && p.name === 'eyes';
-  for (const kind of ['solid', 'eyes', 'glass']) {
-    const glass = kind === 'glass';
-    const list = live.filter(p => (glass ? p.glass : !p.glass && isEye(p) === (kind === 'eyes')));
+  for (const glass of [false, true]) {
+    const list = live.filter(p => p.glass === glass);
     if (!list.length) continue;
-    const mat = glass ? GLASS_MAT : kind === 'eyes' ? eyeMat : solid;
+    const mat = glass ? GLASS_MAT : solid;
     if (merge) {
       const geos = list.map(toGeo), merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
       if (geos.length > 1) geos.forEach(g => g.dispose());
       if (!merged) continue;
       merged.computeBoundingBox(); merged.computeBoundingSphere();
-      root.add(meshOf(merged, mat, kind, { merged: true, parts: list.map(p => p.name) }));
+      root.add(meshOf(merged, mat, glass ? 'glass' : 'solid', { merged: true, parts: list.map(p => p.name) }));
     } else {
       const used = new Map();
       for (const p of list) {

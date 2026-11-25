@@ -23,13 +23,13 @@ const [cmd = 'sheet', ...rest] = process.argv.slice(2);
 const args = Object.fromEntries(rest.reduce((acc, a, i, all) => { if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1]?.startsWith('--') ? true : all[i + 1] ?? true]); return acc; }, []));
 const OUT = String(args.out ?? 'shots/workbench');
 let base = args.url ? String(args.url).replace(/\/$/, '') : null;
-let vite = null;
+let vite = null, viteLog = '';
 
 async function up(url, ms = 90000) {
   const t0 = Date.now();
   for (;;) {
     try { const r = await fetch(`${url}/workbench.html`); if (r.ok) return; } catch { /* not yet */ }
-    if (Date.now() - t0 > ms) throw new Error('dev server did not start');
+    if (Date.now() - t0 > ms) throw new Error('dev server did not start:\n' + viteLog.slice(-2000));
     await new Promise((r) => setTimeout(r, 600));
   }
 }
@@ -37,7 +37,14 @@ async function up(url, ms = 90000) {
 try {
   if (!base) {
     const port = Number(args.port ?? 5196);
-    vite = spawn('npx', ['vite', '--port', String(port), '--strictPort', '--clearScreen', 'false'], { stdio: ['ignore', 'ignore', 'inherit'] });
+    // its output is collected (not inherited), so a pipe reading this script's output still closes when it ends
+    vite = spawn('npx', ['vite', '--port', String(port), '--strictPort', '--clearScreen', 'false'], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    vite.stdout.on('data', (d) => { viteLog += d; });
+    vite.stderr.on('data', (d) => { viteLog += d; });
+    // stop the server (and npx's child) however this script ends: normally, on an error, or killed
+    const stop = () => { try { process.kill(-vite.pid, 'SIGKILL'); } catch { /* already gone */ } };
+    process.on('exit', stop);
+    for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => { stop(); process.exit(130); });
     base = `http://localhost:${port}`;
   }
   await up(base);
@@ -85,7 +92,8 @@ try {
     }
   }
   await browser.close();
-} finally {
-  vite?.kill('SIGKILL');
+} catch (e) {
+  console.error(String(e?.stack ?? e));
+  process.exitCode = 1;
 }
-process.exit(0);
+process.exit();
