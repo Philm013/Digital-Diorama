@@ -78,8 +78,9 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   }),
   // a small ground squirrel: striped back, white belly, flatter tail
   'eastern-chipmunk': mammal('squirrel', {
-    size: 0.72, tailLen: 0.55, earStyle: 'round', coatPattern: 'none',
-    specOverride: { tail: { bush: 0.45, curl: -10 }, saddle: 0.22, flankStripe: true, palette: { body: '#a8703f', belly: '#f4e9d8', marking: '#2c1f17', nose: '#2e221c' } },
+    size: 0.72, tailLen: 0.55, earStyle: 'round',
+    // five dark back stripes with pale bands between, a dark eye stripe framed in pale, a slimmer tail held up
+    specOverride: { pattern: 'chipmunk', tail: { bush: 0.35, thk: 0.13, set: 70, curl: -10 }, palette: { body: '#a8703f', belly: '#f4e9d8', marking: '#2c1f17', nose: '#2e221c' } },
   }),
   // grey-brown agouti coat and the white "cotton" tail
   'eastern-cottontail': mammal('rabbit', {

@@ -1278,6 +1278,8 @@ function tetraEars(B, S, L) {
     }
     const cup = E.cup ?? 0.35;
     const innerW = E.innerW ?? 0.55, innerLen = E.innerLen ?? 0.82;
+    // offset > 0 moves the flap behind its root line (an elephant's ear hangs back from its front edge)
+    const off = E.offset ?? 0, thick = E.thick ?? 1;
     const part = B.part('ears', { group: 'ears' });
     sheet(part, {
       nu: Math.round((E.style === 'long' || E.style === 'fan' || E.style === 'hound' ? 10 : 7) * det + 1),
@@ -1300,9 +1302,9 @@ function tetraEars(B, S, L) {
         const fc = new THREE.Vector3().crossVectors(d, s).normalize();
         const w = wMax * wp(u) * rootF(u), x = 2 * v - 1;
         const cupU = lerp(cup, Math.max(cup, 0.95), 1 - sstep(0.04, 0.42, u)) * (isHanging ? 0.7 : 1);
-        return c.addScaledVector(s, w * x * side).addScaledVector(fc, cupU * w * (x * x - 0.35));
+        return c.addScaledVector(s, w * (x + off) * side).addScaledVector(fc, cupU * w * (x * x - 0.35));
       },
-      th: (u, v) => Math.max(0.0006, wMax * 0.14 * (1 - 0.7 * (2 * v - 1) ** 2) * (1 - 0.55 * u)),
+      th: (u, v) => Math.max(0.0006, thick * wMax * 0.14 * (1 - 0.7 * (2 * v - 1) ** 2) * (1 - 0.55 * u)),
       zone: (u, v, face) => (face > 0) === (side > 0) && Math.abs(2 * v - 1) < innerW && u < innerLen && u > 0.05 ? 'skin' : B.paint({ part: 'ear', u, a: v * TAU, P: at(u).c }),
       skin: (u) => u < 0.18 ? rig.W2('Head', bone, u / 0.18) : rig.W(bone),
     });
@@ -1664,7 +1666,9 @@ function tetraHorns(B, S, L) {
       horn([P(-0.12, 0.05, 0.05), P(0.3, 0.02, 0.06), P(0.66, -0.14, 0.1), P(0.86, 0.14, 0.04), P(0.8, 0.42, -0.05)], (u) => r0 * (1.7 * (1 - sstep(0, 0.35, u)) + 1) * Math.max(0.05, 1 - u));
     } else if (st === 'ram') {
       const turns = Hn.curl ?? 1.7, R0 = len * 0.36, pts = [];
-      const upT = up.clone().applyAxisAngle(hd, -side * 0.35), bk = back.clone();
+      // Digital Diorama revision: curl in world axes (back over the crown, down behind the ear, forward past the
+      // cheek); in head axes a down-pitched head turned the spiral into loops on top of the skull
+      const upT = V3(0, 1, 0).applyAxisAngle(V3(0, 0, 1), -side * 0.32), bk = V3(0, 0, -1);
       for (let i = 0; i <= 18; i++) {
         const th = (i / 18) * turns * Math.PI, R = R0 * Math.exp(-0.17 * th);
         pts.push(base.clone().addScaledVector(upT, -R0 + R * Math.cos(th) + R0 * 0.0).addScaledVector(bk, R * Math.sin(th)).addScaledVector(out, (0.12 + 0.28 * i / 18) * len));
@@ -1680,6 +1684,18 @@ function tetraHorns(B, S, L) {
       horn(pts, taper(0.9));
     } else if (st === 'ossicones') {
       const og = horn([P(0, 0, 0), P(0.04, 0.6, 0.12), P(0.05, 0.95, 0.15)], (u) => r0 * (1 - 0.25 * u) + r0 * 0.35 * bell(u, 1, 0.3), (u, a2, Pp) => u > 0.8 ? 'mane' : B.paint({ part: 'head', u: 0.2, a: Math.PI / 2, P: Pp }), null, 'round');
+    } else if (st === 'whitetail') {
+      // Digital Diorama revision: a white-tailed deer's main beam curves out and back, then sweeps forward
+      // over the brow, with a short brow tine and tall tines rising straight up from the beam
+      const W = (o, y, z) => base.clone().addScaledVector(out, o * len).add(V3(0, y * len, z * len));
+      const beam = [W(0, 0, 0), W(0.16, 0.2, -0.12), W(0.36, 0.38, -0.12), W(0.46, 0.5, 0.06), W(0.4, 0.56, 0.3), W(0.22, 0.57, 0.48)];
+      horn(beam, (u) => r0 * (1 - 0.55 * u), 'horn', null, 'round');
+      const bc = makePath(beam), n = Hn.tines ?? 4;
+      for (let i = 0; i < n; i++) {
+        const u = i === 0 ? 0.1 : 0.36 + (i - 1) * (0.5 / Math.max(1, n - 1)), b0 = bc.getPointAt(u);
+        const tl = len * (i === 0 ? 0.2 : 0.46 - (i - 1) * 0.08), dir = V3(side * 0.06, 1, i === 0 ? 0.3 : 0.12).normalize();
+        horn([b0, b0.clone().addScaledVector(dir, tl * 0.55).add(V3(0, 0, tl * 0.04)), b0.clone().addScaledVector(dir, tl)], (uu) => r0 * 0.55 * (1 - 0.88 * uu));
+      }
     } else if (st === 'antlers' || st === 'palmate') {
       const beam = st === 'palmate' ? [P(0, 0, 0), P(0.35, 0.12, 0.06), P(0.55, 0.22, 0.1)] : [P(0, 0, 0), P(0.16, 0.3, 0.2), P(0.3, 0.62, 0.22), P(0.34, 0.88, 0.06), P(0.3, 1.02, -0.12)];
       const bg = horn(beam, (u) => r0 * (1 - 0.6 * u), 'horn', null, 'round');
@@ -1791,6 +1807,18 @@ function tetraMane(B, S, L) {
   }
 }
 
+/** Udder with four teats under the rear belly (dairy cattle). Digital Diorama revision. */
+function tetraUdder(B, S, L) {
+  if (!(S.udder > 0)) return;
+  const u = lerp(L.uOf.haunch, L.uOf.loin, 0.3), bot = L.torso.at(u, -Math.PI / 2).p, r = S.udder * L.H;
+  const c = bot.clone().add(V3(0, -r * 0.35, 0)), part = B.part('udder', { group: 'body' }), W = B.rig.W('Hips');
+  emit(part, ellipsoid(c, r * 0.95, r * 0.72, r * 1.15, [0, 0, 1], [0, 1, 0], Math.round(6 * B.det + 2), 2 * Math.round(5 * B.det + 2)), 'skin', W);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const t = c.clone().add(V3(sx * r * 0.42, -r * 0.5, sz * r * 0.5));
+    emit(part, tube([t, t.clone().add(V3(0, -r * 0.45, 0))], r * 0.11, 3, 6, { cap1: { type: 'round', len: 0.6, n: 2 } }), 'skin', W);
+  }
+}
+
 /** Quills / spines (hedgehog, porcupine): cones scattered over the dorsal half of the torso loft and crown. */
 function tetraQuills(B, S, L) {
   const Q = S.quills;
@@ -1800,7 +1828,7 @@ function tetraQuills(B, S, L) {
   for (let i = 0; i < n; i++) {
     const u = lerp(0.04, U.neckRoot + 0.04, Math.sqrt(rnd())), a = lerp(-0.25, Math.PI + 0.25, rnd());
     const { p, n: nn, t } = L.torso.at(u, a);
-    const dir = nn.clone().addScaledVector(t, -0.85).normalize();
+    const dir = nn.clone().addScaledVector(t, -(Q.lay ?? 0.85)).normalize();
     spike(part, p.clone().addScaledVector(nn, -len * 0.15), dir, len * lerp(0.7, 1.15, rnd()), r, rnd() > 0.55 ? 'marking' : 'pattern', rig.chain(L.axial, u), 4);
   }
 }
@@ -1829,7 +1857,7 @@ function makePainter(S, L) {
     if (torso && sa < bellyLine) zone = 'belly';
     if (part === 'jaw' && cs >= 0.3 && sa < 0.25) zone = 'belly';
     if (head && S.cheeks && part === 'head' && sa < -0.05 && Math.abs(ca) > 0.35 && u > 0.18 && u < s0 + 0.2) zone = 'belly';
-    if (head && S.muzzle && u > s0 + 0.45 * (1 - s0) * 0 + (S.muzzleS ?? 0.62) * (1 - s0)) zone = S.muzzle === 'dark' ? 'marking' : 'belly';
+    if (head && S.muzzle && u > s0 + 0.45 * (1 - s0) * 0 + (S.muzzleS ?? 0.62) * (1 - s0) && (!S.muzzleLow || sa < 0.05)) zone = S.muzzle === 'dark' ? 'marking' : 'belly';
     if (head && S.faceZone) zone = S.faceZone;
     if (part === 'ear') {
       if (S.earZone) zone = S.earZone;
@@ -1845,8 +1873,11 @@ function makePainter(S, L) {
     if (torso && S.dorsal && sa > 0.975 && u < U.neckRoot + 0.05) zone = 'marking';
     if (torso && S.saddle && sa > lerp(0.9, 0.35, S.saddle) && u > U.haunch * 0.7 && u < U.neckRoot) zone = 'marking';
     if (torso && S.rumpPatch && u < U.haunch + 0.05 && sa > -0.7 && Math.abs(ca) < 0.7) zone = 'belly';
-    if (torso && S.frontMane && u > lerp(U.barrel, U.chest, S.frontMane)) zone = 'mane';
-    if (head && S.frontMane && part === 'head' && u < s0 + 0.1) zone = 'mane';
+    if (torso && S.frontMane && u > lerp(U.barrel, U.chest, S.frontMane) && sa < (S.maneTop ?? 2)) zone = 'mane';
+    if (head && S.frontMane && S.maneHead !== false && part === 'head' && u < s0 + 0.1) zone = 'mane';
+    // dense spines painted between the modelled quills: dark bands and cream tips streaked along the body
+    // (the hind quarters are part of the leg lofts, so the upper legs carry spines too)
+    if (S.spinyBack && ((torso && sa > -0.15 && u < U.neckRoot + 0.06) || (part === 'head' && u < 0.35 && sa > -0.15) || (limb && P.y > L.elbowY + 0.4 * L.D))) return vnoise(x * 44, y * 44, z * 14, seed + 5) > 0.52 ? 'marking' : 'pattern';
     if (torso && S.flankStripe && Math.abs(sa + 0.38) < 0.11 && u > U.haunch && u < U.chest) zone = 'marking';
     // ── patterns
     switch (pat) {
@@ -1887,9 +1918,13 @@ function makePainter(S, L) {
         if (torso) {
           if (sa < -0.62) return zone;
           const along = u > U.neckRoot - 0.02 ? (P.x * L.nd.x + P.y * L.nd.y + P.z * L.nd.z) * k : z;
-          const ph = along * f + n1 * 1.5 - sa * 0.18;
-          const w = lerp(0.07, 0.34, sstep(-0.6, 0.95, sa)) * (0.55 + 0.9 * n2);
-          if (0.5 + 0.5 * Math.cos(TAU * ph) > 1 - w && n2 > 0.3) return 'pattern';
+          // stripes waver down the flank, vary in spacing, split into pairs and break into pieces
+          const n3 = fbm(x * 3.5 + 7, y * 3.5, z * 3.5, seed + 11);
+          const ph = along * f * (0.85 + 0.3 * n3) + n1 * 2.3 + 0.3 * Math.sin(TAU * (y * 1.2 + n1)) - sa * 0.2;
+          const w = lerp(0.06, 0.3, sstep(-0.6, 0.95, sa)) * (0.45 + 1.1 * n2);
+          const c = 0.5 + 0.5 * Math.cos(TAU * ph);
+          const split = n3 > 0.55 && c > 1 - w * 0.35;
+          if (c > 1 - w && !split && n2 > 0.27 && n3 > 0.2) return 'pattern';
           return zone;
         }
         if (limb) {
@@ -1961,6 +1996,25 @@ function makePainter(S, L) {
         if (head && part === 'head') return u > s0 * 0.55 && Math.abs(ca) < 0.28 && sa > -0.2 ? 'body' : u > s0 + 0.35 * (1 - s0) ? zone : 'pattern';
         const w = (fbm(x * 3.5, y * 3.5, z * 3.5, seed + 4) - 0.5) * 0.55;
         if (fbm(x * 1.5 + w, y * 1.5, z * 1.5 - w, seed, 4) > 0.5) return 'pattern';
+        return zone;
+      }
+      case 'chipmunk': { // Digital Diorama revision: five dark back stripes with pale bands, a dark eye stripe framed in pale
+        if (torso && u > U.haunch - 0.02 && u < U.chest + 0.02) {
+          const th = Math.abs(Math.atan2(ca, sa)), fade = sstep(U.haunch - 0.02, U.haunch + 0.06, u) * (1 - sstep(U.chest - 0.06, U.chest + 0.02, u));
+          if (fade > 0.3) {
+            if (th < 0.09) return 'marking';
+            if (th > 0.42 && th < 0.52) return 'marking';
+            if (th > 0.52 && th < 0.66) return 'belly';
+            if (th > 0.66 && th < 0.76) return 'marking';
+          }
+          return zone;
+        }
+        if (part === 'head' && L.eyes && Math.abs(ca) > 0.35 && u < s0 + 0.25) {
+          const e = L.eyes.reduce((m, ee) => (P.distanceTo(ee.c) < P.distanceTo(m.c) ? ee : m));
+          const dy = (P.y - e.c.y) / eyeR;
+          if (Math.abs(dy) < 0.42 && u < s0 + 0.1) return 'marking';
+          if (Math.abs(dy) > 0.6 && Math.abs(dy) < 1.15) return 'belly';
+        }
         return zone;
       }
       case 'panda': {
@@ -2075,31 +2129,39 @@ const SPECIES_DEFS = {
   cow: { label: 'Dairy Cow', fam: UNGULATE, H: 1.42, len: 1.16, depth: 0.58, width: 0.86, rump: 1.0, hipW: 1.1, rumpDepth: 0.95, tuck: 0.05, belly: 0.4,
     neckAng: 22, neckLen: 0.3, neckThk: 0.75, neckW: 0.72, headAng: 62, headLen: 0.39, headD: 0.27, headW: 0.25, snout: 0.5, snoutW: 0.8, snoutD: 0.66, stop: 0.05, cheek: 1.12, jowl: 1.2, muzzleN: 2.0, eye: 0.045, eyeS: 0.3,
     ear: { style: 'pointed', len: 0.3, w: 0.55, s: 0.12, a: 1.15, spread: 75, tilt: -10, turn: 40, cup: 0.4 }, horns: { style: 'cattle', len: 0.32, thk: 0.06, s: 0.04, a: 0.95 },
-    tail: { style: 'tuft', len: 0.62, thk: 0.022, set: -84, tuft: 2.4 }, pattern: 'patches', countershade: 0.1, muzzle: 'light', muzzleS: 0.8,
+    tail: { style: 'tuft', len: 0.62, thk: 0.022, set: -84, tuft: 2.4 }, pattern: 'patches', countershade: 0.1, muzzle: 'light', muzzleS: 0.8, udder: 0.13,
     palette: pal({ body: '#f1ede4', belly: '#f4f0e8', pattern: '#1c1a19', marking: '#1c1a19', nose: '#d99a96', skin: '#d99a96', horn: '#e2d6b6', hoof: '#3b3330' }) },
   deer: { label: 'White-tailed Deer', fam: UNGULATE, H: 1.0, len: 1.0, depth: 0.42, width: 0.78, rump: 1.02, tuck: 0.3, neckAng: 52, neckLen: 0.48, neckThk: 0.55, neckW: 0.7,
     headAng: 55, headLen: 0.31, headD: 0.26, headW: 0.22, snout: 0.55, snoutW: 0.5, snoutD: 0.5, stop: 0.15, eye: 0.06, eyeS: 0.32, legThk: 0.72,
-    ear: { style: 'pointed', len: 0.5, w: 0.56, s: 0.1, a: 0.85, spread: 45, tilt: 4, turn: 35, cup: 0.6 }, horns: { style: 'antlers', len: 0.85, thk: 0.06, s: 0.09, a: 0.5, tines: 4 },
+    ear: { style: 'pointed', len: 0.5, w: 0.56, s: 0.1, a: 0.85, spread: 45, tilt: 4, turn: 35, cup: 0.6 }, horns: { style: 'whitetail', len: 1.15, thk: 0.075, s: 0.09, a: 0.5, tines: 4 },
     tail: { style: 'flat', len: 0.2, thk: 0.035, set: -20, flat: 2 }, tailUnder: true, rumpPatch: true, countershade: 0.55, muzzle: 'dark', muzzleS: 0.9,
     palette: pal({ body: '#9a6b42', belly: '#efe7da', marking: '#2a1d14', nose: '#1d1715', horn: '#cbb48c' }) },
-  wolf: { label: 'Gray Wolf', fam: CANID, H: 0.8, len: 1.15, depth: 0.42, width: 0.68, rump: 0.97, tuck: 0.4, neckAng: 30, neckLen: 0.32, neckThk: 0.78,
-    headAng: 22, headLen: 0.32, headD: 0.26, headW: 0.29, snout: 0.5, snoutW: 0.42, snoutD: 0.48, eye: 0.04, legThk: 0.88, saddle: 0.2, countershade: 0.6, muzzle: 'light', muzzleS: 0.75, cheeks: true,
-    palette: pal({ body: '#8d877e', belly: '#e1dbd0', marking: '#4a4540', eye: '#b9892c', nose: '#1a1817' }) },
+  // Digital Diorama revision: a deeper chest, thick ruff and fuller tail (it looked shaved), grizzled agouti coat
+  // with a dark saddle, tawny legs, pale lips and cheeks under a dark nose (not a white nose tip), dark tail tip
+  wolf: { label: 'Gray Wolf', fam: CANID, H: 0.8, len: 1.15, depth: 0.46, width: 0.8, rump: 0.97, tuck: 0.36, neckAng: 30, neckLen: 0.32, neckThk: 1.0,
+    headAng: 22, headLen: 0.32, headD: 0.27, headW: 0.34, snout: 0.5, snoutW: 0.46, snoutD: 0.5, eye: 0.045, legThk: 1.02, saddle: 0.26, countershade: 0.6, muzzle: 'light', muzzleS: 0.45, muzzleLow: true, cheeks: true,
+    tail: { style: 'bushy', len: 0.55, thk: 0.07, set: -62, curl: 12, bush: 0.85 }, tailTip: 0.12, tailTipZone: 'marking', legZone: 'mane', grain: 2.4,
+    palette: pal({ body: '#8b8276', belly: '#e6dfd1', marking: '#57504a', mane: '#b09673', eye: '#b9892c', nose: '#1a1817' }) },
   cat: { label: 'Domestic Cat', fam: FELID, H: 0.25, len: 1.45, depth: 0.46, width: 0.7, rump: 1.04, tuck: 0.35, neckAng: 34, neckLen: 0.3, neckThk: 0.75,
-    headAng: 12, headLen: 0.34, headD: 0.36, headW: 0.42, snout: 0.25, eye: 0.11, eyeYaw: 26, legThk: 0.95, footLen: 1.1, hockH: 0.26,
-    ear: { len: 0.36, w: 0.78 }, tail: { len: 1.1, thk: 0.03, set: 20, curl: 45, tipCurl: 20 }, pattern: 'tabby', countershade: 0.55, cheeks: true,
-    palette: pal({ body: '#c98a45', belly: '#f0dfc2', pattern: '#8c4f22', marking: '#8c4f22', eye: '#a8b83a', nose: '#d98b86', skin: '#e2a39b' }) },
-  lion: { label: 'Lion', fam: FELID, H: 1.15, len: 1.35, depth: 0.48, width: 0.72, rump: 0.98, tuck: 0.3, neckAng: 22, neckLen: 0.3, neckThk: 0.82,
-    headAng: 18, headLen: 0.32, headD: 0.32, headW: 0.32, snout: 0.42, snoutW: 0.62, snoutD: 0.62, stop: 0.4, eye: 0.04,
+    // Digital Diorama revision: a brown mackerel tabby, eyes set into the face (they bulged from the sides)
+    headAng: 12, headLen: 0.34, headD: 0.36, headW: 0.44, snout: 0.25, eye: 0.092, eyeInset: 0.74, eyeYaw: 26, legThk: 1.05, footLen: 1.1, hockH: 0.26, neckThk: 0.85,
+    ear: { len: 0.36, w: 0.78 }, tail: { len: 1.1, thk: 0.034, set: 20, curl: 45, tipCurl: 20 }, pattern: 'tabby', countershade: 0.55, cheeks: true, grain: 1.6,
+    palette: pal({ body: '#8f7b5e', belly: '#dccfb6', pattern: '#2e2419', marking: '#2e2419', eye: '#a9a83c', nose: '#c27c72', skin: '#d99a92' }) },
+  // Digital Diorama revision (big cats): heavier forelimbs, a broader, deeper body and a broader head
+  lion: { label: 'Lion', fam: FELID, H: 1.15, len: 1.35, depth: 0.52, width: 0.86, rump: 0.98, tuck: 0.26, neckAng: 22, neckLen: 0.3, neckThk: 0.95,
+    headAng: 18, headLen: 0.32, headD: 0.33, headW: 0.38, snout: 0.42, snoutW: 0.66, snoutD: 0.64, stop: 0.4, eye: 0.042, legThk: 1.28,
     ear: { style: 'round', len: 0.17, w: 0.95, s: 0.24, a: 0.8 }, tail: { style: 'tuft', len: 0.8, thk: 0.028, set: -60, curl: 20, tuft: 2.6 }, mane: { style: 'lion', size: 0.72 }, countershade: 0.45, cheeks: true, earTip: 0.4,
     palette: pal({ body: '#c09356', belly: '#e9d4ae', marking: '#3a2a1c', mane: '#6b4425', eye: '#b8862a', nose: '#6a3d35' }) },
-  tiger: { label: 'Bengal Tiger', fam: FELID, H: 1.0, len: 1.55, depth: 0.5, width: 0.74, rump: 1.0, tuck: 0.25, neckAng: 22, neckLen: 0.28, neckThk: 0.85,
-    headAng: 15, headLen: 0.34, headD: 0.32, headW: 0.34, snout: 0.38, eye: 0.04, ear: { style: 'round', len: 0.17, w: 0.95, s: 0.24, a: 0.82 },
+  tiger: { label: 'Bengal Tiger', fam: FELID, H: 1.0, len: 1.55, depth: 0.55, width: 0.88, rump: 1.0, tuck: 0.2, neckAng: 22, neckLen: 0.28, neckThk: 0.98,
+    headAng: 15, headLen: 0.34, headD: 0.33, headW: 0.4, snout: 0.38, eye: 0.042, legThk: 1.32, cheek: 1.32, ear: { style: 'round', len: 0.17, w: 0.95, s: 0.24, a: 0.82 },
     tail: { style: 'thin', len: 0.95, thk: 0.045, set: -45, curl: 25, tipCurl: 15 }, pattern: 'tiger', countershade: 0.55, cheeks: true, earZone: 'pattern',
     palette: pal({ body: '#d27a2c', belly: '#f3ead8', pattern: '#1b1310', marking: '#1b1310', eye: '#c8a034', nose: '#c07a72' }) },
   elephant: { label: 'African Elephant', fam: { stance: 'graviportal', nose: 'none' }, H: 3.0, len: 1.02, depth: 0.5, width: 0.92, rump: 0.93, rumpDepth: 0.92, tuck: 0, belly: 0.15,
-    neckAng: 12, neckLen: 0.08, neckThk: 0.95, neckW: 0.9, headAng: 72, headLen: 0.4, headD: 0.55, headW: 0.42, snout: 0.35, snoutW: 0.6, snoutD: 0.5, stop: 0, dome: 1.15, eye: 0.025, eyeYaw: 70, legThk: 1.2, nails: 4,
-    ear: { style: 'fan', len: 1.05, w: 0.9, s: 0.2, a: 1.15, spread: 28, tilt: 0, turn: 10, cup: 0.12, droop: 0.3, hang: 62, moundR: 0.2, innerW: 0 }, trunk: { len: 0.68, thk: 0.13, curl: 1.2 }, tusks: { style: 'elephant', len: 0.42, thk: 0.1, s: 0.78, a: 0.75 },
+    // Digital Diorama revision: a big domed head; ears hang back over the shoulders from their front edge
+    // (they used to spread both ways from the root and jut forward over the face); a longer, thicker trunk;
+    // the back dips behind the shoulders
+    neckAng: 12, neckLen: 0.08, neckThk: 0.95, neckW: 0.9, headAng: 72, headLen: 0.4, headD: 0.62, headW: 0.62, snout: 0.35, snoutW: 0.6, snoutD: 0.5, stop: 0, dome: 1.3, eye: 0.025, eyeYaw: 70, legThk: 1.2, nails: 4, sag: 0.06,
+    ear: { style: 'fan', len: 1.12, w: 0.42, offset: 0.9, thick: 0.3, s: 0.2, a: 1.05, spread: 18, tilt: 0, turn: 10, cup: 0.06, droop: 0.3, hang: 64, moundR: 0.12, innerW: 0 }, trunk: { len: 0.8, thk: 0.16, curl: 0.6 }, tusks: { style: 'elephant', len: 0.42, thk: 0.1, s: 0.78, a: 0.75 },
     tail: { style: 'tuft', len: 0.38, thk: 0.02, set: -80, tuft: 1.8 }, countershade: 0,
     palette: pal({ body: '#7f7a74', belly: '#77726c', marking: '#5d5853', mane: '#2b2826', skin: '#8f7d78', hoof: '#cfc6b6', teeth: '#efe5cc' }) },
   giraffe: { label: 'Giraffe', fam: UNGULATE, H: 3.0, len: 0.62, depth: 0.34, width: 0.82, rump: 0.82, rumpDepth: 0.9, tuck: 0.2, withers: 0.25,
@@ -2114,47 +2176,52 @@ const SPECIES_DEFS = {
     headAng: 28, headLen: 0.42, headD: 0.27, headW: 0.3, snout: 0.55, snoutW: 0.48, snoutD: 0.48, stop: 0.12, dome: 0.9, jowl: 1.5, eye: 0.03, nose: 'disc', muzzleN: 2.6, eyeYaw: 50,
     ear: { style: 'semiPrick', len: 0.4, w: 0.7, s: 0.2, a: 0.75, spread: 30, tilt: 18, turn: 10, breakU: 0.5 }, tail: { style: 'curly', len: 0.3, thk: 0.018, turns: 1.6 },
     countershade: 0, palette: pal({ body: '#eab3a4', belly: '#ebb8aa', skin: '#e39a8c', nose: '#d98b80', mouth: '#9c4c4a', hoof: '#a08070' }) },
-  rabbit: { label: 'Rabbit', fam: RODENT, H: 0.2, len: 1.35, depth: 0.8, width: 0.8, rump: 1.18, rumpDepth: 1.15, hipW: 1.1, tuck: 0.05, neckAng: 35, neckLen: 0.18, neckThk: 0.85,
-    headAng: 18, headLen: 0.45, headD: 0.36, headW: 0.38, snout: 0.32, snoutW: 0.6, snoutD: 0.6, eye: 0.1, eyeYaw: 75, legThk: 1.1, crouch: 0.9, hockH: 0.08, footLen: 2.6, incisors: 0.07,
+  // Digital Diorama revision: a compact body under a larger head (the body dwarfed it)
+  rabbit: { label: 'Rabbit', fam: RODENT, H: 0.2, len: 1.22, depth: 0.7, width: 0.78, rump: 1.2, rumpDepth: 1.15, hipW: 1.1, tuck: 0.05, neckAng: 35, neckLen: 0.18, neckThk: 0.9,
+    headAng: 18, headLen: 0.53, headD: 0.36, headW: 0.38, snout: 0.32, snoutW: 0.6, snoutD: 0.6, eye: 0.1, eyeYaw: 75, legThk: 1.1, crouch: 0.9, hockH: 0.08, footLen: 2.6, incisors: 0.07,
     ear: { style: 'long', len: 0.95, w: 0.32, s: 0.18, a: 0.5, spread: 14, tilt: 22, turn: 18, cup: 0.6 }, tail: { style: 'fluffy', len: 0.22, thk: 0.07, set: 40 },
     countershade: 0.5, tailTip: 1, tailTipZone: 'belly', palette: pal({ body: '#9a8068', belly: '#eee4d6', skin: '#dba59a', nose: '#c98b84', eye: '#2a1b12' }) },
-  dog: { label: 'Labrador Dog', fam: CANID, H: 0.58, len: 1.15, depth: 0.46, width: 0.75, rump: 0.98, tuck: 0.3, neckAng: 36, neckLen: 0.34, neckThk: 0.8,
-    headAng: 15, headLen: 0.38, headD: 0.27, headW: 0.3, snout: 0.45, snoutW: 0.55, snoutD: 0.58, stop: 0.55, eye: 0.045, jowl: 1.15,
-    ear: { style: 'floppy', len: 0.38, w: 0.62, s: 0.22, a: 0.95, spread: 30, droop: 0.95, hang: 15 }, tail: { style: 'thin', len: 0.6, thk: 0.045, set: -10, curl: -10 },
-    countershade: 0.15, palette: pal({ body: '#d6a65a', belly: '#e2bc7c', nose: '#2a1d18', eye: '#5a3a1c' }) },
+  // Digital Diorama revision: a stocky retriever (it read as a whippet): deep, broad chest, thick legs and neck,
+  // broad skull and muzzle, thick "otter" tail; pale yellow coat
+  dog: { label: 'Labrador Dog', fam: CANID, H: 0.58, len: 1.18, depth: 0.54, width: 0.92, rump: 0.98, tuck: 0.18, neckAng: 36, neckLen: 0.3, neckThk: 0.98,
+    headAng: 15, headLen: 0.4, headD: 0.3, headW: 0.38, snout: 0.42, snoutW: 0.7, snoutD: 0.66, stop: 0.55, eye: 0.045, jowl: 1.25, legThk: 1.18,
+    ear: { style: 'floppy', len: 0.38, w: 0.62, s: 0.22, a: 0.95, spread: 30, droop: 0.95, hang: 15, innerW: 0 }, tail: { style: 'thin', len: 0.6, thk: 0.07, set: -10, curl: -10 },
+    countershade: 0.15, palette: pal({ body: '#e2c38c', belly: '#ecd4a8', nose: '#2a1d18', eye: '#5a3a1c' }) },
   fox: { label: 'Red Fox', fam: CANID, H: 0.4, len: 1.4, depth: 0.42, width: 0.7, rump: 1.0, tuck: 0.4, neckAng: 32, neckLen: 0.3, neckThk: 0.72,
     headAng: 18, headLen: 0.36, headD: 0.24, headW: 0.3, snout: 0.55, snoutW: 0.36, snoutD: 0.42, eye: 0.05, legThk: 0.8, pupil: 'slit', slitW: 0.3,
-    ear: { len: 0.45, w: 0.58 }, tail: { style: 'bushy', len: 0.95, thk: 0.06, set: -35, curl: 10, bush: 0.85 }, points: 0.55, tailTip: 0.14, tailTipZone: 'belly', earTip: 0.0, earZone: 'marking', countershade: 0.6, cheeks: true,
+    ear: { len: 0.45, w: 0.58 }, tail: { style: 'bushy', len: 0.95, thk: 0.1, set: -35, curl: 10, bush: 1.0 }, points: 0.55, tailTip: 0.14, tailTipZone: 'belly', earTip: 0.0, earZone: 'marking', countershade: 0.6, cheeks: true, grain: 1.5, neckThk: 0.85,
     palette: pal({ body: '#c4561e', belly: '#efe6da', marking: '#231a16', eye: '#c08c2a', nose: '#181412' }) },
   hyena: { label: 'Spotted Hyena', fam: CANID, H: 0.85, len: 1.1, depth: 0.5, width: 0.72, rump: 0.8, rumpDepth: 0.85, withers: 0.15, neckAng: 25, neckLen: 0.34, neckThk: 0.9,
     headAng: 20, headLen: 0.36, headD: 0.32, headW: 0.34, snout: 0.4, snoutW: 0.55, snoutD: 0.6, eye: 0.04,
     ear: { style: 'round', len: 0.27, w: 0.85 }, tail: { style: 'bushy', len: 0.38, thk: 0.035, set: -70, bush: 0.6 }, mane: { style: 'crest', h: 0.05 }, pattern: 'hyena', countershade: 0.2, muzzle: 'dark', muzzleS: 0.6,
     palette: pal({ body: '#b49a6c', belly: '#c8b38a', pattern: '#3a2b1e', marking: '#2d241b', mane: '#3a2b1e', nose: '#151110' }) },
   cheetah: { label: 'Cheetah', fam: FELID, H: 0.8, len: 1.25, depth: 0.44, width: 0.62, rump: 0.98, tuck: 0.65, chestW: 0.95, neckAng: 25, neckLen: 0.3, neckThk: 0.72,
-    headAng: 12, headLen: 0.24, headD: 0.34, headW: 0.38, snout: 0.32, eye: 0.06, legThk: 0.72, claws: 0.4, ear: { style: 'round', len: 0.2, w: 0.95, s: 0.26, a: 0.85 },
+    headAng: 12, headLen: 0.24, headD: 0.34, headW: 0.38, snout: 0.32, eye: 0.06, legThk: 0.84, claws: 0.4, ear: { style: 'round', len: 0.2, w: 0.95, s: 0.26, a: 0.85 },
     tail: { style: 'thin', len: 0.85, thk: 0.032, set: -55, curl: 30, tipCurl: 25 }, pattern: 'spots', tearMark: true, countershade: 0.55, cheeks: true,
     palette: pal({ body: '#d9a856', belly: '#f2e6cc', pattern: '#1d1712', marking: '#1d1712', eye: '#b8862a', nose: '#2a1f1a' }) },
-  leopard: { label: 'Leopard', fam: FELID, H: 0.65, len: 1.5, depth: 0.48, width: 0.7, rump: 1.0, tuck: 0.35, neckAng: 24, neckLen: 0.3, neckThk: 0.82,
-    headAng: 14, headLen: 0.33, headD: 0.33, headW: 0.36, snout: 0.36, eye: 0.045, ear: { style: 'round', len: 0.2, w: 0.95, s: 0.24, a: 0.8 },
+  leopard: { label: 'Leopard', fam: FELID, H: 0.65, len: 1.5, depth: 0.5, width: 0.8, rump: 1.0, tuck: 0.3, neckAng: 24, neckLen: 0.3, neckThk: 0.92,
+    headAng: 14, headLen: 0.33, headD: 0.34, headW: 0.4, snout: 0.36, eye: 0.045, legThk: 1.18, ear: { style: 'round', len: 0.2, w: 0.95, s: 0.24, a: 0.8 },
     tail: { style: 'thin', len: 1.2, thk: 0.035, set: -40, curl: 30, tipCurl: 20 }, pattern: 'rosettes', countershade: 0.55, cheeks: true,
     palette: pal({ body: '#d6a54e', belly: '#f2e5c8', pattern: '#1f1611', marking: '#a86a26', eye: '#b8a03a', nose: '#b07a6a' }) },
   lynx: { label: 'Eurasian Lynx', fam: FELID, H: 0.62, len: 1.12, depth: 0.48, width: 0.72, rump: 1.06, tuck: 0.3, neckAng: 28, neckLen: 0.28, neckThk: 0.82,
     headAng: 14, headLen: 0.3, headD: 0.35, headW: 0.4, snout: 0.3, cheek: 1.45, eye: 0.055, legThk: 1.05, footLen: 1.15, pawW: 1.25,
     ear: { style: 'tufted', len: 0.34, w: 0.7, s: 0.26, a: 0.66, spread: 20 }, tail: { style: 'thin', len: 0.18, thk: 0.04, set: -30 }, tailTip: 0.35, earTip: 0.25,
-    pattern: 'spots', patternScale: 1.5, countershade: 0.6, cheeks: true,
-    palette: pal({ body: '#b8936a', belly: '#efe4d2', pattern: '#7a5a3c', marking: '#1d1714', eye: '#b8a03a', nose: '#b07a6a' }) },
-  polarBear: { label: 'Polar Bear', fam: URSID, H: 1.3, len: 1.5, depth: 0.52, width: 0.88, rump: 1.02, tuck: 0.1, belly: 0.25, neckAng: 22, neckLen: 0.4, neckThk: 0.75,
-    headAng: 14, headLen: 0.32, headD: 0.26, headW: 0.28, snout: 0.48, snoutW: 0.55, snoutD: 0.5, stop: 0.15, dome: 0.95, legThk: 1.25, countershade: 0,
+    pattern: 'spots', patternScale: 0.95, spotSize: 0.24, countershade: 0.6, cheeks: true, grain: 1.5,
+    palette: pal({ body: '#b8936a', belly: '#efe4d2', pattern: '#6e5038', marking: '#1d1714', eye: '#b8a03a', nose: '#b07a6a' }) },
+  // Digital Diorama revision: heavier limbs and body (it looked slender)
+  polarBear: { label: 'Polar Bear', fam: URSID, H: 1.3, len: 1.45, depth: 0.58, width: 1.0, rump: 1.02, tuck: 0.06, belly: 0.25, neckAng: 22, neckLen: 0.38, neckThk: 0.85,
+    headAng: 14, headLen: 0.32, headD: 0.27, headW: 0.3, snout: 0.48, snoutW: 0.58, snoutD: 0.52, stop: 0.15, dome: 0.95, legThk: 1.55, pawW: 1.25, countershade: 0,
     ear: { len: 0.15 }, palette: pal({ body: '#ece6d6', belly: '#e6dfcd', marking: '#d6ceb8', nose: '#121010', hoof: '#2a2420', skin: '#2a2420' }) },
   panda: { label: 'Giant Panda', fam: URSID, H: 0.75, len: 1.3, depth: 0.6, width: 1.0, rump: 1.0, tuck: 0.05, belly: 0.3, neckAng: 18, neckLen: 0.22, neckThk: 0.9,
     headAng: 16, headLen: 0.38, headD: 0.36, headW: 0.46, snout: 0.32, snoutW: 0.5, snoutD: 0.5, stop: 0.5, dome: 1.15, cheek: 1.35, legThk: 1.3,
     ear: { style: 'round', len: 0.22, w: 1.0, s: 0.2, a: 0.82 }, pattern: 'panda', countershade: 0,
     palette: pal({ body: '#f1ede4', belly: '#f1ede4', pattern: '#1b1a1a', marking: '#1b1a1a', nose: '#121010', skin: '#1b1a1a' }) },
-  raccoon: { label: 'Raccoon', fam: { ...URSID, stance: 'plantigrade' }, H: 0.3, len: 1.5, depth: 0.55, width: 0.85, rump: 1.15, tuck: 0.15, neckAng: 25, neckLen: 0.25, neckThk: 0.85,
+  // Digital Diorama revision: a hunched, stocky body (it was long and stretched) and a grizzled coat
+  raccoon: { label: 'Raccoon', fam: { ...URSID, stance: 'plantigrade' }, H: 0.3, len: 1.3, depth: 0.66, width: 0.95, rump: 1.2, tuck: 0.1, neckAng: 25, neckLen: 0.22, neckThk: 0.95, legThk: 1.2, grain: 2.2,
     headAng: 15, headLen: 0.42, headD: 0.3, headW: 0.42, snout: 0.45, snoutW: 0.35, snoutD: 0.4, stop: 0.45, eye: 0.05, cheek: 1.35, claws: 0.6,
-    ear: { style: 'round', len: 0.26, w: 0.85, s: 0.22, a: 0.68, spread: 20 }, tail: { style: 'bushy', len: 0.85, thk: 0.06, set: -30, bush: 0.4 }, pattern: 'raccoon', countershade: 0.3, earTip: 0.0, earZone: 'belly',
+    ear: { style: 'round', len: 0.26, w: 0.85, s: 0.22, a: 0.68, spread: 20 }, tail: { style: 'bushy', len: 0.85, thk: 0.085, set: -30, bush: 0.5 }, pattern: 'raccoon', countershade: 0.3, earTip: 0.0, earZone: 'belly',
     palette: pal({ body: '#8a847b', belly: '#cfc8bb', pattern: '#1e1c1a', marking: '#2b2825', nose: '#121010' }) },
-  badger: { label: 'European Badger', fam: URSID, H: 0.28, len: 2.1, depth: 0.62, width: 1.05, rump: 1.0, tuck: 0, belly: 0.2, neckAng: 10, neckLen: 0.3, neckThk: 0.85,
+  badger: { label: 'European Badger', fam: URSID, H: 0.28, len: 2.1, depth: 0.7, width: 1.25, grain: 1.8, rump: 1.0, tuck: 0, belly: 0.2, neckAng: 10, neckLen: 0.3, neckThk: 0.85,
     headAng: 18, headLen: 0.55, headD: 0.24, headW: 0.32, snout: 0.5, snoutW: 0.4, snoutD: 0.45, stop: 0.05, dome: 0.9, eye: 0.03, legThk: 1.4, claws: 1.4,
     ear: { style: 'round', len: 0.14, w: 1.0, s: 0.22, a: 0.95 }, tail: { style: 'bushy', len: 0.45, thk: 0.06, set: -20, bush: 0.4 }, pattern: 'badger', countershade: 0,
     palette: pal({ body: '#8f8a84', belly: '#ece8df', pattern: '#1a1918', marking: '#1a1918', nose: '#121010' }) },
@@ -2162,13 +2229,17 @@ const SPECIES_DEFS = {
     headAng: 8, headLen: 0.42, headD: 0.24, headW: 0.38, snout: 0.35, snoutW: 0.6, snoutD: 0.55, stop: 0.25, dome: 0.9, eye: 0.045, eyeEl: 30, legThk: 1.2, footLen: 1.1, webbed: true, toes: 5,
     ear: { style: 'round', len: 0.12, w: 1.0, s: 0.24, a: 1.0 }, tail: { style: 'thin', len: 1.35, match: 0.75, set: -15 }, countershade: 0.45, cheeks: true,
     palette: pal({ body: '#5e432c', belly: '#a68e72', nose: '#121010', web: '#3a2a1e' }) },
-  hedgehog: { label: 'Hedgehog', fam: { stance: 'plantigrade', nose: 'pad', claws: 0.5 }, H: 0.12, len: 1.6, depth: 0.78, width: 1.15, rump: 1.0, tuck: 0, neckAng: 15, neckLen: 0.15, neckThk: 0.95,
-    headAng: 25, headLen: 0.55, headD: 0.28, headW: 0.35, snout: 0.55, snoutW: 0.3, snoutD: 0.32, stop: 0.1, eye: 0.06, legThk: 1.4, quills: { len: 0.35, count: 320 },
+  // Digital Diorama revision: a round body under a dense coat of short spines laid back (painted between the
+  // modelled quills), rather than sparse long spikes on a long body
+  hedgehog: { label: 'Hedgehog', fam: { stance: 'plantigrade', nose: 'pad', claws: 0.5 }, H: 0.115, len: 1.35, depth: 0.86, width: 1.2, rump: 1.0, tuck: 0, neckAng: 15, neckLen: 0.12, neckThk: 0.95,
+    headAng: 25, headLen: 0.5, headD: 0.3, headW: 0.36, snout: 0.5, snoutW: 0.3, snoutD: 0.32, stop: 0.1, eye: 0.06, legThk: 1.4, quills: { len: 0.2, count: 560, lay: 1.35 }, spinyBack: true,
     ear: { style: 'round', len: 0.2, w: 1.0, s: 0.25, a: 0.95 }, tail: { style: 'thin', len: 0.12, thk: 0.06, set: -30 }, countershade: 0.6,
-    palette: pal({ body: '#7d6a55', belly: '#cbb59a', marking: '#efe6d6', pattern: '#3a2c20', nose: '#121010', skin: '#d4a090' }) },
-  squirrel: { label: 'Red Squirrel', fam: RODENT, H: 0.12, len: 1.55, depth: 0.55, width: 0.75, rump: 1.25, rumpDepth: 1.1, tuck: 0.2, neckAng: 40, neckLen: 0.22, neckThk: 0.8,
-    headAng: 15, headLen: 0.45, headD: 0.33, headW: 0.38, snout: 0.32, eye: 0.11,
-    ear: { style: 'tufted', len: 0.42, w: 0.55, s: 0.2, a: 0.55, spread: 15 }, tail: { style: 'bushy', len: 1.9, thk: 0.09, set: 75, curl: -35, tipCurl: -30, bush: 0.75 },
+    palette: pal({ body: '#7d6a55', belly: '#cbb59a', marking: '#c9b996', pattern: '#4f3e2d', nose: '#121010', skin: '#d4a090' }) },
+  // Digital Diorama revision: a compact, crouched body low on short legs (it stood on stilts like a cat) and a
+  // tail as bushy as the body is deep, arching up behind the back
+  squirrel: { label: 'Red Squirrel', fam: RODENT, H: 0.095, len: 1.9, depth: 0.74, width: 0.85, rump: 1.12, rumpDepth: 1.15, tuck: 0.15, neckAng: 40, neckLen: 0.18, neckThk: 0.9,
+    headAng: 15, headLen: 0.5, headD: 0.38, headW: 0.44, snout: 0.32, eye: 0.12, legThk: 1.25,
+    ear: { style: 'tufted', len: 0.42, w: 0.55, s: 0.2, a: 0.55, spread: 15 }, tail: { style: 'bushy', len: 1.8, thk: 0.24, set: 62, curl: -8, tipCurl: -22, bush: 0.9 },
     countershade: 0.65, palette: pal({ body: '#b5561f', belly: '#f2e4cc', marking: '#7a3812', nose: '#3a2a22', eye: '#140e0b' }) },
   beaver: { label: 'Beaver', fam: { ...RODENT, stance: 'plantigrade', crouch: 0 }, H: 0.32, len: 2.0, depth: 0.72, width: 1.0, rump: 1.15, rumpDepth: 1.1, tuck: 0, neckAng: 20, neckLen: 0.22, neckThk: 0.95,
     headAng: 15, headLen: 0.45, headD: 0.3, headW: 0.38, snout: 0.38, snoutW: 0.62, snoutD: 0.6, eye: 0.04, incisors: 0.12, webbed: 'hind', toes: 5, legThk: 1.25,
@@ -2185,7 +2256,7 @@ const SPECIES_DEFS = {
     palette: pal({ body: '#ece2cc', belly: '#e6dbc2', marking: '#2c2623', nose: '#1d1917', skin: '#2c2623' }) },
   bighorn: { label: 'Bighorn Sheep', fam: UNGULATE, H: 1.0, len: 1.1, depth: 0.52, width: 0.88, rump: 1.0, tuck: 0.2, neckAng: 40, neckLen: 0.3, neckThk: 0.85,
     headAng: 50, headLen: 0.3, headD: 0.29, headW: 0.27, snout: 0.5, snoutW: 0.58, snoutD: 0.55, stop: 0.15, roman: 0.4, eye: 0.05, legThk: 0.95,
-    ear: { style: 'pointed', len: 0.3, w: 0.45, s: 0.14, a: 1.05, spread: 60, tilt: 0 }, horns: { style: 'ram', len: 1.0, thk: 0.12, s: 0.1, a: 0.5, curl: 1.7 },
+    ear: { style: 'pointed', len: 0.3, w: 0.45, s: 0.14, a: 1.05, spread: 60, tilt: 0 }, horns: { style: 'ram', len: 1.45, thk: 0.17, s: 0.1, a: 0.5, curl: 1.85 },
     tail: { style: 'thin', len: 0.12, thk: 0.035, set: -60 }, rumpPatch: true, muzzle: 'light', muzzleS: 0.85, countershade: 0.35,
     palette: pal({ body: '#7a5f45', belly: '#eee4d4', horn: '#bfa77e', nose: '#2b2320' }) },
   goat: { label: 'Domestic Goat', fam: UNGULATE, H: 0.75, len: 1.15, depth: 0.5, width: 0.8, rump: 1.02, tuck: 0.15, neckAng: 45, neckLen: 0.34, neckThk: 0.68,
@@ -2211,7 +2282,7 @@ const SPECIES_DEFS = {
   reindeer: { label: 'Reindeer', fam: UNGULATE, H: 1.1, len: 1.05, depth: 0.5, width: 0.84, rump: 1.0, tuck: 0.15, neckAng: 35, neckLen: 0.35, neckThk: 0.75,
     headAng: 55, headLen: 0.33, headD: 0.25, headW: 0.22, snout: 0.55, snoutW: 0.7, snoutD: 0.6, stop: 0.08, eye: 0.045, legThk: 0.95, pawW: 1.2,
     ear: { style: 'pointed', len: 0.3, w: 0.5, s: 0.12, a: 0.95, spread: 55 }, horns: { style: 'antlers', len: 1.3, thk: 0.05, s: 0.1, a: 0.42, tines: 5 },
-    tail: { style: 'flat', len: 0.12, thk: 0.035, set: -40 }, frontMane: 0.85, rumpPatch: true, countershade: 0.3, muzzle: 'dark', muzzleS: 0.6,
+    tail: { style: 'flat', len: 0.12, thk: 0.035, set: -40 }, frontMane: 0.7, maneTop: 0.25, maneHead: false, rumpPatch: true, countershade: 0.3, muzzle: 'dark', muzzleS: 0.6, grain: 1.6,
     palette: pal({ body: '#7a6a58', belly: '#e4dccb', mane: '#ece4d4', marking: '#3d3127', horn: '#d0bc96', nose: '#2b2320' }) },
   camel: { label: 'Dromedary Camel', fam: { ...UNGULATE, foot: 'pad', nose: 'muzzle', pupil: 'round' }, H: 1.85, len: 0.82, depth: 0.42, width: 0.78, rump: 0.92, tuck: 0.35, humps: [{ u: 0.55, h: 0.2, w: 0.42 }],
     neckAng: 15, neckLen: 0.55, neckThk: 0.48, neckW: 0.6, neckArch: -0.12, headAng: 25, headLen: 0.28, headD: 0.23, headW: 0.22, snout: 0.55, snoutW: 0.6, snoutD: 0.6, stop: 0.2, eye: 0.05, legThk: 0.72, tibiaSlope: 0.7,
@@ -2237,9 +2308,10 @@ const SPECIES_DEFS = {
     palette: pal({ body: '#4a3a2e', belly: '#3e3026', mane: '#241c16', nose: '#3a2e28', hoof: '#1d1814' }) },
   anteater: { label: 'Giant Anteater', fam: { stance: 'plantigrade', nose: 'pad', claws: 2.2, toes: 4 }, H: 0.75, len: 1.5, depth: 0.55, width: 0.65, rump: 1.02, tuck: 0.05, neckAng: 15, neckLen: 0.38, neckThk: 0.7,
     headAng: 25, headLen: 0.5, headD: 0.14, headW: 0.16, snout: 0.78, snoutW: 0.35, snoutD: 0.4, stop: 0, eye: 0.022, legThk: 1.1,
-    ear: { style: 'round', len: 0.1, w: 1.0, s: 0.12, a: 0.9 }, tail: { style: 'hair', len: 0.7, thk: 0.06, set: -10, hair: 0.95, hairW: 3, hairBack: 0.9 }, pattern: 'anteater', countershade: 0,
+    ear: { style: 'round', len: 0.1, w: 1.0, s: 0.12, a: 0.9 }, tail: { style: 'hair', len: 0.75, thk: 0.07, set: -10, hair: 1.15, hairW: 5, hairBack: 0.9 }, pattern: 'anteater', countershade: 0, grain: 2,
     palette: pal({ body: '#5e4e3e', belly: '#d9cfbd', pattern: '#121010', mane: '#4a3c30', nose: '#121010' }) },
-  mouse: { label: 'House Mouse', fam: RODENT, H: 0.035, len: 1.8, depth: 0.62, width: 0.8, rump: 1.2, rumpDepth: 1.1, tuck: 0.1, neckAng: 30, neckLen: 0.18, neckThk: 0.85,
+  // Digital Diorama revision: a low, rounded body on short legs (it stood on stilts)
+  mouse: { label: 'House Mouse', fam: RODENT, H: 0.03, len: 2.4, depth: 0.82, width: 0.85, rump: 1.25, rumpDepth: 1.1, tuck: 0.1, neckAng: 30, neckLen: 0.16, neckThk: 0.9, legThk: 1.15,
     headAng: 20, headLen: 0.55, headD: 0.32, headW: 0.38, snout: 0.45, snoutW: 0.35, snoutD: 0.38, stop: 0.15, eye: 0.09,
     ear: { style: 'round', len: 0.48, w: 0.95, s: 0.22, a: 0.6, spread: 30, tilt: 8, cup: 0.35 }, tail: { style: 'thin', len: 2.0, thk: 0.012, set: -10, curl: 18 },
     countershade: 0.4, palette: pal({ body: '#8d8478', belly: '#c9c0b2', skin: '#e2a8a0', nose: '#e2a8a0', eye: '#0c0a09' }) },
@@ -2305,7 +2377,7 @@ export const params = withZones({
   earStyle: { type: 'choice', default: 'species', options: ['species', ...Object.keys(EAR_PROFILES)], label: 'Ear style', affects: 'geometry', describe: 'Ear outline / carriage override.' },
   tailLen: { type: 'range', default: 1, min: 0, max: 2, step: 0.01, label: 'Tail length', affects: 'geometry', describe: 'Tail length multiplier.' },
   tailStyle: { type: 'choice', default: 'species', options: ['species', 'thin', 'bushy', 'tuft', 'hair', 'flat', 'fluffy', 'curly', 'none'], label: 'Tail style', affects: 'geometry', describe: 'Tail style override.' },
-  coatPattern: { type: 'choice', default: 'species', options: ['species', 'none', 'stripes', 'tiger', 'spots', 'hyena', 'rosettes', 'giraffe', 'patches', 'panda', 'raccoon', 'badger', 'tabby', 'anteater'], label: 'Coat pattern', affects: 'colors', describe: 'Coat pattern override.' },
+  coatPattern: { type: 'choice', default: 'species', options: ['species', 'none', 'stripes', 'tiger', 'spots', 'hyena', 'rosettes', 'giraffe', 'patches', 'panda', 'raccoon', 'badger', 'tabby', 'anteater', 'chipmunk'], label: 'Coat pattern', affects: 'colors', describe: 'Coat pattern override.' },
   countershading: { type: 'range', default: -1, min: -1, max: 1, step: 0.01, label: 'Countershading', affects: 'colors', describe: '-1 keeps the species value; 0..1 sets how far the light belly climbs the flank.' },
   seed: { type: 'range', default: 7, min: 1, max: 999, step: 1, label: 'Variation seed', affects: 'colors', describe: 'Seed for spots, stripes and quills.' },
   showHorns: { type: 'toggle', default: true, label: 'Horns / antlers', affects: 'geometry', describe: 'Build horns, antlers and ossicones.' },
@@ -2327,7 +2399,7 @@ export const rig = {
   ThighL: { axis: 'x', range: [-60, 40] }, ShinL: { axis: 'x', range: [-20, 120] }, FootL: { axis: 'x', range: [-90, 30] },
   Tail1: { axis: 'y', range: [-30, 30], describe: 'tail swish' }, Trunk1: { axis: 'x', range: [-40, 60], describe: 'trunk curl' },
 };
-export const detach = ['horns', 'tusks', 'trunk', 'mane', 'tail', 'ears', 'eyes', 'eyelids', 'nose', 'teeth', 'spines', 'jaw', 'feet'];
+export const detach = ['horns', 'tusks', 'trunk', 'mane', 'tail', 'ears', 'eyes', 'eyelids', 'nose', 'teeth', 'spines', 'jaw', 'feet', 'udder'];
 export const night = { eye: { color: '#9cff6a', intensity: 0.35, describe: 'tapetum eyeshine on the iris zone' } };
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -2449,6 +2521,7 @@ export function createAsset(input = {}) {
   tetraTrunk(B, S, L);
   tetraMane(B, S, L);
   tetraQuills(B, S, L);
+  tetraUdder(B, S, L);
 
   const hidden = new Set(String(p.hide || '').split(',').map(s => s.trim()).filter(Boolean));
   const keep = (pt) => !hidden.has(pt.name) && !hidden.has(pt.group) && !(hidden.has('feet') && pt.group === 'feet');
@@ -2465,7 +2538,7 @@ export function createAsset(input = {}) {
     hipToShoulder: rigB.head('Chest').distanceTo(rigB.head('Hips')),
   };
   const pose = p.pose !== 'stand' ? sampleFor(info, p.pose, p.posePhase) : null;
-  const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, grain: p.coatGrain, grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat' };
+  const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, grain: p.coatGrain * (S.grain ?? 1), grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat' };
   const { root, skeleton } = finish(build, { name: `mammal-${p.species}`, merge: p.mergeForProduction, skinned: p.rigMode === 'skinned', zones, pose, coat: coatOn || coat.smooth ? coat : null });
   let tris = 0; root.traverse(m => { if (m.isMesh) tris += m.geometry.attributes.position.count / 3; });
   root.userData = {
