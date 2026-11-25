@@ -1,15 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import { Search, Lock } from 'lucide-react';
 import { CATALOG, CATEGORY_META } from '../../assets/catalog';
 import type { AssetDef } from '../../assets/types';
-import { dietText, roleOf, ROLE_META } from '../../assets/foodweb';
+import { roleOf, ROLE_META } from '../../assets/foodweb';
 import { BIOMES } from '../../biomes/templates';
-import { AVATARS, BADGES, levelOf, updateProfile } from '../../game/progress';
+import { AVATARS, BADGES, levelOf, updateProfile, type Profile } from '../../game/progress';
 import { AssetThumb } from '../AssetThumb';
 import { LevelRing } from './Hud';
 import { useProfile } from './useGame';
-import { statusColor, Chip } from '../common';
+import { SpeciesSheet } from '../species/SpeciesSheet';
+import { loadSpeciesMedia } from '../species/media';
 
 const LIVING = CATALOG.filter((d) => d.living !== false && d.category !== 'habitats');
 const BIOME_NAME = Object.fromEntries(BIOMES.map((b) => [b.id, `${b.emoji} ${b.name}`]));
@@ -56,6 +57,8 @@ export function Journal({ initialTab = 'species' }: { initialTab?: 'species' | '
   const [cat, setCat] = useState<string>('animals');
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<AssetDef | null>(null);
+  // the photos and descriptions, ready by the time a card is opened
+  useEffect(() => { void loadSpeciesMedia(); }, []);
   const cats = ['animals', 'plants', 'fungi'] as const;
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -125,21 +128,14 @@ export function Journal({ initialTab = 'species' }: { initialTab?: 'species' | '
           {byGroup.length === 0 && <p className="py-8 text-center text-sm text-ink/55">No discoveries match. Tap living things in Explore mode to add them to your journal.</p>}
         </>
       )}
-      {open && (
-        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/50 p-4" onClick={() => setOpen(null)}>
-          <div className="dd-species-card w-[min(92vw,380px)] overflow-hidden rounded-[28px]" onClick={(e) => e.stopPropagation()} style={{ ['--role' as string]: ROLE_META[roleOf(open)].color }}>
-            <div className="dd-species-hero grid place-items-center pb-2 pt-4"><AssetThumb id={open.id} emoji={open.emoji} size={150} /></div>
-            <div className="space-y-2 p-4">
-              <div className="font-display text-2xl font-bold leading-tight">{open.name}</div>
-              {open.info.scientific && <div className="-mt-1 text-sm italic text-ink/60">{open.info.scientific}</div>}
-              <div className="flex flex-wrap gap-1"><Chip color={ROLE_META[roleOf(open)].color}>{ROLE_META[roleOf(open)].emoji} {ROLE_META[roleOf(open)].label}</Chip>{open.info.status && <Chip color={statusColor(open.info.status)}>{open.info.status}</Chip>}</div>
-              <p className="text-sm leading-relaxed text-ink/80">💡 {open.info.fact ?? open.info.blurb}</p>
-              {open.category === 'animals' && !!open.info.eats?.length && <p className="text-[13px] text-ink/70"><b className="text-ink/85">🍽️ Eats:</b> {dietText(open)}</p>}
-              <div className="text-xs text-ink/55">{[open.info.kingdom, open.info.phylum, open.info.class, open.info.order, open.info.family].filter(Boolean).join(' › ')}</div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* (a sheet of its own on top of everything, with its own ✕: Back closes just the card) */}
+      <SpeciesSheet def={open} onClose={() => setOpen(null)} />
     </div>
   );
+}
+
+/** "12/306 species · 3/16 badges" */
+export function journalSummary(p: Readonly<Profile>) {
+  const found = p.discovered.filter((id) => LIVING.some((d) => d.id === id)).length;
+  return `${found}/${LIVING.length} species · ${p.badges.length}/${BADGES.length} badges`;
 }

@@ -1,0 +1,20 @@
+{
+  "_about": "Hand-picked fixes for tools/fetch-species-media.mjs (see its header): skip old drawings and poor likenesses so a real photo is used, look for a photo under a related page, or leave out what doesn't fit.",
+  "aqua/anemone": {"skip": ["Actiniaria.jpg"], "also": ["Heteractis magnifica", "Entacmaea quadricolor"]},
+  "aqua/vallisneria": {"skip": ["Vallisneria spiralis Erasmus Darwin 1789.jpg"], "also": ["Vallisneria spiralis", "Vallisneria americana"]},
+  "plant/dandelions": {"skip": ["Taraxacum officinale - Köhler–s Medizinal-Pflanzen-135.jpg"]},
+  "plant/geranium": {"skip": ["Jan Moninckx08.jpg"], "also": ["Pelargonium zonale", "Pelargonium × hortorum"]},
+  "plant/lavender-shrub": {"skip": ["Lavandula angustifolia - Köhler–s Medizinal-Pflanzen-087.jpg"]},
+  "plant/reeds": {"skip": ["Typha flwrs.jpg"]},
+  "tree/palm": {"commons": "2009 Yucatán beach palms.jpg"},
+  "tree/banana": {"skip": ["Bananapao.JPG"], "also": ["Banana"]},
+  "tree/broadleaf": {"noInat": true},
+  "grove/mixed": {"also": ["Temperate deciduous forest", "Forest"]},
+  "water/fish-school": {"skip": ["Sardina pilchardus Italy.jpg", "Sardina pilchardus Gervais.jpg"], "also": ["Shoaling and schooling"]},
+  "feature/termite-mound": {"skip": ["Macrotermes michaelseni.jpg"], "also": ["Mound-building termites", "Termite mound"]},
+  "wild/glass-sponge": {"skip": ["Haeckel Hexactinellae.jpg"], "also": ["Hyalonema", "Hexactinellid"]},
+  "wild/velvet-worm": {"skip": ["Peripatus juliformis illustration.jpg"], "also": ["Peripatus", "Onychophora"]},
+  "wild/little-jaw-animal": {"noPhoto": true},
+  "wild/orthonectid": {"noPhoto": true},
+  "wild/dicyemid": {"skip": ["Dicyema macrocephalum.png"], "also": ["Dicyemida", "Dicyema"]}
+}

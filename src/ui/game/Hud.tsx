@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { clsx } from 'clsx';
-import { starGoals } from '../../game/ecology';
+import { starGoals, type Health } from '../../game/ecology';
+import { Modal } from '../common';
 import { FEATURES, needFor, nextStage, type Stage } from '../../game/unlocks';
 import { BIOME_BY_ID } from '../../biomes/templates';
 import { useProfile } from './useGame';
@@ -56,12 +57,17 @@ export function XpChip({ profile, onClick, compact }: { profile: Profile; onClic
 }
 
 /* ---------------- ecosystem health ---------------- */
-export function HealthChip({ game, compact }: { game: GameState; compact?: boolean }) {
+/**
+ * The heart in the top bar. Tapping it explains the score: in a popover under it on wide screens,
+ * and in a panel from the bottom of the screen on phones (where a popover would hang off the edge).
+ */
+export function HealthChip({ game, compact, sheet }: { game: GameState; compact?: boolean; /** phones: the details open as a bottom panel */ sheet?: boolean }) {
   const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
   const h = game.health;
   return (
     <div className="relative">
-      <button onClick={() => setOpen((v) => !v)} className="dd-hudchip flex h-11 items-center gap-2 rounded-2xl px-2.5" title="Ecosystem health" data-popover-anchor data-tour="health">
+      <button onClick={() => setOpen((v) => !v)} className="dd-hudchip flex h-11 items-center gap-2 rounded-2xl px-2.5" title="Ecosystem health" aria-label={`Ecosystem health: ${h.score} out of 100, ${h.label}`} aria-expanded={open} aria-haspopup="dialog" data-popover-anchor data-tour="health">
         <span className="relative grid h-7 w-7 place-items-center rounded-full" style={{ background: h.color + '33' }}>
           <Heart size={16} fill={h.color} stroke={h.color} className={h.score >= 85 ? 'dd-beat' : ''} />
         </span>
@@ -70,32 +76,61 @@ export function HealthChip({ game, compact }: { game: GameState; compact?: boole
           {!compact && <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: h.color }}>{h.label}</span>}
         </span>
       </button>
-      <Popover open={open} onClose={() => setOpen(false)} className="w-[min(92vw,340px)]">
-        <div className="dd-card-dark rounded-3xl p-4 text-white" data-tour="health-pop">
-          <div className="flex items-center gap-3">
-            <div className="grid h-14 w-14 place-items-center rounded-2xl" style={{ background: h.color + '2a', boxShadow: `inset 0 0 0 2px ${h.color}66` }}><Heart size={28} fill={h.color} stroke={h.color} /></div>
-            <div>
-              <div className="font-display text-xs font-bold uppercase tracking-widest text-white/60">Ecosystem health</div>
-              <div className="font-display text-2xl font-bold">{h.score} <span className="text-base" style={{ color: h.color }}>{h.label}</span></div>
-            </div>
+      {sheet ? (
+        <Modal open={open} onClose={close} sheet closeOnCoach label="Ecosystem health"
+          title={<span className="flex items-center gap-2"><Heart size={20} fill={h.color} stroke={h.color} /> Ecosystem health</span>}>
+          <div className="space-y-3" data-tour="health-pop">
+            <div className="dd-card-dark rounded-3xl p-4 text-white"><HealthScore h={h} caption="How well your habitat can keep its plants and animals alive, out of 100." /></div>
+            <HealthParts h={h} />
           </div>
-          <div className="mt-3 space-y-2">
-            {h.parts.map((p) => (
-              <div key={p.name}>
-                <div className="flex justify-between text-[12px] font-semibold text-white/80"><span>{p.name}</span><span className="tabular-nums text-white/60">{p.got}/{p.max}</span></div>
-                <div className="mt-0.5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full transition-all duration-700" style={{ width: `${(p.got / p.max) * 100}%`, background: p.got >= p.max ? '#28c76f' : p.got > 0 ? '#f0b429' : '#e5484d' }} /></div>
-              </div>
-            ))}
+        </Modal>
+      ) : (
+        <Popover open={open} onClose={close} className="w-[min(92vw,340px)]">
+          <div className="dd-card-dark rounded-3xl p-4 text-white" data-tour="health-pop">
+            <HealthScore h={h} />
+            <HealthParts h={h} dark />
           </div>
-          {h.tips.length > 0 && (
-            <div className="mt-3 space-y-1.5 rounded-2xl bg-white/[0.06] p-3">
-              <div className="flex items-center gap-1.5 font-display text-xs font-bold uppercase tracking-wider text-amber-300"><Lightbulb size={14} /> How to help it thrive</div>
-              {h.tips.slice(0, 3).map((t) => <div key={t} className="text-[13px] leading-snug text-white/85">• {t}</div>)}
-            </div>
-          )}
-        </div>
-      </Popover>
+        </Popover>
+      )}
     </div>
+  );
+}
+
+/** the score; `caption` (the phone panel, whose title already names it) says what it means instead */
+function HealthScore({ h, caption }: { h: Health; caption?: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl" style={{ background: h.color + '2a', boxShadow: `inset 0 0 0 2px ${h.color}66` }}><Heart size={28} fill={h.color} stroke={h.color} /></div>
+      <div className="min-w-0">
+        {!caption && <div className="font-display text-xs font-bold uppercase tracking-widest text-white/60">Ecosystem health</div>}
+        <div className="font-display text-2xl font-bold">{h.score}<span className="text-base text-white/50">/100</span> <span className="text-base" style={{ color: h.color }}>{h.label}</span></div>
+        {caption && <div className="mt-0.5 text-[12.5px] leading-snug text-white/65">{caption}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** each part of the score as a bar, and what to add next */
+function HealthParts({ h, dark }: { h: Health; dark?: boolean }) {
+  return (
+    <>
+      <div className={clsx('space-y-2', dark ? 'mt-3' : 'rounded-3xl bg-black/[0.03] p-3.5 ring-1 ring-black/5')}>
+        {!dark && <div className="font-display text-[12px] font-bold uppercase tracking-wider text-ink/50">What makes it healthy</div>}
+        {h.parts.map((p) => (
+          <div key={p.name}>
+            <div className={clsx('flex justify-between font-semibold', dark ? 'text-[12px] text-white/80' : 'text-[13px] text-ink/80')}><span>{p.name}</span><span className={clsx('tabular-nums', dark ? 'text-white/60' : 'text-ink/50')}>{p.got}/{p.max}</span></div>
+            <div className={clsx('mt-0.5 h-2 overflow-hidden rounded-full', dark ? 'bg-white/10' : 'bg-black/10')}><div className="h-full rounded-full transition-all duration-700" style={{ width: `${(p.got / p.max) * 100}%`, background: p.got >= p.max ? '#28c76f' : p.got > 0 ? '#f0b429' : '#e5484d' }} /></div>
+          </div>
+        ))}
+      </div>
+      {h.tips.length > 0 && (
+        <div className={clsx('space-y-1.5 rounded-2xl p-3', dark ? 'mt-3 bg-white/[0.06]' : 'bg-amber-50 ring-1 ring-amber-200')}>
+          <div className={clsx('flex items-center gap-1.5 font-display text-xs font-bold uppercase tracking-wider', dark ? 'text-amber-300' : 'text-amber-700')}><Lightbulb size={14} /> How to help it thrive</div>
+          {h.tips.slice(0, dark ? 3 : 5).map((t) => <div key={t} className={clsx('leading-snug', dark ? 'text-[13px] text-white/85' : 'text-[14px] text-ink/85')}>• {t}</div>)}
+        </div>
+      )}
+      {h.tips.length === 0 && !dark && <div className="rounded-2xl bg-[#3ccf6e]/15 p-3 text-[14px] font-semibold text-[#1f7a3d] ring-1 ring-[#3ccf6e]/30">🌟 A thriving habitat — every part is in balance.</div>}
+    </>
   );
 }
 
