@@ -57,12 +57,17 @@ export class Actor {
   velocity = new THREE.Vector3();
   private lastPos = new THREE.Vector3();
   speedSmoothed = 0;
+  /** a quicker speed estimate, for gait playback rates (Digital Diorama revision 7) */
+  private speedFast = 0;
+  private relFast = 0;
   /** true while a script is steering this actor (ambient life pauses) */
   scripted = false;
   ambientEnabled = true;
   ambient: AmbientState = 'idle';
   private ambientTimer = 1 + Math.random() * 3;
   private ambientTarget = new THREE.Vector3();
+  /** ambient walking speed, eased in and out (Digital Diorama revision 7) */
+  private moveV = 0;
   private home = new THREE.Vector3();
   private circlePhase = Math.random() * Math.PI * 2;
   private R = rng(Math.floor(Math.random() * 1e9));
@@ -328,14 +333,18 @@ export class Actor {
     _v.y = 0;
     const sp = dt > 0 ? _v.length() / dt : 0;
     this.speedSmoothed += (sp - this.speedSmoothed) * Math.min(1, dt * 6);
+    // Digital Diorama revision 7: the playback rate follows a quicker estimate of the speed (about 50 ms behind) than the
+    // gait choice does; following the slow one (about 170 ms), planted feet slid as an animal set off or stopped
+    this.speedFast += (sp - this.speedFast) * Math.min(1, dt * 20);
     this.lastPos.copy(this.root.position);
     const scale = this.root.scale.x * m.exhibitScale;
     const rel = this.speedSmoothed / Math.max(0.2, scale);
+    this.relFast = this.speedFast / Math.max(0.2, scale);
     if (this.mixer) {
       if (!this.forcedClip) this.autoClip(rel);
       // a gait chosen by a script still keeps its feet planted while the animal moves (and steps at its own pace in place)
       else if (this.currentName === this.forcedClip && this.gaitMeta(this.forcedClip)) {
-        if (rel > 0.02) this.playGait(this.forcedClip, rel); else this.play(this.forcedClip, 0.25, 1);
+        if (rel > 0.02) this.playGait(this.forcedClip, this.relFast); else this.play(this.forcedClip, 0.25, 1);
       }
       for (const [name] of this.holds) if (!this.restQuats.has(name)) {
         const b = m.raw.getObjectByName(name);
@@ -397,11 +406,14 @@ export class Actor {
     return ud?.stride && ud.hipH ? (ud as { stride: number; speed?: number; hipH: number }) : null;
   }
 
-  /** play a gait clip at the rate that carries its planted feet back at ground speed `rel`, so they don't slide */
-  private playGait(name: string, rel: number, fade = 0.25) {
+  /**
+   * play a gait clip at the rate that carries its planted feet back at ground speed `rel`, so they don't slide
+   * (Digital Diorama revision 7: down to a tenth of the clip's own speed; held at 0.3, a slow walk's feet slid 10-15 cm a step)
+   */
+  private playGait(name: string, rel: number, fade = 0.15) {
     const m = this.gaitMeta(name), a = this.actions.get(name);
     if (!m || !a) return this.play(name, fade);
-    return this.play(name, fade, clamp((rel * a.getClip().duration) / m.stride, 0.3, 2.5));
+    return this.play(name, fade, clamp((rel * a.getClip().duration) / m.stride, 0.1, 2.5));
   }
 
   /**
@@ -414,7 +426,9 @@ export class Actor {
     if (!walk) return false;
     const cur = this.currentName, moving = cur === 'walk' || cur === 'trot' || cur === 'gallop';
     const vWalk = walk.speed ?? Math.sqrt(0.2 * 9.81 * walk.hipH);
-    if (rel < vWalk * (moving ? 0.16 : 0.22)) {
+    // (Digital Diorama revision 7: an animal moving at more than a tenth of its walking pace walks, slowly, rather than
+    // gliding in its idle; it used to stand still below about a fifth)
+    if (rel < vWalk * (moving ? 0.08 : 0.12)) {
       if (moving || !cur) this.play(this.idleClip(), 0.35);
       return true;
     }
@@ -422,7 +436,7 @@ export class Actor {
     const toTrot = cur === 'trot' || cur === 'gallop' ? 0.42 : 0.5, toGallop = cur === 'gallop' ? 2.0 : 2.5;
     let want = fr < toTrot || !this.actions.has('trot') ? 'walk' : 'trot';
     if (want === 'trot' && fr >= toGallop && this.actions.has('gallop')) want = 'gallop';
-    this.playGait(want, rel);
+    this.playGait(want, this.relFast);
     return true;
   }
 
@@ -578,6 +592,7 @@ export class Actor {
     if (d < 0.08 || this.ambientTimer <= 0) {
       this.ambient = 'idle';
       this.ambientTimer = 3 + this.R() * 6;
+      this.moveV = 0;
       return;
     }
     const want = Math.atan2(dx, dz);
@@ -585,8 +600,12 @@ export class Actor {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     this.root.rotation.y += clamp(diff, -dt * 2.5, dt * 2.5);
-    if (Math.abs(diff) < 0.9) {
-      const step = Math.min(d, spd * dt);
+    // Digital Diorama revision 7: walkers ease into their pace and slow down as they arrive (at full speed from the first
+    // frame, their planted feet slid while the walk faded in); the gait's playback follows the actual speed
+    const wantV = Math.abs(diff) < 0.9 ? spd * clamp(d / (spd * 0.5), 0.25, 1) : 0;
+    this.moveV += (wantV - this.moveV) * Math.min(1, dt * 3);
+    if (this.moveV > 1e-4) {
+      const step = Math.min(d, this.moveV * dt);
       p.x += Math.sin(this.root.rotation.y) * step;
       p.z += Math.cos(this.root.rotation.y) * step;
     }

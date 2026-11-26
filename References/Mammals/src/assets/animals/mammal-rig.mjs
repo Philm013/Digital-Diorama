@@ -91,6 +91,33 @@
  *     draped behind the eye over the neck and shoulder; hippo and camel heads reshaped.
  *   - Grazing reaches the grass in front of the forefeet (the neck pivots about its base, not
  *     mid-chest); lying elephants lift the head and curl the trunk; wolves' saddles fade raggedly.
+ *
+ * REVISION 7 (Digital Diorama: humps, heads, limb roots, elephants and planted feet)
+ *   - Humps: the withers bump falls steeply in front (`withersFront`) and slopes gradually back to the loin (`withersBack`),
+ *     and over a real hump (`humpTop`, `humpN`) the section keeps its width up to a rounded top instead of narrowing to a
+ *     ridge (the bison's front was a tall tent, the boar's withers a peak). The bison has a shaggy cape (`shag`) whose edge
+ *     runs back over the hump and frays (`maneSlant`, `maneRag`) and runs down the forearms (`maneLegs`); the boar's
+ *     bristle crest runs on along the spine (`mane.back`).
+ *   - Heads: pad noses sit on the front of the rounded muzzle (they were buried in it, so wolves, bears, otters and rodents
+ *     had none); big erect ears move out round the skull, then spread, until they stop crossing over the crown; hanging ears
+ *     are pushed clear of the head row by row and smoothed (they kinked); a camel's thick split upper lip hangs over the
+ *     lower (`lipOver`, `cleft`, `jawEnd`) above slit nostrils (`nostrilSlit`); a sheep's wool cap (`woolCap`); broad
+ *     beaver incisors (`incisorW`); moose palms cupped and tilted up and back with tines round their edges; new otter,
+ *     beaver, polar bear and camel heads. Pad-nose sizes: `padW`, `padH`, `padD`, `padUp`.
+ *   - Limb roots (blendLimbRoots): above the stifle and the upper arm the body is the outer surface, so leg points that stood
+ *     out of it are tucked inside (the thigh's top showed on the croup as a slab), and below that the leg flares into the
+ *     body by the soft-union amount (`fillet`), so the join no longer shows as a hard crease. Legs and torso are emitted
+ *     after this blend.
+ *   - Elephant: high shoulders over a back sloping to a lower, rounded rump, a deep round belly and a compact body; fan ears
+ *     with a curled top rim, a curved front edge and soft folds; pad feet flat on the ground, their contact at the pad's
+ *     front edge (rolling over its middle sank them 2-5 cm into the ground), as for rhinos and hippos.
+ *   - Gaits: the girdles' drop is smoothed round the cycle (dropCurve; the body jumped by the whole drop, up to a quarter of
+ *     a metre, when a straining foot lifted); feet stay on their line across the body and level (keepOnLine; pelvic roll
+ *     and body sway slid them 5-15 cm sideways a step); the swing starts and ends moving back with the ground, so feet set
+ *     down instead of skidding; the foreleg solve no longer misses at touchdown; 41-65 keys a cycle. Elephants take shorter
+ *     steps; rabbits' and squirrels' hind feet land under the chest in the bound (their haunches stretched at push-off).
+ *   - Graze: carnivores, bears and rodents sniff the ground in front of their forefeet with a shallower neck; grazers that
+ *     must dip the forehand (short necks) step their forefeet forward instead of folding the elbows.
  */
 
 import * as THREE from 'three';
@@ -1131,10 +1158,21 @@ function tetraTorso(B, S, L) {
   const pW = prof(keys.map(k => [k.u, k.w])), pHT = prof(keys.map(k => [k.u, k.ht])), pHB = prof(keys.map(k => [k.u, k.hb]));
   const by = (n) => keys.find(k => k.n === n);
   const uTop = by('neckTop').u, uRoot = by('neckRoot').u;
-  const ht = (u) => pHT(u) + humps.reduce((s, h) => s + h.h * L.H * bell(u, h.u * by('chest').u, h.w * by('chest').u), 0) + (S.withers || 0) * L.D * bell(u, by('chest').u - 0.02, 0.24);
+  // Digital Diorama revision 7: a hump, not a ridge. The withers bump was a narrow symmetric bell added to the top
+  // half-height of a narrow-topped chest section, so a big one (bison, boar) rose as a tent or a sharp peak. It now
+  // falls steeply in front (`withersFront`) and slopes gradually back to the loin (`withersBack`), and where it is a
+  // real hump (withers above ~0.2, or `humpTop` given) the section keeps its width up to a rounded, flatter top
+  // (`humpTop`: width high on the side, `humpN`: superellipse exponent of the top) instead of narrowing to a ridge.
+  const wAmt = S.withers || 0, uW = by('chest').u - 0.02 + (S.withersAt ?? 0);
+  const wFront = S.withersFront ?? 0.24, wBack = S.withersBack ?? 0.24;
+  const withersBell = (u) => bell(u, uW, u < uW ? wBack : wFront);
+  const humpK = S.humpTop !== undefined ? 1 : sstep(0.2, 0.3, wAmt);
+  const humpW = (u) => humpK * withersBell(u);
+  const ht = (u) => pHT(u) + humps.reduce((s, h) => s + h.h * L.H * bell(u, h.u * by('chest').u, h.w * by('chest').u), 0) + wAmt * L.D * withersBell(u);
   // Sections: broad back (nt > 2), keeled chest / rounded belly (nb < 2) so the barrel is not a tube.
   const ntB = S.nt || 2.15, nbB = S.nb || 1.85;
-  const nt = prof([[0, ntB * 0.92], [by('haunch').u, ntB], [by('chest').u, ntB], [uRoot + 0.02, 2], [1, 2]]);
+  const nt0 = prof([[0, ntB * 0.92], [by('haunch').u, ntB], [by('chest').u, ntB], [uRoot + 0.02, 2], [1, 2]]);
+  const nt = humpK > 0 ? (u) => lerp(nt0(u), S.humpN ?? 2.5, humpW(u)) : nt0;
   const nb = prof([[0, 2.1], [by('haunch').u, S.quartersBox ?? 2.0], [by('barrel').u, nbB], [by('chest').u, nbB * 0.95], [uRoot + 0.02, 2], [1, 2]]);
   const seg = Math.round((32 + 10 * (S.neckLen || 0)) * det), rad = 2 * Math.round(9 * det + 3);
   // Hamstring / buttock mass: swells the lower-lateral rear quadrant so the rear outline bulges at the
@@ -1170,7 +1208,8 @@ function tetraTorso(B, S, L) {
     { u: by('barrel').u, du: 0.5 * gap('loin', 'chest'), s: -0.05, ds: 0.55, amp: mk.ribs ?? 0 },
     { u: uAt('barrel', 'chest', 0.62), du: 0.28 * gap('barrel', 'chest'), s: -0.6, ds: 0.24, amp: -(mk.girth ?? 0) },
     { u: uAt('chest', 'neckRoot', 0.72), du: 0.38 * gap('chest', 'neckRoot'), s: -0.5, ds: 0.32, amp: mk.breast ?? 0 },
-    { u: by('chest').u - 0.01, du: 0.5 * gap('barrel', 'chest'), s: 1, ds: 0.12, amp: mk.withers ?? 0 },
+    // (Digital Diorama revision 7: no withers ridge on a hump)
+    { u: by('chest').u - 0.01, du: 0.5 * gap('barrel', 'chest'), s: 1, ds: 0.12, amp: (mk.withers ?? 0) * (1 - humpK) },
     { u: by('chest').u, du: 0.4 * gap('barrel', 'chest'), s: 0.8, ds: 0.16, amp: mk.scapula ?? 0 },
     { u: (by('haunch').u + by('chest').u) / 2, du: 0.55 * gap('haunch', 'chest'), s: 1, ds: 0.08, amp: mk.spine ?? 0 },
   ].filter(m => m.amp);
@@ -1179,10 +1218,19 @@ function tetraTorso(B, S, L) {
     for (const m of marks) { const du = (u - m.u) / m.du, ds = (sa - m.s) / m.ds; if (du * du < 9 && ds * ds < 9) f += m.amp * Math.exp(-du * du - ds * ds); }
     return f;
   };
-  const bump0 = (u, a, x, y) => hamBump(u, a) + shoulderBump(u, x, y, a) + markBump(u, a);
+  // Digital Diorama revision 7: a shaggy cape (`shag`, bison): over the front mane the coat stands out in rough tufts,
+  // thickest over the hump and shoulders (no extra triangles: the surface is displaced)
+  const capeU = { barrel: by('barrel').u, chest: by('chest').u };
+  const shagBump = S.shag && S.frontMane ? (u, a) => {
+    const sa = Math.sin(a), e = capeEdgeU(S, capeU, sa);
+    return S.shag * sstep(e - 0.04, e + 0.05, u) * (0.45 + 0.55 * Math.max(0, sa)) * (0.3 + 2 * (fbm(Math.cos(a) * 7 + u * 19, sa * 7, u * 15, 9) - 0.5));
+  } : null;
+  const bump0 = shagBump ? (u, a, x, y) => hamBump(u, a) + shoulderBump(u, x, y, a) + markBump(u, a) + shagBump(u, a)
+    : (u, a, x, y) => hamBump(u, a) + shoulderBump(u, x, y, a) + markBump(u, a);
   const bump = S.bumpFn ? (u, a, x, y) => bump0(u, a, x, y) + S.bumpFn(u, a, x, y) : bump0;
   // section shape (see tetraLayout): the side narrows toward the top / bottom by each station's `st` factors
-  const stT = prof(keys.map(k => [k.u, (k.st || [1, 1])[0]])), stB = prof(keys.map(k => [k.u, (k.st || [1, 1])[1]]));
+  const stT0 = prof(keys.map(k => [k.u, (k.st || [1, 1])[0]])), stB = prof(keys.map(k => [k.u, (k.st || [1, 1])[1]]));
+  const stT = humpK > 0 ? (u) => lerp(stT0(u), S.humpTop ?? 0.98, humpW(u)) : stT0;
   const sect = (u, a, x, y, h1, h2) => {
     const yn = Math.min(1, Math.abs(y) / Math.max(1e-9, y >= 0 ? h1 : h2));
     return [x * lerp(1, y >= 0 ? stT(u) : stB(u), sstep(0.04, 0.92, yn)), y];
@@ -1248,17 +1296,22 @@ function tetraHead(B, S, L) {
   // Digital Diorama revision 6: behind the corner of the mouth (sC) the cheek and its masseter muscle cover the jaw, so
   // the skull's surface comes down to the bottom of the jaw there (the jaw hung below the whole head as a strap: a
   // crocodile's mouth). Hunters' mouths run back to below the eye; grazers' and rodents' corners lie far forward.
-  const sJ0 = 0.14, sJ1 = 0.955;
+  // (Digital Diorama revision 7: `jawEnd` shortens the jaw so the upper lip can hang over its tip)
+  const sJ0 = 0.14, sJ1 = S.jawEnd ?? 0.955;
   const jawExtra = (S.jaw ?? 0.5) * ch * 0.55, lip = 0.22 * mt + 0.002 * L.H;
   const jDrop = (s) => lerp(jawExtra, lip, sstep(sJ0 + 0.12, sJ1, s)) * (S.chin ? 1 + S.chin * bell(s, 0.9, 0.14) : 1);
   const hunter = S.fang > 0 || S.nose === 'feline' || S.stance === 'plantigrade';
   const sC = clamp(S.mouthS ?? (hunter ? sEye + 0.04 : S.incisors > 0 ? lerp(sEye, 1, 0.42) : lerp(sEye, 1, 0.5)), sJ0 + 0.12, 0.93);
   const cover = (s) => 1 - sstep(sC - 0.05, sC + 0.03, s);
-  const HB = (s) => HBl(s) + cover(s) * (jDrop(s) + 0.04 * ch);
+  // Digital Diorama revision 7: a camel's long upper lip overhangs the lower: the muzzle's underside drops in front of the
+  // jaw's tip (`lipOver`, × muzzle height), and a cleft (`cleft`) splits it down the middle; the jaw keeps the plain lip line
+  const lipOver = (s) => (S.lipOver || 0) * mt * sstep(sJ1 - 0.1, Math.min(0.99, sJ1 + 0.06), s);
+  const HB = (s) => HBl(s) + lipOver(s) + cover(s) * (jDrop(s) + 0.04 * ch);
+  const cleftBump = S.cleft ? (s, a) => -S.cleft * sstep(0.86, 1, s) * Math.exp(-((Math.cos(a) / 0.16) ** 2)) * sstep(0.2, 0.7, -Math.sin(a)) : null;
   const nMuz = S.muzzleN || 2.2;
   const NT = prof([[0, 2], [s0, 2.05], [1, nMuz]]), NB = prof([[0, 2], [s0, 2.1], [1, nMuz + 0.2]]);
   const tip = O.clone().addScaledVector(hd, Lh);
-  const g = loft({ pts: [O, tip], seg: Math.round(18 * det), rad: 2 * Math.round(8 * det + 3), w: W, ht: HT, hb: HB, oy: OY, nt: NT, nb: NB, up: hu,
+  const g = loft({ pts: [O, tip], seg: Math.round(18 * det), rad: 2 * Math.round(8 * det + 3), w: W, ht: HT, hb: HB, oy: OY, nt: NT, nb: NB, up: hu, bump: cleftBump,
     cap0: { type: 'round', len: S.occiput ?? 0.72, n: 3 }, cap1: S.nose === 'disc' ? { type: 'flat' } : { type: 'round', len: S.noseCap ?? 0.5, n: 3 }, bend: 0, antifold: false });
   L.head = g; L.headS = { s0, sEye, sn, W, HT, HB: HBl, OY, sC };
   const headW = rig.W('Head');
@@ -1288,7 +1341,8 @@ function tetraHead(B, S, L) {
   rig.add('Jaw', 'Head', tmj, tip.clone().addScaledVector(hu, jBot(1)));
   L.jaw = jg;
   // (the lining only inside the mouth: the front of the jaw is the lower lip, coat-coloured)
-  emit(B.part('jaw', { group: 'head' }), jg, (u, a, P) => Math.abs(a - Math.PI / 2) < 0.5 && u > 0.1 && u < 0.88 ? 'mouth' : paint({ part: 'jaw', u: sOf(u), a, P, s0 }), rig.W('Jaw'));
+  // (Digital Diorama revision 7: the lining starts just in front of the mouth corner; at the corner it peeked out as a pink line)
+  emit(B.part('jaw', { group: 'head' }), jg, (u, a, P) => Math.abs(a - Math.PI / 2) < 0.5 && sOf(u) > sC + 0.02 && u < 0.88 ? 'mouth' : paint({ part: 'jaw', u: sOf(u), a, P, s0 }), rig.W('Jaw'));
   // ── whisker pads (mystacial pads for felids / carnivores)
   if (S.whiskerPads) {
     const sWp = s0 + 0.55 * sn, wpL = sn * Lh * 0.28;
@@ -1350,22 +1404,29 @@ function tetraHead(B, S, L) {
       emit(B.part('nose', { group: 'head' }), slit, 'mouth', headW);
     }
   } else if (S.nose === 'pad') {
-    const { p } = g.at(0.995, Math.PI / 2);
-    const c = tip.clone().addScaledVector(hd, mt * 0.12).addScaledVector(hu, OY(1) + mt * 0.25);
-    const ng = ellipsoid(c.lerp(p, 0.38), sw * cw * 0.48, mt * 0.38, mt * 0.22, hd.clone().addScaledVector(hu, 0.25).normalize(), hu, 5, 10);
+    // Digital Diorama revision 7: the pad sits on the front of the rounded muzzle cap, its upper part level with the top of
+    // the muzzle (it was placed from the end of the skull's path, so the longer caps of wolves, bears, otters and rodents
+    // swallowed it and they had no nose)
+    // (`padW`, `padH`, `padD`: its size, multipliers; `padUp`: its centre above the cap's apex, × muzzle height)
+    const rz = mt * 0.22 * (S.padD ?? 1), A = g.tip1 || tip;
+    const c = A.clone().addScaledVector(hu, mt * (S.padUp ?? 0.2)).addScaledVector(hd, -rz * 0.3);
+    const ng = ellipsoid(c, sw * cw * 0.48 * (S.padW ?? 1), mt * 0.38 * (S.padH ?? 1), rz, hd.clone().addScaledVector(hu, 0.25).normalize(), hu, 5, 10);
     emit(B.part('nose', { group: 'head' }), ng, 'nose', headW);
   } else if (S.nose === 'muzzle' || S.nose === 'disc') {
     for (const side of [1, -1]) {
       const nA = S.nostrilA ?? 0.32, { p, n } = g.at(S.nose === 'disc' ? 0.999 : (S.nostrilS ?? 0.975), side > 0 ? nA : Math.PI - nA);
       const r = (S.nostril || 0.28) * Math.min(sw * cw, mt);
-      const ng = ellipsoid(p.addScaledVector(n, -r * 0.45), r * 0.7, r, r * 0.55, n, hu, 4, 8);
+      // (Digital Diorama revision 7: `nostrilSlit`, closable slits slanting down and out, a camel's)
+      const ng = S.nostrilSlit ? ellipsoid(p.addScaledVector(n, -r * 0.3), r * 0.2, r * 1.25, r * 0.4, n, hu.clone().applyAxisAngle(n, side * S.nostrilSlit * DEG), 4, 8)
+        : ellipsoid(p.addScaledVector(n, -r * 0.45), r * 0.7, r, r * 0.55, n, hu, 4, 8);
       emit(B.part('nose', { group: 'head' }), ng, S.nose === 'disc' ? 'mouth' : 'nose', headW);
     }
   }
   // ── rodent / lagomorph incisors
   if (S.incisors > 0) for (const side of [1, -1]) {
     const b = g.at(0.985, 1.5 * Math.PI + side * 0.1).p, dn = hu.clone().multiplyScalar(-1).addScaledVector(hd, 0.1).normalize(), Li = S.incisors * Lh;
-    const ig = loft({ pts: [b.clone().addScaledVector(dn, -Li * 0.3), b.clone().addScaledVector(dn, Li)], seg: 2, rad: 6, w: Li * 0.22, ht: Li * 0.12, hb: Li * 0.12, up: hd, cap0: 'flat', cap1: { type: 'round', len: 0.3, n: 2 }, bend: 0 });
+    // (Digital Diorama revision 7: `incisorW`, the width × length; a beaver's are broad chisels)
+    const ig = loft({ pts: [b.clone().addScaledVector(dn, -Li * 0.3), b.clone().addScaledVector(dn, Li)], seg: 2, rad: 6, w: Li * (S.incisorW ?? 0.22), ht: Li * 0.12, hb: Li * 0.12, up: hd, cap0: 'flat', cap1: { type: 'round', len: 0.3, n: 2 }, bend: 0 });
     emit(B.part('teeth', { group: 'head' }), ig, 'teeth', headW);
   }
   // ── teeth (canines / fangs)
@@ -1379,6 +1440,14 @@ function tetraHead(B, S, L) {
       const lg = tube([lo.p.clone().addScaledVector(hu, -Lb * 0.3), lo.p.clone().addScaledVector(hu, Lb * 0.45), lo.p.clone().addScaledVector(hu, Lb).addScaledVector(hd, Lb * 0.08)], (u) => Lb * 0.16 * (1 - u * 0.92), 5, 5, { cap1: 'point', cap0: 'flat' });
       emit(B.part('teeth', { group: 'head' }), lg, 'teeth', rig.W('Jaw'));
     }
+  }
+  // Digital Diorama revision 7: a woolly cap over the crown and forehead (`woolCap`, its size; sheep), set into the skull
+  // with a curly surface in the fleece colour (the face was a plain dark tube)
+  if (S.woolCap) {
+    const sCap = Math.max(0.12, sEye * 0.62), top = g.at(sCap, Math.PI / 2).p, k = S.woolCap;
+    const ry = HT(sCap) * 0.5 * k, c = top.clone().addScaledVector(hu, -ry * 0.78).addScaledVector(hd, -0.06 * Lh);
+    emit(B.part('head', { group: 'head' }), ellipsoid(c, W(sCap) * 0.98 * k, ry, (sEye + 0.04) * Lh * 0.6 * k, hd, hu, Math.round(6 * det + 2), 2 * Math.round(6 * det + 2),
+      (u, a) => 0.16 * (fbm(Math.cos(a) * 5 + u * 9, Math.sin(a) * 5, u * 7, 13) - 0.5) * 2 * Math.sin(Math.PI * u)), 'body', headW);
   }
   if (S.ear && S.ear.style !== 'none') tetraEars(B, S, L);
   return g;
@@ -1416,23 +1485,29 @@ function tetraFanEar(B, S, L, side) {
   // outline: how far back the back edge and the front edge lie at each height (fractions of the width); the top-back
   // corner is rounded, the back edge sweeps down and forward to the lobe, the free front edge falls back below the
   // attachment and curves forward again into the lobe
+  // Digital Diorama revision 7: the front edge was a straight vertical line and the fan one flat sheet. The front edge now
+  // rounds over at the top, bulges forward where the ear joins the temple and falls back to the lobe; the top margin is
+  // rolled outward and down (a curled rim), the back margin turns out a little, and two soft folds run from the root
+  // toward the lower back edge. Every point stays outside the head and body.
   const backP = prof([[0, 0.5], [0.08, 0.82], [0.25, 1], [0.5, 0.97], [0.72, 0.78], [0.88, 0.45], [1, 0.12]]);
-  const frontP = prof([[0, 0.08], [0.1, 0], [0.45, 0.02], [0.72, 0.1], [0.9, 0.09], [1, 0.05]]);
+  const frontP = prof([[0, 0.16], [0.07, 0.04], [0.2, 0], [0.38, 0.03], [0.58, 0.12], [0.76, 0.17], [0.9, 0.13], [1, 0.06]]);
   const topY = prof([[0, 0], [0.5, 0.02], [0.8, 0.07], [1, 0.16]]);
   const clear = (E.fanClear ?? 0.03) * H;
   const f = (u, v) => {
-    const y = top - hgt * (v + topY(u) * (1 - v));
+    const curl = 1 - sstep(0, 0.16, v);
+    const y = top - hgt * (v + topY(u) * (1 - v)) + 0.03 * wid * curl * curl * Math.sin(Math.PI * clamp(u * 1.2, 0, 1));
     const z = lerp(zF - wid * frontP(v), zF - wid * backP(v), u);
-    const body = sideXAt(L, z, y);
-    // a rolled rim along the top and a gentle wave across the fan
-    const rim = 0.05 * wid * (1 - sstep(0, 0.1, v)), wave = 0.025 * wid * Math.sin(3.2 * u + 5 * v) * u;
-    const x = Math.max(headX * 0.9, body > 0 ? body + clear : 0) + 0.06 * wid * Math.sin(Math.PI * u) * (1 - 0.6 * v) + rim + wave;
+    const body = sideXAt(L, z, y), base = Math.max(headX * 0.9, body > 0 ? body + clear : 0);
+    const belly = 0.06 * wid * Math.sin(Math.PI * u) * (1 - 0.6 * v);
+    const rim = 0.11 * wid * curl * curl * sstep(0, 0.12, u) + 0.04 * wid * sstep(0.82, 1, u) * (1 - 0.5 * v);
+    const folds = 0.032 * wid * Math.sin(TAU * (1.45 * u + 0.75 * v) - 0.6) * sstep(0.12, 0.45, u) * (1 - 0.35 * v);
+    const x = Math.max(base + belly + rim + folds, body > 0 ? body + clear * 0.6 : 0, headX * 0.88);
     return V3(side * x, y, z);
   };
   const bone = side > 0 ? 'EarL' : 'EarR';
   rig.add(bone, 'Head', f(0, 0.04), f(0.15, 1));
-  sheet(B.part('ears', { group: 'ears' }), { nu: Math.round(8 * det + 2), nv: Math.round(10 * det + 2), f,
-    th: (u) => H * lerp(0.016, 0.006, u),
+  sheet(B.part('ears', { group: 'ears' }), { nu: Math.round(10 * det + 2), nv: Math.round(10 * det + 2), f,
+    th: (u, v) => H * lerp(0.016, 0.006, u) * (1 + 0.6 * (1 - sstep(0, 0.12, v))),
     zone: (u, v, face) => face !== 0 && (face === 1) === (side > 0) ? 'skin' : B.paint({ part: 'ear', u: v, a: u * TAU, P: f(u, v) }),
     skin: (u) => u < 0.16 ? rig.W2('Head', bone, u / 0.16) : rig.W(bone) });
 }
@@ -1458,78 +1533,64 @@ function tetraEars(B, S, L) {
   const isHanging = E.style === 'floppy' || E.style === 'hound' || (E.droop ?? 0) > 0.4 || E.hang !== undefined;
   for (const side of [1, -1]) {
     if (E.style === 'fan') { tetraFanEar(B, S, L, side); continue; }
-    const a = Math.PI / 2 - side * (E.a ?? 0.75);
-    const { p, n } = g.at(E.s ?? 0.2, a);
     // The pinna rises from a narrow stalk buried 0.3 wMax inside the skull and flares to full width just
     // above the surface, so the root never floats off a curving skull (the sweep is lengthened to keep
     // the visible ear length unchanged).
     const inset = wMax * 0.3, LeT = Le + inset * 0.4;
-    const base = p.clone().addScaledVector(n, -inset);
     const rootF = (u) => lerp(0.42, 1, sstep(0, 0.24, u));
-    let axis;
-    if (isHanging) {
-      // root direction: out to the side by `spread`, pitched down by `hang` (12.5° matches a hound's ear set)
-      const hang = (E.hang ?? 12.5) * DEG, spr = (E.spread ?? 20) * DEG;
-      axis = V3(side * Math.sin(spr) * Math.cos(hang), -Math.sin(hang), Math.cos(spr) * 0.08 * Math.cos(hang)).normalize();
-    } else {
-      axis = hu.clone().multiplyScalar(Math.cos((E.spread ?? 25) * DEG)).add(V3(side * Math.sin((E.spread ?? 25) * DEG), 0, 0)).normalize();
-      axis.applyAxisAngle(V3(1, 0, 0), -(E.tilt ?? 15) * DEG);
-    }
     const down = V3(side * 0.02, -0.99, 0.06).normalize();
-    let face = hd.clone().applyAxisAngle(V3(0, 1, 0), side * (E.turn ?? 25) * DEG);
-    const N = 12, cs = [base.clone()], dirs = [];
-    for (let i = 0; i < N; i++) {
-      const u = i / N;
-      let d;
-      if (E.style === 'semiPrick') {
-        const breakU = E.breakU ?? 0.58;
-        const tipDir = hd.clone().multiplyScalar(0.7).addScaledVector(hu, -0.45).add(V3(side * 0.1, 0, 0)).normalize();
-        const tBreak = clamp((u - breakU) / (1 - breakU), 0, 1);
-        d = axis.clone().lerp(tipDir, Math.pow(tBreak, 1.3)).normalize();
-      } else if (E.style === 'button') {
-        const foldDir = hd.clone().multiplyScalar(0.85).addScaledVector(hu, -0.5).add(V3(side * 0.08, 0, 0)).normalize();
-        const tFold = clamp((u - 0.12) / 0.5, 0, 1);
-        d = axis.clone().lerp(foldDir, Math.pow(tFold, 1.4)).normalize();
-      } else if (E.style === 'rose') {
-        const foldDir = hd.clone().multiplyScalar(-0.8).addScaledVector(hu, -0.3).add(V3(side * 0.35, 0, 0)).normalize();
-        const tFold = clamp((u - 0.12) / 0.5, 0, 1);
-        d = axis.clone().lerp(foldDir, Math.pow(tFold, 1.4)).normalize();
-      } else if (isHanging) {
-        const droopPower = E.style === 'hound' ? 0.7 : 0.9;
-        const droopFactor = clamp((E.droop ?? 0.95) * Math.pow(u, droopPower), 0, 1);
-        d = axis.clone().lerp(down, droopFactor).normalize();
-      } else {
-        d = axis.clone().lerp(down, clamp((E.droop || 0) * Math.pow(u + 0.08, 1.2), 0, 1)).normalize();
-      }
-      dirs.push(d);
-      cs.push(cs[i].clone().addScaledVector(d, LeT / N));
-    }
-    dirs.push(dirs[N - 1]);
-    const at = (u) => {
-      const f = u * N, i = Math.min(N - 1, Math.floor(f)), t = f - i;
-      return { c: cs[i].clone().lerp(cs[i + 1], t), d: dirs[i].clone().lerp(dirs[i + 1], t).normalize() };
-    };
-    const bone = side > 0 ? 'EarL' : 'EarR';
-    rig.add(bone, 'Head', base, cs[N]);
-    // ear-base mound (auricular muscles): hides the pinch where the pinna enters the skull
-    if (E.mound !== false) {
-      // Digital Diorama revision 6: sunk mostly inside the skull, so it only fills the crease round the ear root
-      // (it stood out as a knob, and with a hanging ear read as a ram's horn)
-      const mr = wMax * (E.moundR ?? 0.3), mc = p.clone().addScaledVector(n, -mr * 0.5).addScaledVector(axis, mr * 0.1);
-      emit(B.part('head', { group: 'head' }), ellipsoid(mc, mr, mr * 0.7, mr * 1.05, hd, n, 5, 10), (uu, aa, P) => B.paint({ part: 'head', u: E.s ?? 0.2, a: Math.PI / 2, P, s0: L.headS.s0 }), rig.W2('Head', bone, 0.35));
-    }
+    const face = hd.clone().applyAxisAngle(V3(0, 1, 0), side * (E.turn ?? 25) * DEG);
     const cup = E.cup ?? 0.35;
     const innerW = E.innerW ?? 0.55, innerLen = E.innerLen ?? 0.82;
     // offset > 0 moves the flap behind its root line (an elephant's ear hangs back from its front edge)
     const off = E.offset ?? 0, thick = E.thick ?? 1;
-    const part = B.part('ears', { group: 'ears' });
-    // Digital Diorama revision 6: a hanging ear lies against the side of the head; below its root it is kept outside the
-    // skull, cheek and neck (it either stood off the head as a disc or, hung steeply, sank into the cheek)
-    const outside = isHanging ? headSideX(L) : null, clear = 0.025 * L.Lh + 0.5 * wMax * 0.14;
-    sheet(part, {
-      nu: Math.round((E.style === 'long' || E.style === 'fan' || E.style === 'hound' ? 10 : 7) * det + 1),
-      nv: Math.round(5 * det + 1),
-      f: (u, v) => {
+    // the ear for a root set `aR` radians round the skull from the crown: its root, axis path and flap surface
+    const build = (aR, sprAdd = 0) => {
+      const { p, n } = g.at(E.s ?? 0.2, Math.PI / 2 - side * aR);
+      const base = p.clone().addScaledVector(n, -inset);
+      let axis;
+      if (isHanging) {
+        // root direction: out to the side by `spread`, pitched down by `hang` (12.5° matches a hound's ear set)
+        const hang = (E.hang ?? 12.5) * DEG, spr = (E.spread ?? 20) * DEG;
+        axis = V3(side * Math.sin(spr) * Math.cos(hang), -Math.sin(hang), Math.cos(spr) * 0.08 * Math.cos(hang)).normalize();
+      } else {
+        const spr = (E.spread ?? 25) + sprAdd;
+        axis = hu.clone().multiplyScalar(Math.cos(spr * DEG)).add(V3(side * Math.sin(spr * DEG), 0, 0)).normalize();
+        axis.applyAxisAngle(V3(1, 0, 0), -(E.tilt ?? 15) * DEG);
+      }
+      const N = 12, cs = [base.clone()], dirs = [];
+      for (let i = 0; i < N; i++) {
+        const u = i / N;
+        let d;
+        if (E.style === 'semiPrick') {
+          const breakU = E.breakU ?? 0.58;
+          const tipDir = hd.clone().multiplyScalar(0.7).addScaledVector(hu, -0.45).add(V3(side * 0.1, 0, 0)).normalize();
+          const tBreak = clamp((u - breakU) / (1 - breakU), 0, 1);
+          d = axis.clone().lerp(tipDir, Math.pow(tBreak, 1.3)).normalize();
+        } else if (E.style === 'button') {
+          const foldDir = hd.clone().multiplyScalar(0.85).addScaledVector(hu, -0.5).add(V3(side * 0.08, 0, 0)).normalize();
+          const tFold = clamp((u - 0.12) / 0.5, 0, 1);
+          d = axis.clone().lerp(foldDir, Math.pow(tFold, 1.4)).normalize();
+        } else if (E.style === 'rose') {
+          const foldDir = hd.clone().multiplyScalar(-0.8).addScaledVector(hu, -0.3).add(V3(side * 0.35, 0, 0)).normalize();
+          const tFold = clamp((u - 0.12) / 0.5, 0, 1);
+          d = axis.clone().lerp(foldDir, Math.pow(tFold, 1.4)).normalize();
+        } else if (isHanging) {
+          const droopPower = E.style === 'hound' ? 0.7 : 0.9;
+          const droopFactor = clamp((E.droop ?? 0.95) * Math.pow(u, droopPower), 0, 1);
+          d = axis.clone().lerp(down, droopFactor).normalize();
+        } else {
+          d = axis.clone().lerp(down, clamp((E.droop || 0) * Math.pow(u + 0.08, 1.2), 0, 1)).normalize();
+        }
+        dirs.push(d);
+        cs.push(cs[i].clone().addScaledVector(d, LeT / N));
+      }
+      dirs.push(dirs[N - 1]);
+      const at = (u) => {
+        const f = u * N, i = Math.min(N - 1, Math.floor(f)), t = f - i;
+        return { c: cs[i].clone().lerp(cs[i + 1], t), d: dirs[i].clone().lerp(dirs[i + 1], t).normalize() };
+      };
+      const flap = (u, v) => {
         const { c, d } = at(u);
         const sUp = new THREE.Vector3().crossVectors(face, d).normalize();
         let s;
@@ -1547,10 +1608,51 @@ function tetraEars(B, S, L) {
         const fc = new THREE.Vector3().crossVectors(d, s).normalize();
         const w = wMax * wp(u) * rootF(u), x = 2 * v - 1;
         const cupU = lerp(cup, Math.max(cup, 0.95), 1 - sstep(0.04, 0.42, u)) * (isHanging ? 0.7 : 1);
-        const q = c.addScaledVector(s, w * (x + off) * side).addScaledVector(fc, cupU * w * (x * x - 0.35));
-        if (outside) { const sx = outside(q.y, q.z), k = sstep(0.06, 0.22, u); if (sx > 0 && Math.abs(q.x) < sx + clear) q.x = side * lerp(Math.abs(q.x), sx + clear, k); }
-        return q;
-      },
+        return c.addScaledVector(s, w * (x + off) * side).addScaledVector(fc, cupU * w * (x * x - 0.35));
+      };
+      return { p, n, base, axis, cs, at, flap, N };
+    };
+    let aR = E.a ?? 0.75, sprAdd = 0, ear = build(aR);
+    // Digital Diorama revision 7: big erect ears set close together crossed over the crown (coyotes, wolves, foxes): the
+    // root moves out round the skull until the inner edge, where the ear reaches its full width, clears the midline, and
+    // ears too big for the skull (a fennec's) also spread outward
+    if (!isHanging && E.style !== 'rose' && E.style !== 'button') {
+      const innerX = (e) => { let m = Infinity; for (const u of [0.1, 0.18, 0.26, 0.36]) for (const v of [0, 1]) m = Math.min(m, side * e.flap(u, v).x); return m; };
+      for (let k = 0; k < 16 && innerX(ear) < 0.08 * wMax; k++) { if (aR < (E.a ?? 0.75) + 0.35) aR += 0.035; else if (sprAdd < 15) sprAdd += 2.5; else break; ear = build(aR, sprAdd); }
+    }
+    const { p, n, base, axis, cs, at, flap, N } = ear;
+    const bone = side > 0 ? 'EarL' : 'EarR';
+    rig.add(bone, 'Head', base, cs[N]);
+    // ear-base mound (auricular muscles): hides the pinch where the pinna enters the skull
+    if (E.mound !== false) {
+      // Digital Diorama revision 6: sunk mostly inside the skull, so it only fills the crease round the ear root
+      // (it stood out as a knob, and with a hanging ear read as a ram's horn)
+      const mr = wMax * (E.moundR ?? 0.3), mc = p.clone().addScaledVector(n, -mr * 0.5).addScaledVector(axis, mr * 0.1);
+      emit(B.part('head', { group: 'head' }), ellipsoid(mc, mr, mr * 0.7, mr * 1.05, hd, n, 5, 10), (uu, aa, P) => B.paint({ part: 'head', u: E.s ?? 0.2, a: Math.PI / 2, P, s0: L.headS.s0 }), rig.W2('Head', bone, 0.35));
+    }
+    const part = B.part('ears', { group: 'ears' });
+    // Digital Diorama revision 6: a hanging ear lies against the side of the head; below its root it is kept outside the
+    // skull, cheek and neck (it either stood off the head as a disc or, hung steeply, sank into the cheek).
+    // Digital Diorama revision 7: pushed out row by row (the most any point of a row needs), spread over the neighbouring rows
+    // and smoothed along the ear, so the flap lies flat and bends smoothly (pushed point by point, it followed the coarse
+    // grid of headSideX and kinked)
+    let pushAt = null;
+    if (isHanging) {
+      const outside = headSideX(L), clear = 0.025 * L.Lh + 0.5 * wMax * 0.14, NU = 32, NV = 8, need = [];
+      for (let i = 0; i <= NU; i++) {
+        const u = i / NU, k = sstep(0.06, 0.22, u);
+        let m = 0;
+        for (let j = 0; j <= NV; j++) { const q = flap(u, j / NV), sx = outside(q.y, q.z); if (sx > 0) m = Math.max(m, (sx + clear - Math.abs(q.x)) * k); }
+        need.push(m);
+      }
+      const R = 3, dil = need.map((_, i) => Math.max(...need.slice(Math.max(0, i - R), i + R + 1)));
+      const sm = dil.map((_, i) => { let t = 0; for (let d = -R; d <= R; d++) t += dil[clamp(i + d, 0, NU)]; return t / (2 * R + 1); });
+      pushAt = (u) => { const f = clamp(u, 0, 1) * NU, i = Math.min(NU - 1, Math.floor(f)); return lerp(sm[i], sm[i + 1], f - i) * sstep(0.02, 0.16, u); };
+    }
+    sheet(part, {
+      nu: Math.round((E.style === 'long' || E.style === 'fan' || E.style === 'hound' ? 10 : 7) * det + 1),
+      nv: Math.round(5 * det + 1),
+      f: (u, v) => { const q = flap(u, v); if (pushAt) q.x += side * pushAt(u); return q; },
       th: (u, v) => Math.max(0.0006, thick * wMax * 0.14 * (1 - 0.7 * (2 * v - 1) ** 2) * (1 - 0.55 * u)),
       zone: (u, v, face) => (face > 0) === (side > 0) && Math.abs(2 * v - 1) < innerW && u < innerLen && u > 0.05 ? 'skin' : B.paint({ part: 'ear', u, a: v * TAU, P: at(u).c }),
       skin: (u) => u < 0.18 ? rig.W2('Head', bone, u / 0.18) : rig.W(bone),
@@ -1589,6 +1691,8 @@ function hindLayoutFor(S, st) {
   const kind = st === 'digitigrade' && (S.crouch || 0) >= 0.5 ? 'crouch' : HIND_LAYOUT[st] ? st : 'digitigrade';
   return { kind, ...HIND_LAYOUT[kind], ...(S.hind || {}) };
 }
+/** How far ahead of its joint a pad foot's front edge meets the ground (matches the pad loft in tetraFoot). */
+const padReach = (j) => 1.2 * Math.max(j.w, j.d);
 /** Hip-joint height: the leg root sits this far below the croup. */
 const hipHeightOf = (S, L) => L.yR - (S.hipDrop ?? 0.4) * L.Dr;
 /**
@@ -1649,7 +1753,10 @@ function tetraLimbJoints(S, L, front, side) {
     }
     if (st === 'graviportal') {
       const wr = J(sx * 0.95 + sp, 0.22 * C, el.p.z + 0.02 * H, 0.05, 0.052);
-      return { st, foot: 'pad', joints: [top, sh, el, wr, J(sx * 0.95 + sp, 0.045 * H, wr.p.z + 0.01 * H, 0.056, 0.058), J(sx * 0.95 + sp, 0, wr.p.z + 0.012 * H, 0.06)] };
+      // Digital Diorama revision 7: the ground contact is the front edge of the pad (it was 1 cm ahead of the wrist, near the
+      // pad's middle, so rolling over it at push-off sank the front of the foot 2-5 cm into the ground)
+      const pj = J(sx * 0.95 + sp, 0.045 * H, wr.p.z + 0.01 * H, 0.056, 0.058);
+      return { st, foot: 'pad', joints: [top, sh, el, wr, pj, J(sx * 0.95 + sp, 0, pj.p.z + padReach(pj), 0.06)] };
     }
     // digitigrade
     const wr = J(sx * 0.94 + sp, 0.26 * C, el.p.z + 0.005 * H, 0.038, 0.04);
@@ -1716,8 +1823,9 @@ function tetraHindJoints(S, L, side, st, o) {
     return { ...base, foot: 'hoof', joints: [hip, kn, an, fe, co, J(fx, 0, co.p.z + hd.toe, 0.03)] };
   }
   if (kind === 'graviportal') {
+    // (Digital Diorama revision 7: the toe at the front edge of the pad, as for the forefoot)
     const pt = J(fx, lay.fY * h, an.p.z + 0.01 * h, 0.056, 0.06);
-    return { ...base, foot: 'pad', joints: [hip, kn, an, pt, J(fx, 0, pt.p.z + 0.012 * h, 0.06)] };
+    return { ...base, foot: 'pad', joints: [hip, kn, an, pt, J(fx, 0, pt.p.z + padReach(pt), 0.06)] };
   }
   if (kind === 'plantigrade' || kind === 'crouch') {
     // ankle above the heel; ball of the foot about 60 % of the way to the toe tips
@@ -1844,7 +1952,8 @@ function tetraHindLeg(B, S, L, lm, nm) {
   const nb = lm.bones.length, sj = J.slice(0, nb + 1).map(j => j.p);
   // a folded haunch bends over a wide band at the knee (a narrow one creased it into a corner as the leg stretched)
   const skin = planeSkin(rig, sj, lm.bones, k === 'crouch' ? [0.3 * h, 0.07 * h, 0.04 * h] : [0.11 * h, 0.05 * h, 0.03 * h], k === 'crouch' ? [-0.4, 0.75] : [-0.25, 0.5]);
-  emit(B.part(nm, { group: 'legs' }), g, (u, a, P) => B.paint({ part: 'leg', u, a, P, front: false, side: lm.side }), skin);
+  // (emitted once every limb root has been blended into the body: blendLimbRoots)
+  lm.emitLeg = () => emit(B.part(nm, { group: 'legs' }), g, (u, a, P) => B.paint({ part: 'leg', u, a, P, front: false, side: lm.side }), skin);
   return g;
 }
 
@@ -1913,8 +2022,70 @@ function tetraForeLeg(B, S, L, lm, nm) {
   lm.grid = g; lm.us = ku;
   const nb = lm.bones.length, sj = J.slice(0, nb + 1).map(j => j.p);
   const skin = planeSkin(rig, sj, lm.bones, [0.07 * h, 0.05 * h, 0.03 * h, 0.025 * h], [-0.3, 0.45], 'Chest');
-  emit(B.part(nm, { group: 'legs' }), g, (u, a, P) => B.paint({ part: 'leg', u, a, P, front: true, side: lm.side }), skin);
+  lm.emitLeg = () => emit(B.part(nm, { group: 'legs' }), g, (u, a, P) => B.paint({ part: 'leg', u, a, P, front: true, side: lm.side }), skin);
   return g;
+}
+
+/**
+ * Radial depth of a point below the torso surface (Digital Diorama revision 7): positive outside, with the outward radial
+ * direction. The point is referred to the nearest station along the body's path (or the rounded rump cap behind it) and
+ * compared with the lofted surface in its own direction round that section.
+ */
+function torsoDepth(L, P) {
+  const g = L.torso, m0 = g.main[0], C = g.C;
+  if (!g.ctr) g.ctr = g.rows.slice(m0, g.main[1] + 1).map(row => row.reduce((s, q) => s.add(q), V3()).divideScalar(row.length));
+  let bk = 0, bt = 0, bd = Infinity, behind = 0;
+  const ab = V3(), ap = V3();
+  for (let k = 0; k < C.length - 1; k++) {
+    ab.subVectors(C[k + 1], C[k]); ap.subVectors(P, C[k]);
+    const t0 = ap.dot(ab) / Math.max(1e-12, ab.lengthSq()), t = clamp(t0, 0, 1);
+    const d = ap.addScaledVector(ab, -t).length();
+    if (d < bd) { bd = d; bk = k; bt = t; behind = k === 0 && t0 < 0 ? -t0 * ab.length() : 0; }
+  }
+  const u = lerp(g.us[m0 + bk], g.us[m0 + bk + 1], bt), f = g.frame(u);
+  const ctr = g.ctr[bk].clone().lerp(g.ctr[Math.min(bk + 1, g.ctr.length - 1)], bt);
+  const v = P.clone().sub(ctr);
+  if (behind > 0) v.addScaledVector(f.t, behind);
+  const a = Math.atan2(v.dot(f.up), v.dot(f.side));
+  let rS = g.at(u, a).p.sub(ctr).length();
+  if (behind > 0 && g.tip0) { const Lc = Math.max(1e-6, g.tip0.distanceTo(g.ctr[0])); rS *= Math.sqrt(Math.max(0, 1 - (behind / Lc) ** 2)); }
+  const n = P.clone().sub(ctr).normalize();
+  return { d: v.length() - rS, n };
+}
+
+/**
+ * Digital Diorama revision 7: where the limbs leave the body. Body and legs are separate surfaces; the thigh's top poked
+ * out through the croup as a slab and every leg met the body along a hard crease (normal blending alone could not hide
+ * the angle). Two steps on each leg's grid before it is emitted:
+ *  - tuck: above the stifle (hind) and the upper arm (fore) the body is the outer surface, so leg points that stand out of
+ *    it are pulled just inside (fading out toward the knee / elbow);
+ *  - flare: below that, where the leg leaves the body, its surface swells outward by the soft-union amount
+ *    k/4 · (1 − d/k)² (d: distance outside the body, k = `fillet` × height), so it runs into the body instead of meeting
+ *    it at an angle. Displacements stay within k/4, so nothing folds into flaps.
+ */
+function blendLimbRoots(B, S, L) {
+  const k = (S.fillet ?? 0.1) * L.H, m = 0.004 * L.H;
+  if (!(k > 0)) return;
+  for (const lm of L.limbs) {
+    if (!lm.emitLeg || !lm.grid || !lm.us) continue;
+    const g = lm.grid, rows = g.rows, R = g.R, ku = lm.us;
+    // tuck from the mid-thigh to the stifle (hind), from the middle of the upper arm to the elbow (fore)
+    const [uIn, uOut] = lm.front ? [ku[3], lerp(ku[3], ku[4], 0.8)] : [ku[2], lerp(ku[2], ku[3], 0.8)];
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r], tuck = 1 - sstep(uIn, uOut, g.us[r]);
+      const ctr = row.reduce((s, q) => s.add(q), V3()).divideScalar(R);
+      // rows hanging well clear of the body are left alone (most of the leg)
+      if (tuck <= 0) { let rad = 0; for (const q of row) rad = Math.max(rad, q.distanceTo(ctr)); if (torsoDepth(L, ctr).d > k + rad) continue; }
+      for (let j = 0; j < R; j++) {
+        const P = row[j], t = torsoDepth(L, P);
+        if (tuck > 0 && t.d > -m) { P.addScaledVector(t.n, -(t.d + m) * tuck); continue; }
+        // flare (after any partial tuck): along the leg's own outward direction
+        const d = tuck > 0 ? torsoDepth(L, P).d : t.d;
+        const f = (1 - tuck) * (k / 4) * (d >= 0 ? (1 - Math.min(1, d / k)) ** 2 : sstep(-k / 3, 0, d));
+        if (f > 1e-6) P.addScaledVector(P.clone().sub(ctr).normalize(), f);
+      }
+    }
+  }
 }
 
 const LIMB_BONES = { front: ['Scapula', 'Arm', 'Forearm', 'Hand', 'Finger'], hind: ['Thigh', 'Shin', 'Foot', 'Toe'] };
@@ -1981,6 +2152,8 @@ function tetraLimbs(B, S, L) {
     emit(B.part(nm, { group: 'legs' }), g, (u, a, P) => B.paint({ part: 'leg', u, a, P, front: lm.front, side: lm.side }), legSkin);
     tetraFoot(B, S, L, lm, foot, nm);
   }
+  blendLimbRoots(B, S, L);
+  for (const lm of L.limbs) if (lm.emitLeg) lm.emitLeg();
 }
 
 function tetraFoot(B, S, L, lm, foot, nm) {
@@ -2021,8 +2194,9 @@ function tetraFoot(B, S, L, lm, foot, nm) {
     return;
   }
   if (foot === 'pad') {
+    // (Digital Diorama revision 7: a vertical sweep, so the sole is flat on the ground; slanted 2° forward, its front edge sank 1 cm)
     const c = J[n - 2].p, r = Math.max(J[n - 2].w, J[n - 2].d);
-    const g = loft({ pts: [c.clone().add(V3(0, r * 0.6, 0)), V3(c.x, 0, c.z + r * 0.05)], seg: 4, rad: 2 * Math.round(7 * det + 2), up: [0, 0, 1],
+    const g = loft({ pts: [V3(c.x, c.y + r * 0.6, c.z + r * 0.05), V3(c.x, 0, c.z + r * 0.05)], seg: 4, rad: 2 * Math.round(7 * det + 2), up: [0, 0, 1],
       w: (u) => lerp(1.0, 1.16, u) * r, ht: (u) => lerp(1.0, 1.2, u) * r, hb: (u) => lerp(1.0, 1.08, u) * r, cap0: { type: 'round', len: 0.4, n: 2 }, cap1: 'flat', bend: 0, antifold: false });
     emit(part, g, footPaint, W);
     const nails = S.nails ?? 4;
@@ -2236,26 +2410,41 @@ function tetraHorns(B, S, L) {
         const tl = len * (i === 0 ? 0.2 : 0.46 - (i - 1) * 0.08), dir = V3(side * 0.06, 1, i === 0 ? 0.3 : 0.12).normalize();
         horn([b0, b0.clone().addScaledVector(dir, tl * 0.55).add(V3(0, 0, tl * 0.04)), b0.clone().addScaledVector(dir, tl)], (uu) => r0 * 0.55 * (1 - 0.88 * uu));
       }
-    } else if (st === 'antlers' || st === 'palmate') {
-      const beam = st === 'palmate' ? [P(0, 0, 0), P(0.35, 0.12, 0.06), P(0.55, 0.22, 0.1)] : [P(0, 0, 0), P(0.16, 0.3, 0.2), P(0.3, 0.62, 0.22), P(0.34, 0.88, 0.06), P(0.3, 1.02, -0.12)];
-      const bg = horn(beam, (u) => r0 * (1 - 0.6 * u), 'horn', null, 'round');
+    } else if (st === 'palmate') {
+      // Digital Diorama revision 7: moose antlers (they were flat planks held out sideways). A short, thick beam runs out from
+      // the skull to a broad palm that rises outward and back, cupped upward like an open hand, with tines along its outer
+      // and back edges and a small brow tine forward. Built in world axes, like the whitetail's (the head is pitched down).
+      const Wd = V3(0, 1, 0), Bk = V3(0, 0, -1);
+      const e0 = base.clone().addScaledVector(out, 0.2 * len).addScaledVector(Wd, 0.07 * len).addScaledVector(Bk, 0.03 * len);
+      horn([base, base.clone().lerp(e0, 0.55).addScaledVector(Wd, 0.015 * len), e0], (u) => r0 * (1.15 - 0.3 * u), 'horn', null, 'round');
+      const A = out.clone().multiplyScalar(0.84).addScaledVector(Wd, 0.44).addScaledVector(Bk, 0.3).normalize();
+      const Bv = Bk.clone().multiplyScalar(0.84).addScaledVector(Wd, 0.54); Bv.addScaledVector(A, -Bv.dot(A)).normalize();
+      const Nn = new THREE.Vector3().crossVectors(A, Bv).normalize(); if (Nn.y < 0) Nn.negate();
+      const pal = 0.78 * len, cupK = Hn.cup ?? 0.16;
+      const wid = (u) => len * (0.2 + 0.52 * sstep(0, 0.6, u));
+      const palm = (u, v) => e0.clone().addScaledVector(A, u * pal).addScaledVector(Bv, (v - 0.32) * wid(u))
+        .addScaledVector(Nn, cupK * len * (0.55 * (2 * v - 1) ** 2 + 0.4 * u * u) * sstep(0, 0.35, u));
+      sheet(part, { nu: Math.round(7 * det), nv: Math.round(5 * det), f: palm, th: (u) => r0 * 0.7 * (1 - 0.4 * u), zone: 'horn', skin: HW });
+      // tines: along the outer edge, then down the back edge; they point out of the edge and curl up out of the cup
+      const nT = Hn.tines ?? 8;
+      for (let i = 0; i < nT; i++) {
+        const t = i / (nT - 1), outer = t < 0.62, uu = outer ? 1 : lerp(1, 0.42, (t - 0.62) / 0.38), vv = outer ? lerp(0.06, 1, t / 0.62) : 1;
+        const b0 = palm(uu, vv), edge = (outer ? A.clone().addScaledVector(Bv, (vv - 0.5) * 0.5) : Bv.clone().addScaledVector(A, 0.25)).normalize();
+        const dir = edge.addScaledVector(Nn, 0.55).normalize(), tl = len * (0.15 + 0.07 * Math.sin(Math.PI * t));
+        horn([b0.clone().addScaledVector(dir, -tl * 0.15), b0.clone().addScaledVector(dir, tl)], (q) => r0 * 0.4 * (1 - 0.88 * q));
+      }
+      // brow tine: forward and up from the front edge of the palm
+      const bf = palm(0.22, 0), bdir = Bk.clone().negate().addScaledVector(out, 0.35).addScaledVector(Wd, 0.6).normalize();
+      horn([bf, bf.clone().addScaledVector(bdir, 0.14 * len), bf.clone().addScaledVector(bdir, 0.24 * len).addScaledVector(Wd, 0.04 * len)], (q) => r0 * 0.45 * (1 - 0.85 * q));
+    } else if (st === 'antlers') {
+      const beam = [P(0, 0, 0), P(0.16, 0.3, 0.2), P(0.3, 0.62, 0.22), P(0.34, 0.88, 0.06), P(0.3, 1.02, -0.12)];
+      horn(beam, (u) => r0 * (1 - 0.6 * u), 'horn', null, 'round');
       const bc = makePath(beam);
-      if (st === 'antlers') {
-        const tines = Hn.tines ?? 3;
-        for (let i = 0; i < tines; i++) {
-          const u = 0.12 + (i / Math.max(1, tines)) * 0.75, b0 = bc.getPointAt(u), tl = len * (i === 0 ? 0.3 : 0.38 - i * 0.03);
-          const dir = (i === 0 ? fwd.clone().multiplyScalar(0.9).add(up.clone().multiplyScalar(0.45)) : up.clone().multiplyScalar(0.9).add(fwd.clone().multiplyScalar(0.35)).add(out.clone().multiplyScalar(0.12))).normalize();
-          horn([b0, b0.clone().addScaledVector(dir, tl * 0.55).addScaledVector(up, tl * 0.08), b0.clone().addScaledVector(dir, tl)], (uu) => r0 * 0.62 * (1 - 0.9 * uu));
-        }
-      } else {
-        const e0 = bc.getPointAt(0.55), pal = len * 0.75;
-        sheet(part, { nu: Math.round(6 * det), nv: Math.round(4 * det),
-          f: (u, v) => { const span = (v - 0.35) * 1.4; return e0.clone().addScaledVector(out, u * pal * 0.85 + Math.abs(span) * pal * 0.1).addScaledVector(up, u * pal * 0.25 + span * pal * 0.42 * Math.sin(Math.PI * (0.25 + 0.75 * u))).addScaledVector(back, span * pal * 0.35); },
-          th: (u) => r0 * 0.7 * (1 - 0.5 * u), zone: 'horn', skin: HW });
-        for (let i = 0; i < 6; i++) {
-          const t = i / 5, b0 = e0.clone().addScaledVector(out, pal * (0.6 + 0.3 * Math.sin(t * Math.PI))).addScaledVector(up, pal * (0.35 * (t - 0.4) + 0.3)).addScaledVector(back, pal * (t - 0.3) * 0.5);
-          horn([b0, b0.clone().addScaledVector(out, len * 0.08).addScaledVector(up, len * 0.12)], (uu) => r0 * 0.45 * (1 - uu));
-        }
+      const tines = Hn.tines ?? 3;
+      for (let i = 0; i < tines; i++) {
+        const u = 0.12 + (i / Math.max(1, tines)) * 0.75, b0 = bc.getPointAt(u), tl = len * (i === 0 ? 0.3 : 0.38 - i * 0.03);
+        const dir = (i === 0 ? fwd.clone().multiplyScalar(0.9).add(up.clone().multiplyScalar(0.45)) : up.clone().multiplyScalar(0.9).add(fwd.clone().multiplyScalar(0.35)).add(out.clone().multiplyScalar(0.12))).normalize();
+        horn([b0, b0.clone().addScaledVector(dir, tl * 0.55).addScaledVector(up, tl * 0.08), b0.clone().addScaledVector(dir, tl)], (uu) => r0 * 0.62 * (1 - 0.9 * uu));
       }
     }
   }
@@ -2304,7 +2493,8 @@ function tetraMane(B, S, L) {
   if (!M || M.style === 'none') return;
   const rig = B.rig, det = B.det, U = L.uOf, part = B.part('mane', { group: 'mane' });
   if (M.style === 'horse' || M.style === 'crest') {
-    const u0 = lerp(U.chest, U.neckRoot, 0.45), u1 = lerp(U.neck2, U.neckTop, 0.85);
+    // (Digital Diorama revision 7: `back` carries a crest on along the spine toward the loin, like a boar's bristles)
+    const u0 = lerp(lerp(U.chest, U.neckRoot, 0.45), U.loin, M.back || 0), u1 = lerp(U.neck2, U.neckTop, 0.85);
     const hgt = (M.h ?? 0.12) * L.H, fall = M.style === 'horse' ? (M.fall ?? 1.05) : 0.05;
     sheet(part, { nu: Math.round(16 * det), nv: 3,
       f: (u, v) => {
@@ -2373,6 +2563,11 @@ function tetraQuills(B, S, L) {
   }
 }
 
+/** Digital Diorama revision 7: where a front mane / cape begins along the torso (u), at height sin(a) round the section. */
+function capeEdgeU(S, U, sa) {
+  return lerp(U.barrel, U.chest, S.frontMane || 0) - (S.maneSlant || 0) * (sa + 0.2) * (U.chest - U.barrel);
+}
+
 /* ════════════════════════════════════════════════════════════════════════════
  *  COAT PAINTER — maps (part, u, a, P) to a zone key. Patterns are evaluated in
  *  rest space scaled by body height, so stripes / spots scale with the animal.
@@ -2385,6 +2580,7 @@ function makePainter(S, L) {
   const legPts = (S.points ?? 0) * L.elbowY, socks = (S.socks ?? 0) * L.elbowY;
   const U = L.uOf, eyeR = S.eye * L.Lh;
   const eyeNear = (P, f) => !!L.eyes && L.eyes.some(e => P.distanceTo(e.c) < f * eyeR);
+  const capeEdge = (sa, x, y, z) => capeEdgeU(S, U, sa) + (S.maneRag || 0) * (fbm(x * 5, y * 5, z * 5, seed + 37) - 0.5);
   return (q) => {
     const { part, P } = q, u = q.u ?? 0, a = q.a ?? 0, sa = Math.sin(a), ca = Math.cos(a);
     const x = P.x * k, y = P.y * k, z = P.z * k;
@@ -2417,7 +2613,10 @@ function makePainter(S, L) {
       if (sa > lerp(0.9, 0.35, S.saddle) + 0.35 * nz && u > U.haunch * 0.7 + 0.12 * nz && u < U.neckRoot + 0.06 * nz) zone = 'marking';
     }
     if (torso && S.rumpPatch && u < U.haunch + 0.05 && sa > -0.7 && Math.abs(ca) < 0.7) zone = 'belly';
-    if (torso && S.frontMane && u > lerp(U.barrel, U.chest, S.frontMane) && sa < (S.maneTop ?? 2)) zone = 'mane';
+    // (Digital Diorama revision 7: a bison's cape reaches further back over the hump than at the elbow, with a ragged
+    // edge (`maneSlant`, `maneRag`), and its long hair runs down the forearms (`maneLegs`: above this fraction of the elbow height))
+    if (torso && S.frontMane && u > capeEdge(sa, x, y, z) && sa < (S.maneTop ?? 2)) zone = 'mane';
+    if (limb && S.maneLegs && q.front && P.y > S.maneLegs * L.elbowY + 0.15 * L.elbowY * (fbm(x * 7, y * 7, z * 7, seed + 41) - 0.5)) zone = 'mane';
     if (head && S.frontMane && S.maneHead !== false && part === 'head' && u < s0 + 0.1) zone = 'mane';
     // dense spines painted between the modelled quills: dark bands and cream tips streaked along the body
     // (the hind quarters are part of the leg lofts, so the upper legs carry spines too)
@@ -2700,11 +2899,14 @@ const SPECIES_DEFS = {
     headAng: 15, headLen: 0.33, headD: 0.43, headW: 0.37, snout: 0.36, eye: 0.042, legThk: 1.32, cheek: 1.32, ear: { style: 'round', len: 0.17, w: 0.95, s: 0.24, a: 0.82 },
     tail: { style: 'thin', len: 0.95, thk: 0.045, set: -45, curl: 25, tipCurl: 15 }, pattern: 'tiger', countershade: 0.55, cheeks: true, earZone: 'pattern',
     palette: pal({ body: '#d27a2c', belly: '#f3ead8', pattern: '#1b1310', marking: '#1b1310', eye: '#c8a034', nose: '#c07a72' }) },
-  elephant: { label: 'African Elephant', fam: { stance: 'graviportal', nose: 'none' }, keel: 0.2, waist: 0.02, hind: { kY: 0.5, kZ: 0.06, aY: 0.19, aZ: -0.02 }, H: 3.0, len: 1.02, depth: 0.5, width: 0.92, rump: 0.93, rumpDepth: 0.92, tuck: 0, belly: 0.15,
+  // Digital Diorama revision 7: high shoulders, the back sloping down to a lower, rounded rump, a deep round belly and a
+  // more compact body (it was long, flat-backed and boxy)
+  elephant: { label: 'African Elephant', fam: { stance: 'graviportal', nose: 'none' }, keel: 0.2, waist: 0.02, hind: { kY: 0.5, kZ: 0.06, aY: 0.19, aZ: -0.02 }, H: 3.0, len: 0.9, depth: 0.5, width: 0.92, rump: 0.84, rumpDepth: 0.98, tuck: 0, belly: 0.4,
+    withers: 0.12, withersBack: 0.6, withersFront: 0.22, nt: 1.95, nb: 1.7, croupFlat: 0.9, croupSlope: 0.3,
     // Digital Diorama revision: a big domed head; ears hang back over the shoulders from their front edge
     // (they used to spread both ways from the root and jut forward over the face); a longer, thicker trunk;
     // the back dips behind the shoulders
-    neckAng: 12, neckLen: 0.08, neckThk: 0.95, neckW: 0.9, headAng: 42, headLen: 0.38, headD: 0.7, headW: 0.46, snout: 0.28, snoutW: 0.62, snoutD: 0.62, stop: 0, dome: 1.2, eye: 0.025, eyeS: 0.6, eyeYaw: 78, eyeEl: 0, legThk: 1.2, nails: 4, sag: 0.06,
+    neckAng: 12, neckLen: 0.08, neckThk: 0.95, neckW: 0.9, headAng: 42, headLen: 0.38, headD: 0.7, headW: 0.46, snout: 0.28, snoutW: 0.62, snoutD: 0.62, stop: 0, dome: 1.2, eye: 0.025, eyeS: 0.6, eyeYaw: 78, eyeEl: 0, legThk: 1.2, nails: 4, sag: 0.04,
     ear: { style: 'fan', fanH: 0.62, fanW: 0.4, fanTop: 0.4, fanGap: 0.09, len: 1.12, w: 0.42, s: 0.2, a: 1.05 }, trunk: { len: 0.78, thk: 0.19, curl: 0.6 }, tusks: { style: 'elephant', len: 0.42, thk: 0.1, s: 0.78, a: 0.75 },
     tail: { style: 'tuft', len: 0.38, thk: 0.02, set: -80, tuft: 1.8 }, countershade: 0,
     palette: pal({ body: '#7f7a74', belly: '#77726c', marking: '#5d5853', mane: '#2b2826', skin: '#8f7d78', hoof: '#cfc6b6', teeth: '#efe5cc' }) },
@@ -2728,7 +2930,7 @@ const SPECIES_DEFS = {
   // Digital Diorama revision: a stocky retriever (it read as a whippet): deep, broad chest, thick legs and neck,
   // broad skull and muzzle, thick "otter" tail; pale yellow coat
   dog: { label: 'Labrador Dog', fam: CANID, H: 0.58, len: 1.18, depth: 0.54, width: 0.92, rump: 0.98, tuck: 0.18, neckAng: 36, neckLen: 0.3, neckThk: 0.98,
-    headAng: 15, headLen: 0.4, headD: 0.36, headW: 0.4, snout: 0.42, snoutW: 0.74, snoutD: 0.8, muzzleN: 2.7, noseCap: 0.32, stop: 0.95, brow: 0.1, dome: 1.06, eye: 0.045, jowl: 1.3, legThk: 1.18,
+    headAng: 15, headLen: 0.4, headD: 0.36, headW: 0.4, snout: 0.42, snoutW: 0.74, snoutD: 0.8, muzzleN: 2.7, noseCap: 0.32, stop: 0.95, brow: 0.1, dome: 1.06, eye: 0.045, jowl: 1.3, legThk: 1.18, padW: 0.78, padH: 0.85,
     ear: { style: 'floppy', len: 0.44, w: 0.56, s: 0.2, a: 1.0, spread: 40, droop: 0.97, hang: 58, cup: 0.08, innerW: 0 }, tail: { style: 'thin', len: 0.6, thk: 0.07, set: -10, curl: -10 },
     countershade: 0.15, palette: pal({ body: '#e2c38c', belly: '#ecd4a8', nose: '#2a1d18', eye: '#5a3a1c' }) },
   fox: { label: 'Red Fox', fam: CANID, hindBulk: 0.92, hindShape: { thighF: 0.12, breech: 0.06, hams: 0.01, kneeW: 0.05, patella: 0.035 }, arch: 0.04, H: 0.4, len: 1.4, depth: 0.42, width: 0.7, rump: 1.0, tuck: 0.4, neckAng: 32, neckLen: 0.3, neckThk: 0.72,
@@ -2754,7 +2956,8 @@ const SPECIES_DEFS = {
     palette: pal({ body: '#b8936a', belly: '#efe4d2', pattern: '#6e5038', marking: '#1d1714', eye: '#b8a03a', nose: '#b07a6a' }) },
   // Digital Diorama revision: heavier limbs and body (it looked slender)
   polarBear: { label: 'Polar Bear', fam: URSID, H: 1.3, len: 1.45, depth: 0.58, width: 1.0, rump: 1.02, tuck: 0.06, belly: 0.25, neckAng: 22, neckLen: 0.38, neckThk: 0.85,
-    headAng: 14, headLen: 0.32, headD: 0.27, headW: 0.3, snout: 0.48, snoutW: 0.58, snoutD: 0.52, stop: 0.15, dome: 0.95, legThk: 1.55, pawW: 1.25, countershade: 0,
+    // Digital Diorama revision 7: a long head with a slight Roman nose and a deep lower jaw flush with the cheek
+    headAng: 14, headLen: 0.32, headD: 0.32, headW: 0.3, snout: 0.48, snoutW: 0.58, snoutD: 0.52, stop: 0.15, roman: 0.3, jaw: 0.35, dome: 0.95, legThk: 1.55, pawW: 1.25, countershade: 0,
     ear: { len: 0.15 }, palette: pal({ body: '#ece6d6', belly: '#e6dfcd', marking: '#d6ceb8', nose: '#121010', hoof: '#2a2420', skin: '#2a2420' }) },
   panda: { label: 'Giant Panda', fam: URSID, H: 0.75, len: 1.3, depth: 0.6, width: 1.0, rump: 1.0, tuck: 0.05, belly: 0.3, neckAng: 18, neckLen: 0.22, neckThk: 0.9,
     headAng: 16, headLen: 0.38, headD: 0.36, headW: 0.46, snout: 0.32, snoutW: 0.5, snoutD: 0.5, stop: 0.5, dome: 1.15, cheek: 1.35, legThk: 1.3,
@@ -2770,8 +2973,10 @@ const SPECIES_DEFS = {
     ear: { style: 'round', len: 0.14, w: 1.0, s: 0.22, a: 0.95 }, tail: { style: 'bushy', len: 0.45, thk: 0.06, set: -20, bush: 0.4 }, pattern: 'badger', countershade: 0,
     palette: pal({ body: '#8f8a84', belly: '#ece8df', pattern: '#1a1918', marking: '#1a1918', nose: '#121010' }) },
   otter: { label: 'River Otter', fam: { stance: 'plantigrade', nose: 'pad', whiskerPads: true, claws: 0.3 }, hind: { kY: 0.46, foot: 0.46 }, H: 0.3, len: 2.4, depth: 0.58, width: 0.92, rump: 1.02, tuck: 0.05, neckAng: 18, neckLen: 0.42, neckThk: 0.92,
-    headAng: 8, headLen: 0.42, headD: 0.24, headW: 0.38, snout: 0.35, snoutW: 0.6, snoutD: 0.55, stop: 0.25, dome: 0.9, eye: 0.045, eyeEl: 30, legThk: 1.2, footLen: 1.1, webbed: true, toes: 5,
-    ear: { style: 'round', len: 0.12, w: 1.0, s: 0.24, a: 1.0 }, tail: { style: 'thin', len: 1.35, match: 0.75, set: -15 }, countershade: 0.45, cheeks: true,
+    // Digital Diorama revision 7: a broad flat skull, a short blunt muzzle with big whisker pads, small eyes set high and
+    // tiny round ears (the head was long and flat: a duck's bill)
+    headAng: 8, headLen: 0.36, headD: 0.3, headW: 0.4, snout: 0.27, snoutW: 0.75, snoutD: 0.55, muzzleN: 2.6, noseCap: 0.3, stop: 0.25, dome: 0.88, eye: 0.04, eyeEl: 36, eyeYaw: 48, legThk: 1.2, footLen: 1.1, webbed: true, toes: 5,
+    ear: { style: 'round', len: 0.1, w: 1.0, s: 0.22, a: 1.08 }, tail: { style: 'thin', len: 1.35, match: 0.75, set: -15 }, countershade: 0.45, cheeks: true,
     palette: pal({ body: '#5e432c', belly: '#a68e72', nose: '#121010', web: '#3a2a1e' }) },
   // Digital Diorama revision: a round body under a dense coat of short spines laid back (painted between the
   // modelled quills), rather than sparse long spikes on a long body
@@ -2786,7 +2991,8 @@ const SPECIES_DEFS = {
     ear: { style: 'tufted', len: 0.42, w: 0.55, s: 0.2, a: 0.55, spread: 15 }, tail: { style: 'bushy', len: 1.8, thk: 0.24, set: 62, curl: -8, tipCurl: -22, bush: 0.9 },
     countershade: 0.65, palette: pal({ body: '#b5561f', belly: '#f2e4cc', marking: '#7a3812', nose: '#3a2a22', eye: '#140e0b' }) },
   beaver: { label: 'Beaver', fam: { ...RODENT, stance: 'plantigrade', crouch: 0 }, hind: { kY: 0.45, kZ: 0.15, foot: 0.62 }, H: 0.32, len: 2.0, depth: 0.72, width: 1.0, rump: 1.15, rumpDepth: 1.1, tuck: 0, neckAng: 20, neckLen: 0.22, neckThk: 0.95,
-    headAng: 15, headLen: 0.45, headD: 0.3, headW: 0.38, snout: 0.38, snoutW: 0.62, snoutD: 0.6, eye: 0.04, incisors: 0.12, webbed: 'hind', toes: 5, legThk: 1.25,
+    // Digital Diorama revision 7: a big, blunt, rounded head with a short deep muzzle and broad orange incisors
+    headAng: 15, headLen: 0.45, headD: 0.36, headW: 0.4, snout: 0.3, snoutW: 0.66, snoutD: 0.75, noseCap: 0.35, eye: 0.04, incisors: 0.1, incisorW: 0.42, webbed: 'hind', toes: 5, legThk: 1.25,
     ear: { style: 'round', len: 0.12, w: 1.0, s: 0.22, a: 0.95 }, tail: { style: 'flat', len: 0.95, thk: 0.15, set: -12, flat: 3.4 }, countershade: 0.2,
     palette: pal({ body: '#6a4426', belly: '#7a5232', marking: '#2c2420', web: '#2c2420', nose: '#151110', teeth: '#d8862a' }) },
   capybara: { label: 'Capybara', fam: { ...RODENT, crouch: 0.2, hockH: 0.2, footLen: 1.4, eye: 0.04 }, hind: { kY: 0.62, kZ: 0.2, aY: 0.24, aZ: -0.14, fY: 0.05, toe: 0.22 }, H: 0.52, len: 1.6, depth: 0.6, width: 0.85, rump: 1.06, tuck: 0.05, neckAng: 20, neckLen: 0.2, neckThk: 0.9,
@@ -2794,7 +3000,8 @@ const SPECIES_DEFS = {
     ear: { style: 'round', len: 0.12, w: 1.0, s: 0.12, a: 0.75 }, tail: { style: 'none', len: 0 }, countershade: 0.1,
     palette: pal({ body: '#8a6440', belly: '#9a744e', nose: '#2a1d16', skin: '#5a4030' }) },
   sheep: { label: 'Sheep', fam: UNGULATE, hind: { kY: 0.72, aY: 0.46, aZ: -0.08, fY: 0.15, fZ: -0.065, cY: 0.055 }, H: 0.8, len: 1.15, depth: 0.62, width: 1.0, rump: 1.0, tuck: 0, belly: 0.2, neckAng: 32, neckLen: 0.26, neckThk: 0.85,
-    headAng: 55, headLen: 0.34, headD: 0.27, headW: 0.26, snout: 0.5, snoutW: 0.6, snoutD: 0.58, stop: 0.1, roman: 0.6, eye: 0.05, legThk: 0.85, wool: 0.06,
+    // Digital Diorama revision 7: a Roman nose and a wool cap on the forehead (the face was a plain dark tube)
+    headAng: 55, headLen: 0.34, headD: 0.27, headW: 0.26, snout: 0.5, snoutW: 0.6, snoutD: 0.58, stop: 0.1, roman: 1.5, eye: 0.05, legThk: 0.85, wool: 0.06, woolCap: 1,
     ear: { style: 'pointed', len: 0.32, w: 0.42, s: 0.12, a: 1.2, spread: 80, tilt: -15, turn: 40 }, tail: { style: 'thin', len: 0.2, thk: 0.05, set: -80 },
     faceZone: 'marking', legZone: 'marking', countershade: 0, earZone: 'marking',
     palette: pal({ body: '#ece2cc', belly: '#e6dbc2', marking: '#2c2623', nose: '#1d1917', skin: '#2c2623' }) },
@@ -2808,7 +3015,10 @@ const SPECIES_DEFS = {
     ear: { style: 'pointed', len: 0.42, w: 0.38, s: 0.12, a: 1.1, spread: 75, tilt: -10, turn: 40 }, horns: { style: 'goat', len: 0.8, thk: 0.07, s: 0.08, a: 0.35 },
     tail: { style: 'flat', len: 0.16, thk: 0.03, set: 55 }, mane: { style: 'none', beard: 0.45 }, countershade: 0.1,
     palette: pal({ body: '#e8e1d2', belly: '#efe9dc', marking: '#8a7a68', mane: '#d8d0bf', horn: '#a39478', nose: '#9a7d74', eye: '#c8a034' }) },
-  bison: { label: 'American Bison', fam: UNGULATE, marks: { hooks: 0.06, fossa: 0.03, breast: 0.04 }, hind: { kY: 0.68, kZ: 0.13, aY: 0.42, aZ: -0.05, fY: 0.14, fZ: -0.04, cY: 0.058 }, H: 1.8, len: 1.15, depth: 0.6, width: 0.85, rump: 0.8, rumpDepth: 0.8, tuck: 0.15, withers: 0.32, chestW: 1.15,
+  bison: { label: 'American Bison', fam: UNGULATE, marks: { hooks: 0.06, fossa: 0.03, breast: 0.04 }, hind: { kY: 0.68, kZ: 0.13, aY: 0.42, aZ: -0.05, fY: 0.14, fZ: -0.04, cY: 0.058 }, H: 1.8, len: 1.15, depth: 0.6, width: 0.85, rump: 0.8, rumpDepth: 0.8, tuck: 0.15, withers: 0.22, chestW: 1.15,
+    // Digital Diorama revision 7: a broad, rounded hump over the shoulders, falling steeply to the low-carried head and
+    // sloping gradually back to the loin (it rose as a tall narrow tent)
+    withersFront: 0.15, withersBack: 0.36, humpTop: 1.0, humpN: 2.5, chestNarrow: 0.82, legThk: 1.3, shag: 0.07, maneSlant: 0.9, maneRag: 0.08, maneLegs: 0.4,
     neckAng: -5, neckLen: 0.2, neckThk: 0.95, neckW: 0.95, neckLow: 0.15, headAng: 78, headLen: 0.3, headD: 0.36, headW: 0.33, snout: 0.38, snoutW: 0.75, snoutD: 0.7, stop: 0.1, dome: 1.2, eye: 0.035,
     ear: { style: 'pointed', len: 0.2, w: 0.5, s: 0.16, a: 1.25, spread: 85, tilt: -10, turn: 40 }, horns: { style: 'cattle', len: 0.22, thk: 0.07, s: 0.1, a: 1.15 },
     tail: { style: 'tuft', len: 0.3, thk: 0.02, set: -70, tuft: 2.5 }, mane: { style: 'none', beard: 0.6 }, frontMane: 0.35, countershade: 0,
@@ -2829,9 +3039,11 @@ const SPECIES_DEFS = {
     tail: { style: 'flat', len: 0.12, thk: 0.035, set: -40 }, frontMane: 0.7, maneTop: 0.25, maneHead: false, rumpPatch: true, countershade: 0.3, muzzle: 'dark', muzzleS: 0.6, grain: 1.6,
     palette: pal({ body: '#7a6a58', belly: '#e4dccb', mane: '#ece4d4', marking: '#3d3127', horn: '#d0bc96', nose: '#2b2320' }) },
   camel: { label: 'Dromedary Camel', fam: { ...UNGULATE, foot: 'pad', nose: 'muzzle', pupil: 'round' }, marks: { hooks: 0.06, fossa: 0.04, girth: 0.03, breast: 0.08 }, hind: { kY: 0.62, kZ: 0.2, aY: 0.5, aZ: -0.07, fY: 0.13, fZ: -0.065, cY: 0.05 }, hindShape: { thighF: 0.08, breech: 0.13, hams: 0, kneeW: 0.05, gaskW: 0.045 }, thighW: 0.3, thighD: 0.3, H: 1.85, len: 0.82, depth: 0.42, width: 0.78, rump: 0.92, tuck: 0.22, humps: [{ u: 0.55, h: 0.2, w: 0.42 }],
-    neckAng: 15, neckLen: 0.55, neckThk: 0.48, neckW: 0.6, neckArch: -0.12, headAng: 25, headLen: 0.3, headD: 0.27, headW: 0.21, snout: 0.5, snoutW: 0.5, snoutD: 0.68, muzzleN: 2.4, noseCap: 0.45, stop: 0.3, dome: 1.08, brow: 0.12, eye: 0.055, jaw: 0.7, chin: 0.3, legThk: 0.72, tibiaSlope: 0.7,
-    ear: { style: 'round', len: 0.18, w: 0.8, s: 0.12, a: 0.8, spread: 40 }, tail: { style: 'tuft', len: 0.3, thk: 0.018, set: -80, tuft: 1.6 }, countershade: 0.1,
-    palette: pal({ body: '#c9a06b', belly: '#d6b585', mane: '#8a6438', hoof: '#5a4a3a', nose: '#4a3a30' }) },
+    // Digital Diorama revision 7: a long, slender head (it read as a donkey's): domed forehead, heavy brows over large eyes,
+    // slit nostrils, and a thick split upper lip hanging over the lower one
+    neckAng: 15, neckLen: 0.55, neckThk: 0.48, neckW: 0.6, neckArch: -0.12, headAng: 22, headLen: 0.33, headD: 0.24, headW: 0.2, snout: 0.56, snoutW: 0.52, snoutD: 0.66, muzzleN: 2.3, noseCap: 0.5, stop: 0.18, dome: 1.14, brow: 0.15, eye: 0.055, jaw: 0.6, chin: 0.2, jawEnd: 0.86, lipOver: 0.32, cleft: 0.12, nostrilSlit: 28, nostril: 0.26, nostrilA: 0.5, legThk: 0.72, tibiaSlope: 0.7,
+    ear: { style: 'round', len: 0.14, w: 0.8, s: 0.12, a: 0.8, spread: 40, innerW: 0.4 }, tail: { style: 'tuft', len: 0.3, thk: 0.018, set: -80, tuft: 1.6 }, countershade: 0.1,
+    palette: pal({ body: '#c9a06b', belly: '#d6b585', mane: '#8a6438', hoof: '#5a4a3a', nose: '#4a3a30', skin: '#a88458' }) },
   llama: { label: 'Llama', fam: UNGULATE, hind: { kY: 0.7, aY: 0.47, aZ: -0.08, fY: 0.12, fZ: -0.06, cY: 0.05 }, H: 1.15, len: 0.95, depth: 0.5, width: 0.82, rump: 1.0, tuck: 0.15, neckAng: 78, neckLen: 0.62, neckThk: 0.55, neckW: 0.7,
     headAng: 30, headLen: 0.3, headD: 0.26, headW: 0.24, snout: 0.45, snoutW: 0.55, snoutD: 0.6, stop: 0.25, eye: 0.06, legThk: 0.85, wool: 0.05,
     ear: { style: 'long', len: 0.52, w: 0.38, s: 0.1, a: 0.5, spread: 18, tilt: 0, turn: 30, droop: 0.15 }, tail: { style: 'fluffy', len: 0.2, thk: 0.05, set: 30 },
@@ -2845,10 +3057,13 @@ const SPECIES_DEFS = {
     neckAng: 5, neckLen: 0.12, neckThk: 0.95, neckW: 0.95, headAng: 22, headLen: 0.5, headD: 0.42, headW: 0.36, snout: 0.52, snoutW: 1.25, snoutD: 1.0, muzzleN: 3.2, noseCap: 0.3, stop: 0.45, dome: 0.85, jaw: 0.85, jawW: 0.92, mouthS: 0.5, eye: 0.045, eyeYaw: 40, eyeEl: 58, turret: true, legThk: 1.4, nostrilA: 1.1,
     ear: { style: 'round', len: 0.1, w: 1.0, s: 0.1, a: 0.6 }, tail: { style: 'flat', len: 0.18, thk: 0.04, set: -70, flat: 2 }, countershade: 0.3,
     palette: pal({ body: '#6e605e', belly: '#c49088', skin: '#c49088', nose: '#4a3e3c', mouth: '#c47a78' }) },
-  boar: { label: 'Wild Boar', fam: UNGULATE, marks: { breast: 0.04 }, keel: 0.15, waist: 0, hind: { kY: 0.66, kZ: 0.17, aY: 0.4, aZ: -0.06, fY: 0.13, fZ: -0.035, cY: 0.05 }, H: 0.85, len: 1.25, depth: 0.58, width: 0.75, rump: 0.86, rumpDepth: 0.9, tuck: 0.1, withers: 0.3, chestW: 1.08, neckAng: 5, neckLen: 0.08, neckThk: 0.95, neckW: 0.95,
-    headAng: 35, headLen: 0.48, headD: 0.26, headW: 0.26, snout: 0.6, snoutW: 0.42, snoutD: 0.42, stop: 0.0, dome: 0.85, jowl: 1.3, eye: 0.025, nose: 'disc', muzzleN: 2.6,
+  boar: { label: 'Wild Boar', fam: UNGULATE, marks: { breast: 0.04 }, keel: 0.15, waist: 0, hind: { kY: 0.66, kZ: 0.17, aY: 0.4, aZ: -0.06, fY: 0.13, fZ: -0.035, cY: 0.05 }, H: 0.85, len: 1.25, depth: 0.58, width: 0.75, rump: 0.86, rumpDepth: 0.9, tuck: 0.1, withers: 0.24, chestW: 1.08,
+    // Digital Diorama revision 7: high, rounded shoulders under the bristle crest (the withers rose to a sharp peak)
+    withersFront: 0.32, withersBack: 0.4, humpTop: 0.92, humpN: 2.4, neckAng: 5, neckLen: 0.08, neckThk: 0.95, neckW: 0.95,
+    // a deep wedge of a head (it was a thin tube), slender legs a little stouter
+    headAng: 35, headLen: 0.48, headD: 0.32, headW: 0.3, snout: 0.6, snoutW: 0.4, snoutD: 0.4, stop: 0.0, dome: 0.85, jowl: 1.3, eye: 0.025, nose: 'disc', muzzleN: 2.6, legThk: 1.12,
     ear: { style: 'pointed', len: 0.28, w: 0.55, s: 0.14, a: 0.75, spread: 35, tilt: 10 }, tusks: { style: 'boar', len: 0.08, thk: 0.15, s: 0.85, a: 0.95 },
-    tail: { style: 'tuft', len: 0.3, thk: 0.012, set: -70, tuft: 2.2 }, mane: { style: 'crest', h: 0.07 }, countershade: 0,
+    tail: { style: 'tuft', len: 0.3, thk: 0.012, set: -70, tuft: 2.2 }, mane: { style: 'crest', h: 0.06, back: 0.55 }, countershade: 0,
     palette: pal({ body: '#4a3a2e', belly: '#3e3026', mane: '#241c16', nose: '#3a2e28', hoof: '#1d1814' }) },
   anteater: { label: 'Giant Anteater', fam: { stance: 'plantigrade', nose: 'pad', claws: 2.2, toes: 4 }, hind: { kY: 0.5, kZ: 0.1, foot: 0.3 }, H: 0.75, len: 1.5, depth: 0.55, width: 0.65, rump: 1.02, tuck: 0.05, neckAng: 15, neckLen: 0.38, neckThk: 0.7,
     headAng: 25, headLen: 0.5, headD: 0.14, headW: 0.16, snout: 0.78, snoutW: 0.35, snoutD: 0.4, stop: 0, eye: 0.022, legThk: 1.1,
@@ -3005,7 +3220,10 @@ function gaitSetFor(S, p) {
   if (st === 'ungulate') return { walk: 'walk', trot: 'trot', gallop: ['deer', 'gazelle', 'reindeer', 'moose', 'goat', 'bighorn'].includes(sp) ? 'rotary' : 'transverse' };
   return { walk: 'walk', trot: 'trot', gallop: 'rotary' };
 }
-const GAIT_TUNE = { cheetah: { gallop: { lambda: 3.8, spine: 15, bob: 0.04 } }, rabbit: { trot: { lambda: 2.2, fr: 0.7 }, gallop: { lambda: 2.6 } }, squirrel: { trot: { lambda: 2.2, fr: 0.7 } } };
+// (Digital Diorama revision 7: elephants walk with short steps and hardly bob; their columnar legs could only follow the
+// standard strides by sinking the body a quarter of a metre)
+const GAIT_TUNE = { cheetah: { gallop: { lambda: 3.8, spine: 15, bob: 0.04 } }, rabbit: { trot: { lambda: 2.2, fr: 0.7 }, gallop: { lambda: 2.6 } }, squirrel: { trot: { lambda: 2.2, fr: 0.7 } },
+  elephant: { walk: { lambda: 1.05 }, trot: { lambda: 1.45 } }, otter: { walk: { lift: 0.1 } } };
 const RIGS = new WeakMap();
 
 /* ── planar helpers in a bone's (z, y) plane: ψ = atan2(z, y); a rotation about +X by δ adds δ to ψ ── */
@@ -3040,13 +3258,37 @@ function fkOf(info, s) {
 }
 
 /**
+ * Digital Diorama revision 7: keeps a foot on its line across the body. Legs are solved in their girdle's (z, y) plane, so a
+ * rolling pelvis, a turning spine or a body swaying over its feet (walks) carried planted feet sideways, 5-15 cm a step,
+ * and tipped them onto their edges. The leg now abducts at the hip (hind) or shoulder (fore) just enough to bring the foot
+ * back over its mark, and the foot is turned back level about the direction of travel.
+ */
+function keepOnLine(info, lm, target, s) {
+  const b = lm.bones, rb = lm.front ? b[1] : b[0], last = b[b.length - 1];
+  if (!rb || !info.has[rb] || !info.has[last]) return;
+  const fk = fkOf(info, s), par = info.parent[rb];
+  const tipW = lm.tip.clone().sub(info.headV[last]).applyMatrix4(fk(last));
+  const v = tipW.applyMatrix4(fk(rb).clone().invert());            // the foot in the abducting bone's own frame
+  const X = target.clone().applyMatrix4(fk(par).clone().invert()).x - info.rest[rb][0];
+  const rho = Math.hypot(v.x, v.y);
+  if (rho < 1e-6) return;
+  // x in the parent's frame after a turn φ about the bone's z axis (applied first in its YXZ euler): v.x cos φ − v.y sin φ
+  const beta = Math.atan2(v.y, v.x), ac = Math.acos(clamp(X / rho, -1, 1));
+  const p1 = wrapA(ac - beta), p2 = wrapA(-ac - beta), phi = Math.abs(p1) < Math.abs(p2) ? p1 : p2;
+  if (!(Math.abs(phi) < 0.3)) return;
+  addRot(info, s, rb, [0, 0, phi / DEG]);
+  const up = V3(0, 1, 0).applyQuaternion(new THREE.Quaternion().setFromRotationMatrix(fkOf(info, s)(last)));
+  addRot(info, s, last, [0, 0, Math.atan2(up.x, up.y) / DEG]);
+}
+
+/**
  * Solves one leg so its ground contact (hoof toe, toe tips or sole) reaches target T.c (model space), and adds
  * the bone rotations to sample s. T: { c, toe, heel, flex } in degrees — toe: the hoof / toes rotated backward
  * (flexion; negative = fetlock sinking under load), heel: plantigrade heel lift, flex: extra hock / knee flexion.
  * Hind legs work as a pantograph (the cannon / rear pastern keeps parallel to the thigh); forelegs swing the
  * shoulder blade with the forearm and keep the knee (carpus) straight unless flexed.
  */
-function solveLeg(info, fk, lm, T, s) {
+function solveLeg(info, fk, lm, T, s, lateral = true) {
   const par = lm.front ? 'Chest' : 'Hips', M = fk(par), inv = M.clone().invert(), ph = info.headV[par];
   const up = V3(0, 1, 0).transformDirection(M), theta = Math.atan2(up.z, up.y);
   const J = lm.J.map(p => P2(p.clone().sub(ph))), n = J.length, tip = J[n - 1], b = lm.bones;
@@ -3063,6 +3305,7 @@ function solveLeg(info, fk, lm, T, s) {
       const K = ik2(H0, At, lf, lt, lm.kneeSide), A = add2(K, sc2(unit2(psi2(sub2(At, K))), lt));
       const dF = wrapA(psi2(sub2(K, H0)) - pf0), dT = wrapA(psi2(sub2(A, K)) - pt0);
       put(b[0], dF); put(b[1], dT - dF); put(b[2], heelA - dT); put(b[3], toeA - heelA);
+      if (lateral && T.c) keepOnLine(info, lm, T.c, s);
       return Math.max(0, len2(sub2(At, H0)) - (lf + lt) * 0.995);
     }
     if (T.A) {
@@ -3083,6 +3326,7 @@ function solveLeg(info, fk, lm, T, s) {
     }
     const dF = wrapA(pf - pf0), dT = wrapA(psi2(sub2(A, K)) - pt0), dM = wrapA(pm - pm0);
     put(b[0], dF); put(b[1], dT - dF); put(b[2], dM - dT); put(b[3], wrapA(toeA - dM));
+    if (lateral && T.c) keepOnLine(info, lm, T.c, s);
     return Math.max(0, len2(sub2(At, H0)) - (lf + lt) * 0.995);
   }
   // foreleg: shoulder blade (J0 → J1), humerus, radius, metacarpus, digit
@@ -3107,18 +3351,24 @@ function solveLeg(info, fk, lm, T, s) {
   // the shoulder blade swings with the forearm (kept within ±12°: a short forearm would otherwise wind it round),
   // turning about a point part way down the blade as it glides over the ribs, so the shoulder does not rise as it reaches
   const blade = (d) => clamp(lm.ks * d, -0.21, 0.21), pivot = add2(S0, sc2(sub2(Sh0, S0), 0.45));
-  let dR = 0, Sh = Sh0, E = E0, pr = pr0;
-  for (let it = 0; it < 8; it++) {
-    Sh = add2(pivot, rot2(sub2(Sh0, pivot), blade(dR)));
+  // (Digital Diorama revision 7: the blade is posed at the angle that placed the shoulder for the final elbow; it was posed
+  // from the next estimate, so where the iteration had not settled (touchdown) blade, arm and forearm disagreed and the foot
+  // missed its mark by up to a few centimetres. The estimate is also damped so that it settles.)
+  let dR = 0, Sh = Sh0, E = E0, pr = pr0, dS = 0;
+  for (let it = 0; it < 10; it++) {
+    dS = blade(dR);
+    Sh = add2(pivot, rot2(sub2(Sh0, pivot), dS));
     E = ik2(Sh, target, lh, Lv, lm.elbowSide);
     pr = psi2(sub2(target, E)) - beta;
-    dR = wrapA(pr - pr0);
+    dR = lerp(dR, wrapA(pr - pr0), it < 2 ? 1 : 0.6);
   }
-  const dS = blade(dR), dH = wrapA(psi2(sub2(E, Sh)) - ph0);
+  dR = wrapA(pr - pr0);
+  const dH = wrapA(psi2(sub2(E, Sh)) - ph0);
   put(b[0], dS); put(b[1], dH - dS); put(b[2], dR - dH);
   if (info.has[b[0]]) { const top = sub2(add2(pivot, rot2(sub2(S0, pivot), dS)), S0), v = s[b[0]]; s[b[0]] = { r: Array.isArray(v) ? v : v.r, p: [0, top.y, top.z] }; }
   if (sole) { put(b[3], heelA - dR); put(b[4], toeA - heelA); }
   else { const dMC = wrapA(pr + carp - pmc0); put(b[3], dMC - dR); put(b[4], wrapA(toeA - dMC)); }
+  if (lateral && T.c) keepOnLine(info, lm, T.c, s);
   return Math.max(0, len2(sub2(target, Sh)) - (lh + Lv) * 0.995);
 }
 
@@ -3132,9 +3382,14 @@ function footTrack(G, lm, u, h, fm) {
     const s = ph / duty;
     return { dz: o + S * (0.5 - s), dy: 0, toe: -G.sink * fm.sink * Math.sin(Math.PI * s) + roll * sstep(0.7, 1, s), heel: G.heel * sstep(0.55, 1, s), flex: 0, load: Math.sin(Math.PI * s) };
   }
-  const s = (ph - duty) / (1 - duty), e = s * s * s * (10 - 15 * s + 6 * s * s);
+  // Digital Diorama revision 7: the swing starts and ends moving back with the ground (swing-leg retraction), so the foot
+  // lifts off and sets down nearly vertically; with zero speed at both ends relative to the body, it skidded forward at
+  // the body's speed for its last centimetre above the ground (the end slope is capped, so runs overshoot at most ~7 %)
+  const s = (ph - duty) / (1 - duty), m = -Math.min((1 - duty) / duty, 1.4) * (G.retract ?? 1);
+  const e = 3 * s * s - 2 * s * s * s + m * (2 * s * s * s - 3 * s * s + s);
   const toe = (roll + (G.toe * fm.toe - roll) * sstep(0, 0.3, s)) * (1 - sstep(0.55, 0.95, s));
-  return { dz: o + S * (-0.5 + e), dy: G.lift * h * Math.pow(Math.sin(Math.PI * Math.pow(s, 0.8)), 1.3), toe, heel: G.heel * (1 - sstep(0.35, 0.85, s)), flex: flex * Math.sin(Math.PI * s), load: 0 };
+  // (Digital Diorama revision 7: the foot leaves and meets the ground a little more crisply: exponent 1, was 1.3)
+  return { dz: o + S * (-0.5 + e), dy: G.lift * h * Math.sin(Math.PI * Math.pow(s, 0.8)), toe, heel: G.heel * (1 - sstep(0.35, 0.85, s)), flex: flex * Math.sin(Math.PI * s), load: 0 };
 }
 
 /** Adds rotations to a bone in a sample ([rx, ry, rz] degrees). */
@@ -3161,13 +3416,15 @@ function plantFeet(info, s, move = () => null) {
  * head's length above the ground, then the head hangs nose-down so the muzzle meets the grass. Short-necked
  * animals that cannot reach also dip the forehand (the forelegs bend under the lowered chest).
  */
-function reachGround(info, s, h) {
-  if (!info.snout || !info.has.Head) return;
+function reachGround(info, s, h, o = {}) {
+  if (!info.snout || !info.has.Head) return 0;
   // The neck swings down nearly straight, a little arched behind the poll, about the base of the neck vertebrae: low in
   // the neck at about the height of the shoulder joint, not the Neck1 joint high in the chest. About Neck1 even a straight
   // neck could only put the poll a third of a metre ahead of the chest on a horse, so the head curled back between the
   // forelegs; real grazers reach well in front of their forefeet. The pivot is applied as a position offset on Neck1.
-  const target = info.headLen * 0.92 + 0.015 * info.H, MAX = 115, N2 = 0.12;
+  // (Digital Diorama revision 7, options: `hang`, the head's pitch nose-down; `target`, the poll's height; `max`, the most the
+  // neck swings down; `maxDip`, the most the forehand dips. Returns the dip, in degrees.)
+  const hang = o.hang ?? 72, target = o.target ?? info.headLen * 0.92 + 0.015 * info.H, MAX = o.max ?? 115, N2 = 0.12;
   const fore = info.limbs.find(l => l.front && l.J && l.J[1]), Pw = info.headV.Neck1, Cw = info.headV.Chest;
   const Qw = fore ? V3(0, Math.min(Pw.y, fore.J[1].y + 0.03 * info.H), Math.max(Pw.z, fore.J[1].z + 0.04 * info.H)) : Pw;
   const Py = Pw.y - Cw.y, Pz = Pw.z - Cw.z, Qy = Qw.y - Cw.y, Qz = Qw.z - Cw.z;
@@ -3179,22 +3436,23 @@ function reachGround(info, s, h) {
   const pollY = (t) => new THREE.Vector3().setFromMatrixPosition(fkOf(info, t)('Head')).y;
   const trial = (a, dip) => { const t = { ...s }; addRot(info, t, 'Hips', [dip, 0, 0]); neckAt(t, a); return t; };
   let dip = 0, a = MAX;
-  if (pollY(trial(MAX, 0)) > target) dip = clamp((pollY(trial(MAX, 0)) - target) / Math.max(1e-6, info.hipToShoulder) / DEG, 0, 9);
+  if (pollY(trial(MAX, 0)) > target) dip = clamp((pollY(trial(MAX, 0)) - target) / Math.max(1e-6, info.hipToShoulder) / DEG, 0, o.maxDip ?? 9);
   if (pollY(trial(0, dip)) > target) {
     let lo = 0, hi = MAX;
     for (let i = 0; i < 16; i++) { const m = (lo + hi) / 2; if (pollY(trial(m, dip)) > target) lo = m; else hi = m; }
     a = hi;
   } else a = 0;
   addRot(info, s, 'Hips', [dip, 0, 0]); neckAt(s, a);
-  // hang the head about 72° nose-down
+  // hang the head about 72° nose-down (grazing)
   const fk = fkOf(info, s), q = new THREE.Quaternion().setFromRotationMatrix(fk('Head'));
   const d = info.snout.clone().sub(info.headV.Head).applyQuaternion(q), now = Math.atan2(-d.y, Math.hypot(d.z, d.x)) / DEG;
-  addRot(info, s, 'Head', [clamp(72 - now, -40, 60), 0, 0]);
+  addRot(info, s, 'Head', [clamp(hang - now, -40, 60), 0, 0]);
+  return dip;
 }
 const tailWave = (info, s, yaw, lift = 0, f = 1, u = 0, lag = 0.6) => info.tail.forEach((b, i) => addRot(info, s, b, [lift / info.tail.length, Math.sin(TAU * f * u - i * lag) * yaw / info.tail.length, 0]));
 const earsTo = (info, s, a) => { addRot(info, s, 'EarL', [0, 0, a]); addRot(info, s, 'EarR', [0, 0, -a]); };
 
-function gaitSample(info, name, u) {
+function gaitSample(info, name, u, raw = false) {
   const G = info.gaits[name], s = {}, h = info.hipH;
   const fmOf = (lm) => FOOT_MOTION[lm.foot] || FOOT_MOTION.paw;
   // feet first (their loads drive the body's rise and fall)
@@ -3218,20 +3476,23 @@ function gaitSample(info, name, u) {
   };
   // the girdles drop where the planted legs could not otherwise reach (double support): the body vaults
   let dropH = 0, dropF = 0;
-  for (let pass = 0; pass < 4; pass++) {
+  // Digital Diorama revision 7: a smooth drop (see dropCurve); the raw one is only measured for it and for adaptStrides
+  const dc = raw ? null : dropCurve(info, name);
+  if (dc) { dropH = dc.at(u, 'H'); dropF = dc.at(u, 'F'); }
+  else for (let pass = 0; pass < 4; pass++) {
     const t = {}, yH = yH0 - dropH, yF = yF0 - dropF;
     trunkAt(t, yH, pitchFor(info, yF - yH));
     const fk = fkOf(info, t);
     let shortH = 0, shortF = 0;
     for (const { lm, tr } of tracks) if (tr && tr.load > 0) {
-      const sh = solveLeg(info, fk, lm, { c: lm.tip.clone().add(V3(0, tr.dy, tr.dz)), toe: tr.toe, heel: tr.heel * (lm.foot === 'sole' ? 1 : 0), flex: tr.flex }, {});
+      const sh = solveLeg(info, fk, lm, { c: lm.tip.clone().add(V3(0, tr.dy, tr.dz)), toe: tr.toe, heel: tr.heel * (lm.foot === 'sole' ? 1 : 0), flex: tr.flex }, {}, false);
       if (lm.front) shortF = Math.max(shortF, sh); else shortH = Math.max(shortH, sh);
     }
     if (shortH < 1e-4 * h && shortF < 1e-4 * h) break;
     dropH = Math.min(0.2 * h, dropH + shortH * 1.15); dropF = Math.min(0.2 * h, dropF + shortF * 1.15);
   }
   const yH = yH0 - dropH, yF = yF0 - dropF, pitch = pitchFor(info, yF - yH);
-  s.__drop = Math.max(dropH, dropF) / h;
+  s.__drop = Math.max(dropH, dropF) / h; s.__dropH = dropH; s.__dropF = dropF;
   trunkAt(s, yH, pitch);
   // keep the head steady (counter the body's pitch); walkers nod with each fore footfall
   const nod = G.run ? 0 : (info.nod ?? 3) * Math.cos(2 * TAU * (u - G.ph.LF - 0.08));
@@ -3264,6 +3525,7 @@ function sampleFor(info, name, u) {
     case 'graze': {
       // head down to the ground, one foreleg forward (hoofed animals), chewing; giraffes browse, elephants pluck with the trunk
       const nb = Math.sin(TAU * u) * 2;
+      let dip = 0;
       if (info.browse) {
         addRot(info, s, 'Neck1', [-14, Math.sin(TAU * u) * 6, 0]); addRot(info, s, 'Neck2', [-8, 0, 0]); addRot(info, s, 'Head', [-22 + nb, 0, 0]);
         addRot(info, s, 'Jaw', [Math.max(0, Math.sin(TAU * u * 4)) * 8, 0, 0]);
@@ -3271,13 +3533,23 @@ function sampleFor(info, name, u) {
         const k = 0.5 - 0.5 * Math.cos(TAU * u);
         addRot(info, s, 'Neck1', [6, 0, 0]); addRot(info, s, 'Head', [4, 0, 0]);
         info.trunk.forEach((b, i) => addRot(info, s, b, [lerp(10, -38, k) * (i + 1) / info.trunk.length * 1.6, 0, 0]));
+      } else if (!info.grazer) {
+        // Digital Diorama revision 7: carnivores, bears and rodents sniff and nibble at the ground rather than graze: the neck
+        // swings down less, the head points down at about 50° and the nose works over the ground in front of the forefeet
+        const sh = Math.sin(TAU * u * 2) * 3;
+        dip = reachGround(info, s, h, { hang: 50, target: info.headLen * 0.72 + 0.035 * info.H, max: 80, maxDip: 5 });
+        addRot(info, s, 'Neck1', [nb * 0.6, Math.sin(TAU * u) * 9, 0]); addRot(info, s, 'Head', [sh, Math.sin(TAU * u + 0.8) * 6, 0]);
+        addRot(info, s, 'Jaw', [Math.max(0, Math.sin(TAU * u * 3)) * 5, 0, 0]);
       } else {
-        reachGround(info, s, h);
+        dip = reachGround(info, s, h);
         addRot(info, s, 'Neck1', [nb, Math.sin(TAU * u) * 5, 0]); addRot(info, s, 'Head', [-nb * 0.5, 0, 0]);
         addRot(info, s, 'Jaw', [Math.max(0, Math.sin(TAU * u * 4)) * 8, 0, 0]);
       }
       earsTo(info, s, -8); tailWave(info, s, 12, 0, 1, u);
-      plantFeet(info, s, (lm) => lm.front && lm.side > 0 && info.hoofed ? { dz: 0.12 * h } : null);
+      // (Digital Diorama revision 7: where the forehand has to dip (short necks: pigs, bears, bison), the forefeet step forward
+      // with it, so the forelegs slant instead of folding at the elbow)
+      const fwd = 0.2 * h * (dip / 9);
+      plantFeet(info, s, (lm) => !lm.front ? null : { dz: fwd + (lm.side > 0 && info.hoofed ? 0.12 * h : 0) });
       break;
     }
     case 'alert': {
@@ -3365,13 +3637,34 @@ const CLIP_SPEC = { idle: [3.2, 49, true], graze: [2.4, 37, true], alert: [2.2, 
  * Short-legged animals (hedgehogs, mice, otters) take shorter, quicker steps: each gait's stride is shortened until
  * the body need not sink more than 12 % of the leg length for the planted feet to reach the ground. Runs once.
  */
+/**
+ * Digital Diorama revision 7: the girdles' drop through a gait cycle, smoothed. Where planted legs cannot reach (double
+ * support) the hips and shoulders sink, and they sprang back the instant the straining foot lifted: the body jumped by
+ * the whole drop between two frames (9 cm in a horse's walk, 26 cm in an elephant's), and the other legs flipped between
+ * a bent and a straight solution. The needed drop is sampled round the cycle, then given an upper envelope and blurred:
+ * never less than the legs need, so every planted foot still reaches, and the body eases down and up.
+ */
+function dropCurve(info, name) {
+  const G = info.gaits[name];
+  if (G.drops) return G.drops;
+  const N = 48, K = 3, raw = { H: [], F: [] };
+  for (let i = 0; i < N; i++) { const t = gaitSample(info, name, i / N, true); raw.H.push(t.__dropH); raw.F.push(t.__dropF); }
+  const smooth = (a) => {
+    const dil = a.map((_, i) => { let m = 0; for (let d = -K; d <= K; d++) m = Math.max(m, a[(i + d + N) % N]); return m; });
+    return dil.map((_, i) => { let t = 0; for (let d = -K; d <= K; d++) t += dil[(i + d + N) % N]; return t / (2 * K + 1); });
+  };
+  const H = smooth(raw.H), F = smooth(raw.F);
+  G.drops = { at: (u, k) => { const a = k === 'H' ? H : F, f = fract(u) * N, i = Math.floor(f) % N; return lerp(a[i], a[(i + 1) % N], f - Math.floor(f)); } };
+  return G.drops;
+}
+
 function adaptStrides(info) {
   if (info.adapted) return;
   info.adapted = true;
   for (const name of Object.keys(info.gaits)) {
     for (let k = 0; k < 6; k++) {
       let worst = 0;
-      for (let i = 0; i < 16; i++) worst = Math.max(worst, gaitSample(info, name, i / 16).__drop || 0);
+      for (let i = 0; i < 16; i++) worst = Math.max(worst, gaitSample(info, name, i / 16, true).__drop || 0);
       if (worst <= 0.12) break;
       info.gaits[name] = { ...info.gaits[name], lambda: info.gaits[name].lambda * 0.85 };
     }
@@ -3385,7 +3678,9 @@ export function createClips(asset) {
   adaptStrides(info);
   for (const name of ['walk', 'trot', 'gallop']) {
     const G = info.gaits[name]; if (!G) continue;
-    const v = Math.sqrt(G.fr * 9.81 * h), stride = G.lambda * h, dur = stride / v, frames = clamp(Math.round(dur * 40), 21, 41);
+    // (Digital Diorama revision 7: 41-65 keys a cycle; with 21-41, the joints' interpolation between keys sank fast feet
+    // 1-2 cm into the ground at touchdown, though every baked pose was exact)
+    const v = Math.sqrt(G.fr * 9.81 * h), stride = G.lambda * h, dur = stride / v, frames = clamp(Math.round(dur * 64), 41, 65);
     const clip = bakeClip(info, name, dur, frames, (u) => sampleFor(info, name, u), true);
     clip.userData = { loop: true, gait: G.id, stride, speed: v, hipH: h, fr: G.fr };
     out.push(clip);
@@ -3424,7 +3719,10 @@ function motionInfo(S, p, L, rig) {
     return out;
   });
   const hind = limbs.filter(l => !l.front), gaits = {};
-  for (const [clip, id] of Object.entries(gaitSetFor(S, p))) if (id) gaits[clip] = { ...GAIT_LIB[id], ...((GAIT_TUNE[p.species] || {})[clip] || {}), id };
+  // (Digital Diorama revision 7: in a crouched animal's bound the hind feet land well forward, under the chest, and push off
+  // below the hips; planted further back the folded haunch stretched into a long wedge at push-off)
+  const crouched = S.stance === 'digitigrade' && (S.crouch || 0) >= 0.5;
+  for (const [clip, id] of Object.entries(gaitSetFor(S, p))) if (id) gaits[clip] = { ...GAIT_LIB[id], ...(crouched && id === 'bound' ? { hindO: 0.3 } : {}), ...((GAIT_TUNE[p.species] || {})[clip] || {}), id };
   let bellyH = Infinity;
   for (let k = L.torso.main[0]; k <= L.torso.main[1]; k++) if (L.torso.us[k] < L.uOf.neckRoot) for (const q of L.torso.rows[k]) bellyH = Math.min(bellyH, q.y);
   const hoofed = S.stance === 'ungulate', fore = limbs.filter(l => l.front && l.chain);
@@ -3437,7 +3735,7 @@ function motionInfo(S, p, L, rig) {
     headV: Object.fromEntries(rig.list.map(e => [e.name, e.head.clone()])),
     snout: L.headO ? L.headO.clone().addScaledVector(L.hd, L.Lh) : null, headLen: L.Lh,
     bellyH: Number.isFinite(bellyH) ? bellyH : S.H * 0.5,
-    hoofed, nod: hoofed ? 4 : 2, browse: p.species === 'giraffe',
+    hoofed, nod: hoofed ? 4 : 2, browse: p.species === 'giraffe', grazer: hoofed || S.stance === 'graviportal' || S.grazer === true,
     footLift: ['deer', 'gazelle', 'reindeer', 'moose', 'goat', 'bighorn'].includes(p.species),
     lies: hoofed || S.stance === 'graviportal', sitUp: S.stance === 'digitigrade' && (S.crouch || 0) >= 0.5,
   };
@@ -3457,8 +3755,9 @@ export function createAsset(input = {}) {
   tetraLimbLayout(B, S, L);
   tetraLimbBones(B, L);
   tetraHead(B, S, L);
-  emit(B.part('body', { group: 'body' }), L.torso, (u, a, P) => B.paint({ part: u > L.uOf.neckRoot ? 'neck' : 'torso', u, a, P }), tetraTorsoSkin(B, L));
+  // (the torso is emitted after the limbs, whose roots are blended into it first: blendLimbRoots)
   tetraLimbs(B, S, L);
+  emit(B.part('body', { group: 'body' }), L.torso, (u, a, P) => B.paint({ part: u > L.uOf.neckRoot ? 'neck' : 'torso', u, a, P }), tetraTorsoSkin(B, L));
   tetraTail(B, S, L);
   tetraHorns(B, S, L);
   tetraTusks(B, S, L);
