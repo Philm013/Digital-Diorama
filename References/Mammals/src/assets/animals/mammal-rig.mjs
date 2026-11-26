@@ -2645,7 +2645,8 @@ function eleLayout(S, p) {
   L.yb = (y) => floor + ((y - 0.425) / 0.575) * D;    // a height of the reference bull's body, between belly line and withers
   L.yl = (y) => (y / 0.425) * floor;                  // a height below its belly line (scales with the legs)
   L.zb = (z) => z * L.kLen * U;
-  const A = V3(0, L.yb(0.8), L.zb(0.62)), R = U * L.hs;
+  L.neckK = (S.neckLen / ref.neckLen - 1) * 0.05 * U;   // neckLen: the head a little further forward or back
+  const A = V3(0, L.yb(0.8), L.zb(0.62) + L.neckK), R = U * L.hs;
   /** A point of the reference bull's head (z, y; x across), scaled by the head size about the poll. */
   L.hp = (z, y, x = 0) => V3(x * R, A.y + (y - 0.8) * R, A.z + (z - 0.62) * R);
   L.R = R;
@@ -2669,7 +2670,7 @@ function eleTorso(B, S, L) {
     ['neckRoot', 0.515, 0.945, 0.495, 0.2, 0.7, 0.84],
     ['neck1', 0.585, 0.91, 0.53, 0.178, 0.82, 0.86],
     ['neckTop', 0.655, 0.9, 0.55, 0.162, 0.9, 0.9],
-  ].map(([n, z, top, bot, w, sT, sB]) => { const t = L.yb(top), b = L.yb(bot), c = lerp(b, t, 0.4); return { n, c: V3(0, c, L.zb(z)), ht: t - c, hb: c - b, w: w * U, sT, sB }; });
+  ].map(([n, z, top, bot, w, sT, sB]) => { const t = L.yb(top), b = L.yb(bot), c = lerp(b, t, 0.4); return { n, c: V3(0, c, L.zb(z) + (n === 'neckTop' ? 1 : n === 'neck1' ? 0.5 : 0) * L.neckK), ht: t - c, hb: c - b, w: w * U, sT, sB }; });
   const curve = makePath(keys.map(k => k.c)), ku = knotUs(curve, keys.length);
   keys.forEach((k, i) => { k.u = ku[i]; });
   const Uo = Object.fromEntries(keys.map(k => [k.n, k.u]));
@@ -2761,6 +2762,9 @@ function eleLeg(B, S, L, lm) {
   const skin = planeSkin(rig, sj, lm.bones, lm.front ? [0.07 * h, 0.06 * h, 0.035 * h, 0.03 * h] : [0.1 * h, 0.05 * h, 0.03 * h], lm.front ? [-0.3, 0.45] : [-0.25, 0.5], lm.front ? 'Chest' : 'Hips');
   const nm = `leg-${lm.front ? 'front' : 'hind'}-${side > 0 ? 'left' : 'right'}`;
   lm.emitLeg = () => emit(B.part(nm, { group: 'legs' }), g, (u, a, P) => B.paint({ part: P.y < yl(0.1) ? 'foot' : 'leg', u, a, P, front: lm.front, side }), skin);
+  // points of its surface, with their skin weights, for poses that must keep a thick leg above the ground (lying down)
+  lm.surf = [];
+  for (let r = g.main[0]; r <= g.main[1]; r++) for (let j = 0; j < g.R; j += 2) lm.surf.push({ P: g.rows[r][j].clone(), W: skin(g.us[r], (j / g.R) * TAU, g.rows[r][j]) });
   // broad flat pale toenails round the front edge of the foot: four on the fore feet, three on the hind
   const part = B.part(`foot-${nm.slice(4)}`, { group: 'feet' }), W = rig.W(lm.bones[nb - 1]), yN = 0.025 * U;
   let lo = 0, hi = 1; for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (yAt(m) > yN) lo = m; else hi = m; }
@@ -2825,14 +2829,15 @@ function eleHead(B, S, L) {
     emit(tPart, ellipsoid(c.addScaledVector(tipF.t, 0.012 * R), 0.011 * R, 0.008 * R, 0.017 * R, tipF.t, tipF.up, 3, 2 * Math.round(3 * det + 1)), (u, a, P) => B.paint({ part: 'trunk', u: 1, a, P }), T5);
   }
   // ── the jaw: short and deep, ending in the pointed lower lip under the trunk; hinged under the ear
-  const jp = [hp(0.715, 0.628), hp(0.8, 0.585), hp(0.88, 0.562), hp(0.948, 0.566)];
-  const jk = [[0.082, 0.036, 0.052], [0.078, 0.032, 0.052], [0.054, 0.025, 0.038], [0.022, 0.013, 0.016]].map(k => k.map(v => v * R));
+  // (its top tucked inside the cheeks and the trunk base; the lip ends just behind and below the trunk)
+  const jp = [hp(0.72, 0.64), hp(0.79, 0.6), hp(0.85, 0.574), hp(0.895, 0.552)];
+  const jk = [[0.074, 0.03, 0.046], [0.066, 0.028, 0.044], [0.044, 0.02, 0.031], [0.016, 0.01, 0.012]].map(k => k.map(v => v * R));
   const jc = makePath(jp), jku = knotUs(jc, jp.length);
   const jg = loft({ curve: jc, seg: Math.round(12 * det), rad: 2 * Math.round(6 * det + 2), w: prof(jk.map((k, i) => [jku[i], k[0]])), ht: prof(jk.map((k, i) => [jku[i], k[1]])), hb: prof(jk.map((k, i) => [jku[i], k[2]])),
     nt: 1.9, nb: 2.2, up: [0, 1, 0], cap0: { type: 'round', len: 0.6, n: 2 }, cap1: { type: 'round', len: 1.1, n: 2 }, bend: 0.5 });
-  rig.add('Jaw', 'Head', hp(0.72, 0.648), jp[3]);
+  rig.add('Jaw', 'Head', hp(0.72, 0.655), jp[3]);
   L.jaw = jg; L.lipRest = jp[3].clone();
-  emit(B.part('jaw', { group: 'head' }), jg, (u, a, P) => Math.sin(a) > 0.75 && u > 0.35 && u < 0.85 ? 'mouth' : B.paint({ part: 'jaw', u, a, P, s0: 0.6 }), rig.W('Jaw'));
+  emit(B.part('jaw', { group: 'head' }), jg, (u, a, P) => Math.sin(a) > 0.85 && u > 0.3 && u < 0.78 ? 'mouth' : B.paint({ part: 'jaw', u, a, P, s0: 0.6 }), rig.W('Jaw'));
   // ── small eyes set low on the side of the head, with heavy lids
   const eyeR = 0.0118 * R * (S.eye / SPECIES.elephant.eye);
   L.eyes = [1, -1].map((side) => {
@@ -2940,7 +2945,10 @@ function eleTail(B, S, L) {
   const rig = B.rig, det = B.det, U = L.U, len = T.len * U, r0 = (T.thk ?? 0.017) * U;
   const y0 = L.yb(0.705), clearZ = (y) => rearZAt(L, y, 0) - r0 - 0.008 * U;
   const pts = [V3(0, y0 + 0.01 * U, rearZAt(L, y0, 0) + 0.02 * U)];
-  for (let i = 1; i <= 8; i++) { const t = i / 8, y = y0 - t * len * 0.97; pts.push(V3(0, y, Math.min(rearZAt(L, y0, 0) - 0.02 * U - 0.035 * U * Math.sin(Math.PI * Math.min(1, t * 1.6)), y > L.yb(0.5) ? clearZ(y) : Infinity))); }
+  for (let i = 1; i <= 8; i++) {
+    const t = i / 8, y = y0 - t * len * 0.97, yMin = 0.05 * U, low = Math.max(0, yMin - y);
+    pts.push(V3(0, Math.max(y, yMin), Math.min(rearZAt(L, y0, 0) - 0.02 * U - 0.035 * U * Math.sin(Math.PI * Math.min(1, t * 1.6)), y > L.yb(0.5) ? clearZ(y) : Infinity) - low));
+  }
   const curve = makePath(pts);
   const g = loft({ curve, seg: Math.round(16 * det), rad: 2 * Math.round(4 * det + 2), w: (u) => r0 * (1 - 0.5 * u), ht: (u) => r0 * (1 - 0.5 * u), hb: (u) => r0 * (1 - 0.5 * u),
     cap0: { type: 'round', len: 0.5, n: 2 }, cap1: { type: 'round', len: 0.7, n: 2 }, bend: 0.4 });
@@ -2951,6 +2959,7 @@ function eleTail(B, S, L) {
   emit(B.part('tail', { group: 'tail' }), g, (u, a, P) => B.paint({ part: 'tail', u, a, P }), (u) => u < 0.06 ? rig.W2('Hips', 'Tail1', u / 0.06) : rig.chain(spec, u));
   // the tuft: stiff black bristles in a flat fan either side of the tip
   const t0 = curve.getPointAt(0.84), t1 = curve.getPointAt(1).clone().add(V3(0, -0.07 * U, -0.004 * U));
+  if (t1.y < 0.035 * U) { t1.z -= 0.035 * U - t1.y; t1.y = 0.035 * U; }
   const hg = loft({ pts: [t0, t0.clone().lerp(t1, 0.5), t1], seg: Math.round(8 * det), rad: 2 * Math.round(4 * det + 2), up: [0, 0, -1],
     w: (u) => U * (0.008 + 0.03 * Math.sin(Math.PI * Math.min(1, u * 1.15 + 0.05))), ht: (u) => U * 0.007 * (1 - 0.5 * u), hb: (u) => U * 0.007 * (1 - 0.5 * u),
     bump: (u, a) => 0.25 * Math.max(0, Math.sin(a * 9 + u * 13)) * u, cap0: { type: 'round', len: 0.5, n: 2 }, cap1: { type: 'round', len: 0.4, n: 2 }, bend: 0.3 });
@@ -4173,27 +4182,52 @@ function eleSample(info, name, u) {
   earGuard(info, s);
   return s;
 }
-/** Lying down (sternal): the belly on the ground, the forelegs stretched forward along it, the hind legs kneeling with the
- *  shins back along the ground, the head held up and the trunk laid forward on the ground. */
+/** Lying down (sternal): the body lowered onto the folded legs, the forelegs reaching forward along the ground, the hind
+ *  legs stretched back with the soles turned up, the tail laid back, the head held up and the trunk laid forward on the
+ *  ground. The legs are thick: points of their surface are posed through the skeleton, and the body is lowered only as
+ *  far as none of them dips below the ground (the footholds move with the body, so the lowest lift is found by bisection). */
 function eleLieDown(info, s, t) {
   const U = info.U, drop = Math.max(0, info.bellyH - 0.025 * U) * t;
-  rootAt(s, [0, -drop, 0]);
-  addRot(info, s, 'Neck1', [-6 * t, 0, 0]); addRot(info, s, 'Head', [-4 * t, 0, 0]);
-  info.trunk.forEach((b, i) => addRot(info, s, b, [info.lieCurl[i] * t, 0, 0]));
-  earFan(info, s, 'EarL', 6); earFan(info, s, 'EarR', 6);
-  tailWave(info, s, 2, -6 * t, 1, 0);
-  const fk = fkOf(info, s);
-  for (const lm of info.limbs) {
-    if (!lm.chain) continue;
-    const J = lm.J;
-    if (lm.front) {
-      const lr = J[3].distanceTo(J[2]), C = V3(J[3].x, lerp(J[3].y, 0.06 * U, t), lerp(J[3].z, J[2].z + 0.9 * lr, t));
-      solveLeg(info, fk, lm, { C, mc: lerp(lm.mcRest, 96, t), toeRel: 0, scap: -4 * t }, s);
-    } else {
-      const lt = J[2].distanceTo(J[1]), A = V3(J[2].x, lerp(J[2].y, 0.07 * U, t), lerp(J[2].z, J[1].z + 0.08 * U - 0.95 * lt, t));
-      solveLeg(info, fk, lm, { A, mt: lerp(lm.mtRest, -94, t), toeRel: 0 }, s);
+  const pose = (lift) => {
+    for (const k of Object.keys(s)) delete s[k];
+    const dy = -drop + lift;
+    rootAt(s, [0, dy, 0]);
+    addRot(info, s, 'Neck1', [-6 * t, 0, 0]); addRot(info, s, 'Head', [-4 * t, 0, 0]);
+    info.trunk.forEach((b, i) => addRot(info, s, b, [info.lieCurl[i] * t, 0, 0]));
+    earFan(info, s, 'EarL', 6); earFan(info, s, 'EarR', 6);
+    tailWave(info, s, 2, 75 * t, 1, 0);
+    const fk = fkOf(info, s);
+    for (const lm of info.limbs) {
+      if (!lm.chain) continue;
+      const J = lm.J;
+      if (lm.front) {
+        // the carpus a forearm's reach ahead of the lowered elbow, half way down to the ground
+        const lr = J[3].distanceTo(J[2]), ey = J[2].y + dy, C = V3(J[3].x, lerp(J[3].y + dy, Math.max(0.1 * U, ey * 0.5), t), lerp(J[3].z, J[2].z + 0.85 * lr, t));
+        solveLeg(info, fk, lm, { C, mc: lerp(lm.mcRest, 95, t), toeRel: 0, scap: -4 * t }, s);
+      } else {
+        const reach = J[1].distanceTo(J[0]) + J[2].distanceTo(J[1]), hy = J[0].y + dy;
+        const A = V3(J[2].x, lerp(J[2].y + dy, Math.max(0.12 * U, hy - 0.45 * reach), t), lerp(J[2].z, J[0].z - 0.85 * reach, t));
+        solveLeg(info, fk, lm, { A, mt: lerp(lm.mtRest, -92, t), toeRel: 0 }, s);
+      }
     }
-  }
+  };
+  const q = V3(), lowest = () => {
+    const fk = fkOf(info, s);
+    let low = Infinity;
+    for (const lm of info.limbs) for (const { P, W } of lm.surf || []) {
+      let y = 0;
+      for (const [bi, w] of W) { const b = info.bones[bi]; y += w * q.copy(P).sub(info.headV[b]).applyMatrix4(fk(b)).y; }
+      low = Math.min(low, y);
+    }
+    return low;
+  };
+  // (the surface is sampled every other point round the leg: a small margin covers what lies between)
+  const margin = 0.0017 * U;
+  pose(0);
+  if (lowest() >= margin) return;
+  let lo = 0, hi = drop + 0.1 * U;
+  for (let i = 0; i < 9; i++) { const m = (lo + hi) / 2; pose(m); if (lowest() < margin) lo = m; else hi = m; }
+  pose(hi);
 }
 /** Once per asset: the head dip that lets the trunk reach the grass, the curl that brings its tip to the mouth, and the
  *  forward curl that keeps a lying elephant's trunk on the ground (solved through the skeleton, so every size works). */
@@ -4205,7 +4239,7 @@ function eleMotionSetup(info) {
   let lo = 0, hi = 40;
   for (let i = 0; i < 18; i++) {
     const d = (lo + hi) / 2, s = pose((s) => { addRot(info, s, 'Neck1', [3 + d * 0.5, 0, 0]); addRot(info, s, 'Head', [3 + d * 0.5, 0, 0]); info.trunk.forEach((b, j) => addRot(info, s, b, [[-4, -3, -2, -2, -2][j], 0, 0])); });
-    if (trunkTip(info, s).y > 0.012 * U) lo = d; else hi = d;
+    if (trunkTip(info, s).y > (0.026 * info.headScale + 0.01) * U) lo = d; else hi = d;
   }
   info.grazeDip = hi;
   // to the mouth: the curl (a fixed shape, scaled) whose tip comes closest to the lower lip
@@ -4302,7 +4336,7 @@ function motionInfo(S, p, L, rig) {
   const limbs = L.limbs.map(lm => {
     const J = lm.joints.map(j => j.p.clone()), n = J.length, std = ['ungulate', 'digitigrade', 'plantigrade', 'graviportal'].includes(lm.st);
     const foot = lm.footType || lm.foot, chain = !std || n < 5 ? null : foot === 'sole' ? 'sole' : 'panto';
-    const out = { front: lm.front, side: lm.side, bones: lm.bones, st: lm.st, foot, chain, J, tip: J[n - 1].clone() };
+    const out = { front: lm.front, side: lm.side, bones: lm.bones, st: lm.st, foot, chain, J, tip: J[n - 1].clone(), surf: lm.surf || null };
     if (!chain) return out;
     const W = J.map(P2r), sub = (a, b) => ({ z: a.z - b.z, y: a.y - b.y }), cr = (a, b) => a.z * b.y - a.y * b.z;
     if (lm.front) {
