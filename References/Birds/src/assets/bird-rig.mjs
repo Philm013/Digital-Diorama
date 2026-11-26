@@ -37,6 +37,16 @@
  *   - Coat atlas: the plumage painter is rasterised into one texture per asset instead of one
  *     colour per quad, so caps, masks, bars and breast patches have smooth edges (see COAT ATLAS).
  *   - Smooth, crease-aware normals and glossy eyes. Options: coat, coatGrain, shading.
+ *
+ * REVISION 8 (Digital Diorama: planted feet)
+ *   - The walk plants its feet: each toe tip stays put through the stance (the heel rolling up onto it at the
+ *     end), then the foot is picked up, carried forward with its toes hanging and set down flat. The hip
+ *     (protraction, retraction and abduction), knee and intertarsal joint reach it by inverse kinematics,
+ *     the pelvis rolls and yaws by family (waddling waterfowl and penguins), and the head keeps its attitude,
+ *     head-bobbers holding it still between thrusts. Stride and timing follow the leg (WALK_STYLE).
+ *   - The walk clip carries { gait, stride, speed, hipH } like the mammals' gaits, so the app plays it at the
+ *     rate that keeps the feet still (they slid about 1.8 hip heights a step).
+ *   - Toes rest on the ground instead of 2-30 mm in it (ostrich, turkey, penguin worst).
  */
 
 import * as THREE from 'three';
@@ -1393,20 +1403,25 @@ function birdBuild(B, S) {
     }
     // tarsus: laterally compressed, feathered "boot" on raptors and owls
     const tarR = S.feathered ? prof([[0, lr * 2.0], [0.55, lr * 1.55], [0.75, lr * 1.05], [1, lr * 0.95]]) : (u) => lr * (1.02 - 0.1 * u);
-    const tar = loft({ pts: [ankle, ankle.clone().lerp(foot, 0.5), foot], seg: Math.round(7 * det), rad: 2 * Math.round(3 * det + 2), up: [0, 0, 1], w: (u) => tarR(u) * 0.86, ht: tarR, hb: tarR, cap0: { type: 'round', len: 0.4 }, cap1: { type: 'round', len: 0.5 }, bend: 0.3 });
-    emit(lp, tar, (u) => S.feathered && u < 0.62 ? paint({ part: 'thigh', u: 1, a: 0, P: ankle }) : 'leg', rig.W('Tarsus' + sfx));
+    // Digital Diorama revision 8: the toes rest on the ground rather than in it. Their roots ran along the Toe bone's
+    // head (1.2 % of the body length up) at a radius of up to 4 % of it, the tarsus ended there in a round cap, and the
+    // talons hooked below the ground, so every bird stood sunk 2-30 mm (ostrich, turkey and penguin the most). They now
+    // start from a point raised by the toe's radius; the bone stays where it was.
     const F = S.feet, toeL = (S.toeLen ?? 0.28) * L, tr = lr * 0.8;
+    const base = foot.clone(); base.y = Math.max(foot.y, tr * 1.04);
+    const tar = loft({ pts: [ankle, ankle.clone().lerp(base, 0.5), base], seg: Math.round(7 * det), rad: 2 * Math.round(3 * det + 2), up: [0, 0, 1], w: (u) => tarR(u) * 0.86, ht: tarR, hb: tarR, cap0: { type: 'round', len: 0.4 }, cap1: { type: 'round', len: 0.5 }, bend: 0.3 });
+    emit(lp, tar, (u) => S.feathered && u < 0.62 ? paint({ part: 'thigh', u: 1, a: 0, P: ankle }) : 'leg', rig.W('Tarsus' + sfx));
     // foot pad hides the toe convergence
-    emit(fpart, ellipsoid(foot.clone().add(V3(0, tr * 0.5, 0)), tr * 1.45, tr * 1.05, tr * 1.6, [0, 0, 1], [0, 1, 0], 4, 8), 'leg', rig.W('Toe' + sfx));
+    emit(fpart, ellipsoid(V3(foot.x, Math.max(foot.y + tr * 0.5, tr * 1.1), foot.z), tr * 1.45, tr * 1.05, tr * 1.6, [0, 0, 1], [0, 1, 0], 4, 8), 'leg', rig.W('Toe' + sfx));
     const dirs = F === 'zygo' ? [[-0.35, 1], [0.15, 1], [-2.8, 0.75], [2.6, 0.6]] : F === 'ratite' ? [[0.08, 1.2], [0.6, 0.75]] : [[-0.55, 0.9], [0, 1], [0.55, 0.9], [Math.PI, F === 'webbed' ? 0.3 : 0.6]];
     const tips = [];
     for (const [ang, k] of dirs) {
       const d = V3(Math.sin(ang * sd), 0, Math.cos(ang)), e = foot.clone().addScaledVector(d, toeL * k); e.y = tr * 0.8;
       tips.push(e);
-      emit(fpart, tube([foot, foot.clone().lerp(e, 0.5).add(V3(0, tr * 0.6, 0)), e], (u) => tr * (1 - 0.35 * u), 4, 5, { cap1: { type: 'round', len: 0.7 } }), 'leg', rig.W('Toe' + sfx));
-      if (S.talons) emit(fpart, tube([e, e.clone().addScaledVector(d, tr * S.talons * 1.4).add(V3(0, tr * 0.5, 0)), e.clone().addScaledVector(d, tr * S.talons * 2.2).add(V3(0, -tr * 1.2, 0))], (u) => tr * 0.55 * (1 - u * 0.9), 4, 4, { cap1: 'point' }), 'beak', rig.W('Toe' + sfx));
+      emit(fpart, tube([base, base.clone().lerp(e, 0.5).add(V3(0, tr * 0.6, 0)), e], (u) => tr * (1 - 0.35 * u), 4, 5, { cap1: { type: 'round', len: 0.7 } }), 'leg', rig.W('Toe' + sfx));
+      if (S.talons) emit(fpart, tube([e, e.clone().addScaledVector(d, tr * S.talons * 1.4).add(V3(0, tr * 0.5, 0)), e.clone().addScaledVector(d, tr * S.talons * 2.2).add(V3(0, Math.max(-tr * 1.2, tr * 0.06 - e.y), 0))], (u) => tr * 0.55 * (1 - u * 0.9), 4, 4, { cap1: 'point' }), 'beak', rig.W('Toe' + sfx));
     }
-    if (F === 'webbed') sheet(fpart, { nu: 2, nv: 6, f: (u, v) => { const x = v * 2, i = Math.min(1, Math.floor(x)), t = x - i; return foot.clone().lerp(tips[i].clone().lerp(tips[i + 1], t), u * (1 - 0.25 * Math.sin(Math.PI * t) * u)); }, th: tr * 0.25, zone: 'leg', skin: rig.W('Toe' + sfx) });
+    if (F === 'webbed') sheet(fpart, { nu: 2, nv: 6, f: (u, v) => { const x = v * 2, i = Math.min(1, Math.floor(x)), t = x - i; return base.clone().lerp(tips[i].clone().lerp(tips[i + 1], t), u * (1 - 0.25 * Math.sin(Math.PI * t) * u)); }, th: tr * 0.25, zone: 'leg', skin: rig.W('Toe' + sfx) });
   }
   return { L, C0, fwd, upb, hd, hu, hr, bodyH, legH, body, neck, head, eyes, spanP: span };
 }
@@ -1598,12 +1613,228 @@ function birdLegs(o, sw, lift, tuck = 0) {
   }
   return o;
 }
+/* ── planted-foot walk (Digital Diorama revision 8) ─────────────────────────────────────────────────────────────
+ * The walk used to swing each leg on a sine (birdLegs) while the app moved the bird at a speed the clip knew nothing
+ * about, so its feet slid (1.8 hip heights a step on average) and dipped up to 4 cm into the ground. Now each foot
+ * is planted for `duty` of the cycle, drawn back under the body at the pace the clip walks at, then lifted, its toes
+ * hanging, and carried forward to land flat. The hip (a little protraction and retraction, and the abduction that
+ * keeps the foot on its line while the pelvis rolls and yaws), the knee and the intertarsal joint reach it; the toes
+ * stay level whatever the leg above does. The head keeps its attitude in the world, and head-bobbers (pigeons,
+ * fowl) hold it still between thrusts. createClips stores the stride (the distance one cycle covers), so the app
+ * plays the walk at the rate its feet need, as it does the mammals' gaits.
+ */
+// lambda: stride / hip height; duty: share of the cycle a foot is planted; lift: toe clearance in the swing / hip
+// height; fr: the Froude number v²/(g·h) of the clip's own pace (the step rate is held below a leg pendulum's);
+// femur: hip swing (±degrees); rise: the hips' rise and fall / hip height; heel: how far the foot
+// rolls onto its toes before lifting (degrees); toe: how far the toes hang in the swing (degrees); roll, yaw: pelvis
+// waddle (degrees); sway: sideways shift / hip height; bob: head bob (1 = the head holds still in the world between
+// thrusts); nod: head nod (degrees)
+const WALK_STYLE = {
+  base: { lambda: 0.85, duty: 0.6, lift: 0.09, fr: 0.16, femur: 6, heel: 18, toe: 40, roll: 2, yaw: 2, sway: 0.012, rise: 0.012, bob: 0, nod: 2 },
+  songbird: { bob: 0.35 }, robin: { bob: 0.35 }, cardinal: { bob: 0.35 }, corvid: { bob: 0.55, lambda: 0.9 },
+  galliform: { lambda: 0.95, bob: 0.9, roll: 2.5 }, peafowl: { lambda: 0.95, bob: 0.8 },
+  wader: { lambda: 0.8, duty: 0.64, lift: 0.07, fr: 0.11, heel: 15, toe: 50, bob: 0.45 }, flamingo: { lambda: 0.75, duty: 0.64, lift: 0.06, fr: 0.1, heel: 15, toe: 50, bob: 0.2 },
+  spoonbill: { lambda: 0.8, duty: 0.64, lift: 0.07, fr: 0.11, heel: 15, toe: 45, bob: 0.4 },
+  waterfowl: { lambda: 0.7, heel: 14, toe: 30, roll: 6, yaw: 4, sway: 0.03, nod: 3 }, swan: { lambda: 0.65, heel: 12, toe: 28, roll: 5, yaw: 3, sway: 0.025 },
+  penguin: { lambda: 0.42, duty: 0.7, lift: 0.05, fr: 0.08, femur: 4, heel: 8, toe: 15, roll: 4, yaw: 7, sway: 0.03, rise: 0.003, nod: 1 },
+  ratite: { lambda: 1.15, duty: 0.58, lift: 0.07, fr: 0.2, femur: 8, heel: 22, toe: 35, roll: 1.5, yaw: 1.5, nod: 1.5 },
+  raptor: { lambda: 0.75, heel: 12, toe: 22, roll: 3, yaw: 2.5, sway: 0.02 }, owl: { lambda: 0.7, heel: 12, toe: 22, roll: 3, yaw: 2.5, sway: 0.02 },
+  parrot: { lambda: 0.7, heel: 14, toe: 28, roll: 3.5, yaw: 3, sway: 0.025 },
+};
+const FLIGHTLESS = new Set(['penguin', 'ostrich', 'kiwi']);
+// pigeons borrow the waterfowl torso but walk like pigeons
+const WALK_SPECIES = { pigeon: { lambda: 0.85, heel: 16, toe: 38, roll: 2.5, yaw: 2.5, sway: 0.015, bob: 1, nod: 2 }, kiwi: { lambda: 0.95, bob: 0.3 } };
+const _gX = V3(1, 0, 0), _gE = new THREE.Euler(), _gQh = new THREE.Quaternion(), _gQ1 = new THREE.Quaternion(), _gM = new THREE.Quaternion(), _gMi = new THREE.Quaternion(), _gQa = new THREE.Quaternion(), _gQb = new THREE.Quaternion();
+const _gP = V3(), _gJ = V3(), _gK = V3(), _gF = V3(), _gf = V3(), _gd = V3();
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const mjerk = (t) => t * t * t * (10 + t * (6 * t - 15));   // minimum-jerk 0 → 1
+const hermite = (w, p0, p1, m0, m1) => { const w2 = w * w, w3 = w2 * w; return (2 * w3 - 3 * w2 + 1) * p0 + (w3 - 2 * w2 + w) * m0 + (-2 * w3 + 3 * w2) * p1 + (w3 - w2) * m1; };
+const eulerOf = (q) => { _gE.setFromQuaternion(q, 'YXZ'); return [_gE.x / DEG, _gE.y / DEG, _gE.z / DEG]; };
+/**
+ * Two links of lengths l1, l2 in a bone's (Y, Z) plane reaching (ty, tz) from the first joint: the first link's
+ * angle atan2(y, z) and the elbow, bending to the side `sign` (that of the rest pose; out of reach, the chain points
+ * at the target).
+ */
+function reach2(ty, tz, l1, l2, sign) {
+  const d = clamp(Math.hypot(ty, tz), Math.abs(l1 - l2) * 1.001 + 1e-9, (l1 + l2) * 0.9995);
+  const af = Math.atan2(ty, tz), b = Math.acos(clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1));
+  const at = (a) => ({ a, ey: l1 * Math.sin(a), ez: l1 * Math.cos(a) }), e = at(af + b);
+  return Math.sign(e.ez * (ty - e.ey) - e.ey * (tz - e.ez)) === sign ? e : at(af - b);
+}
+/** The hips' sway, rise and turn at walk phase u (shared by the walk and its set-up). */
+function walkHips(G, u) {
+  const c1 = Math.cos(TAU * (u - G.duty / 2)), c2 = Math.cos(2 * TAU * (u - G.duty / 2));   // c1: +1 left mid-stance, −1 right; c2: +1 at either
+  const k = fract(u) * G.fix.length, i = Math.floor(k), f = k - i, fix = G.fix.length ? lerp(G.fix[i % G.fix.length], G.fix[(i + 1) % G.fix.length], f) : 0;
+  // (the pelvis rocks over the stance foot, not about its middle: the swing side rises, the stance hip keeps its height)
+  const roll = -G.roll * c1;
+  return { c1, c2, dy: -G.drop + G.bobA * c2 + fix + G.hipX * Math.abs(Math.sin(roll * DEG)), roll, yaw: G.yaw * c1, sway: G.sway * c1 };
+}
+/**
+ * The lowest points of a bird's body and tail at rest (a few per part, legs and feet aside), and how far the walk takes
+ * them down: returns, for 32 phases, how much to lift the hips so the body never sinks below where it stood (or below
+ * the ground), and how far to raise the tail so it stays clear too.
+ */
+function walkClearance(rig, parts, G) {
+  const hips = rig.head('Hips'), tailH = rig.has('Tail') ? rig.head('Tail') : null, lows = [];
+  for (const pt of parts) {
+    if (pt.group === 'legs' || pt.group === 'feet' || pt.glass) continue;
+    const idx = [];
+    for (let i = 0; i < pt.count; i++) idx.push(i);
+    idx.sort((a, b) => pt.p[a * 3 + 1] - pt.p[b * 3 + 1]);
+    for (const i of idx.slice(0, 24)) {
+      let bi = pt.si[i * 4], bw = pt.sw[i * 4];
+      for (let k = 1; k < 4; k++) if (pt.sw[i * 4 + k] > bw) { bw = pt.sw[i * 4 + k]; bi = pt.si[i * 4 + k]; }
+      const name = rig.list[bi].name, tail = name === 'Tail';
+      if (!tail && !/^(Root|Hips|Chest|WingFold[LR])$/.test(name)) continue;
+      lows.push({ tail, P: V3(pt.p[i * 3], pt.p[i * 3 + 1], pt.p[i * 3 + 2]) });
+    }
+  }
+  const margin = 0.004 * G.hipH, low = (set) => Math.min(...lows.filter((l) => l.tail === set).map((l) => l.P.y), Infinity);
+  const tBody = Math.min(low(false), margin), tTail = Math.min(low(true), margin);
+  const Qh = new THREE.Quaternion(), Qt = new THREE.Quaternion(), e = new THREE.Euler(), v = V3(), N = 32, fix = [], at = [];
+  for (let n = 0; n < N; n++) {
+    const u = n / N, h = walkHips({ ...G, fix: [] }, u);
+    Qh.setFromEuler(e.set(0, h.yaw * DEG, h.roll * DEG, 'YXZ'));
+    let m = Infinity;
+    for (const l of lows) if (!l.tail) m = Math.min(m, v.copy(l.P).sub(hips).applyQuaternion(Qh).y + hips.y + h.dy);
+    fix.push(Math.max(0, tBody - m)); at.push({ u, h });
+  }
+  // a little smoothing, so the lift has no corners
+  const sm = fix.map((f, n) => Math.max(f, 0.25 * fix[(n + N - 1) % N] + 0.5 * f + 0.25 * fix[(n + 1) % N]));
+  let tailUp = 0;
+  if (tailH) for (; tailUp < 40; tailUp += 1) {
+    let ok = true;
+    for (const [n, { u, h }] of at.entries()) {
+      Qh.setFromEuler(e.set(0, h.yaw * DEG, h.roll * DEG, 'YXZ'));
+      Qt.setFromEuler(e.set((tailUp + 2 * h.c2) * DEG, (-1.2 * h.yaw + 3 * Math.sin(TAU * u)) * DEG, 0, 'YXZ'));
+      for (const l of lows) if (l.tail && v.copy(l.P).sub(tailH).applyQuaternion(Qt).add(tailH).sub(hips).applyQuaternion(Qh).y + hips.y + h.dy + sm[n] < tTail) { ok = false; break; }
+      if (!ok) break;
+    }
+    if (ok) break;
+  }
+  return { fix: sm.map((f) => +f.toFixed(5)), tailUp };
+}
+/** Walk geometry for one bird, from its skeleton (plain numbers, so the asset's userData stays clonable). */
+function birdGaitSetup(rig, S, species, parts = []) {
+  const st = { ...WALK_STYLE.base, ...(WALK_STYLE[S.bodyForm] || {}), ...(WALK_SPECIES[species] || {}) };
+  const rel = (n) => { const e = rig.by[n]; return (e.parent ? e.head.clone().sub(e.parent.head) : e.head.clone()).toArray(); };
+  const legs = ['L', 'R'].map((s) => {
+    const g = { s, t: rel('Thigh' + s), a: rel('Shin' + s), b: rel('Tarsus' + s), c: rel('Toe' + s), foot: rig.head('Toe' + s).toArray() };
+    g.sign = Math.sign(g.b[2] * g.c[1] - g.b[1] * g.c[2]) || 1;
+    return g;
+  });
+  const J = rig.head('ThighL'), hipH = J.y, g0 = legs[0], d1 = st.femur * DEG;
+  const l2 = Math.hypot(g0.b[1], g0.b[2]), l3 = Math.hypot(g0.c[1], g0.c[2]);
+  // the leg may reach 94 % of its length; legs nearly straight at rest that cannot crouch (penguins, whose knees sit
+  // high in a body that almost touches the ground) may straighten a little past where they stand
+  const kn = rig.head('ShinL'), extRest = Math.hypot(kn.y - g0.foot[1], kn.z - g0.foot[2]) / (l2 + l3);
+  let ext = 0.94;
+  const bobA = st.rise * hipH, low = Math.cos(TAU * st.duty);   // the hips' bob, lowest at double support
+  // a stride and crouch the leg can reach at both ends of a stance and in its middle without straightening (94 % of its
+  // reach), the hips lifted by `lift` where the body or tail would otherwise touch the ground
+  const wl = (u) => hipX * Math.abs(Math.sin(st.roll * DEG * Math.cos(TAU * (u - st.duty / 2))));
+  let zc = 0;   // where the stance is centred, from the foot's place at rest (moved back if a leg reaches further that way)
+  const fits = (stride, drop, lift = [0, 0, 0]) => [[1, -d1, low, lift[0] + wl(0)], [-1, d1, low, lift[1] + wl(st.duty)], [0, 0, 1, lift[2] + wl(st.duty / 2)]].every(([e, th, b, f]) => {
+    const ky = J.y - drop + bobA * b + f + g0.a[1] * Math.cos(th) - g0.a[2] * Math.sin(th), kz = J.z + g0.a[1] * Math.sin(th) + g0.a[2] * Math.cos(th);
+    return Math.hypot(ky - g0.foot[1], g0.foot[2] + zc + e * st.duty * stride / 2 - kz) <= ext * (l2 + l3);
+  });
+  const hipX = Math.abs(J.x - rig.head('Hips').x), G = { hipH, hipX, duty: st.duty, bobA, roll: st.roll, yaw: st.yaw, sway: st.sway * hipH, fix: [] };
+  const solve = () => {
+    let stride = st.lambda * hipH, drop = 0, clr = { fix: [], tailUp: 0 };
+    for (let k = 0; k < 24; k++) {
+      drop = 0; while (drop < 0.12 * hipH && !fits(stride, drop)) drop += 0.004 * hipH;
+      clr = walkClearance(rig, parts, { ...G, drop });
+      const fx = (u) => clr.fix.length ? clr.fix[Math.round(fract(u) * clr.fix.length) % clr.fix.length] : 0;
+      if (fits(stride, drop, [Math.max(fx(0), fx(0.5)), Math.max(fx(st.duty), fx(st.duty + 0.5)), Math.max(fx(st.duty / 2), fx(st.duty / 2 + 0.5))])) break;
+      stride *= 0.92;
+    }
+    return { stride, drop, clr, zc };
+  };
+  let best = solve();
+  if (best.stride < 0.5 * st.lambda * hipH) {
+    ext = clamp(extRest + 0.012, 0.94, 0.995);
+    for (const k of [0, -0.1, -0.2, -0.3]) { zc = k * hipH; const r = solve(); if (r.stride > best.stride * 1.03) best = r; }
+  }
+  const { stride, drop, clr } = best; zc = best.zc;
+  // (short strides would otherwise patter: a cycle takes at least 0.38 of the leg's pendulum period, as in fowl and ostriches)
+  const T = clamp(Math.max(stride / Math.sqrt(st.fr * 9.81 * hipH), 0.38 * TAU * Math.sqrt(hipH / 9.81)), 0.22, 2.4);
+  const tr = S.legThk * S.L * 0.8, toeReach = (S.toeLen ?? 0.28) * S.L * (S.feet === 'ratite' ? 1.2 : 1) + (S.talons ? tr * S.talons * 2.2 : 0);
+  // rolling up onto long toes, or hanging them, lifts the foot by toeReach·sin(angle): keep that within a quarter of the hip height
+  const tMax = Math.asin(clamp(0.25 * hipH / Math.max(1e-6, toeReach), 0, 1)) / DEG, toeA = Math.min(st.toe, tMax), heelA = Math.min(st.heel, 0.8 * toeA);
+  const n2 = rel('Neck2'), n3 = rel('Head');
+  return {
+    hipH: +hipH.toFixed(4), stride: +stride.toFixed(4), T: +T.toFixed(3), duty: st.duty, lift: st.lift * hipH, drop, bobA, hipX, zc, fix: clr.fix, tailUp: clr.tailUp, femur: d1,
+    heel: heelA * DEG, toe: toeA * DEG, toeReach, roll: st.roll, yaw: st.yaw, sway: st.sway * hipH, bob: st.bob, nod: st.nod, hips: rel('Hips'), legs,
+    neck: { n2, n3, sign: Math.sign(n2[2] * n3[1] - n2[1] * n3[2]) || 1 },
+  };
+}
+/** One leg reaching its foot target F (model space) from the posed hips, with the toes pitched `toe` (radians) in the world. */
+function legReach(o, leg, F, th1, toe) {
+  const { t, a, b, c } = leg, xb = b[0] + c[0];
+  _gJ.set(t[0], t[1], t[2]).applyQuaternion(_gQh).add(_gP);
+  // the abduction that brings the foot target into the plane the knee and intertarsal joint fold in
+  const local = (phi) => {
+    _gQ1.setFromEuler(_gE.set(th1, 0, phi, 'YXZ'));
+    _gM.copy(_gQh).multiply(_gQ1); _gMi.copy(_gM).invert();
+    _gK.set(a[0], a[1], a[2]).applyQuaternion(_gM).add(_gJ);
+    return _gf.copy(F).sub(_gK).applyQuaternion(_gMi);
+  };
+  let phi = 0;
+  for (let i = 0; i < 6; i++) {
+    const g = local(phi).x - xb;
+    if (Math.abs(g) < 1e-7) break;
+    const dg = (local(phi + 1e-4).x - xb - g) / 1e-4;
+    if (Math.abs(dg) < 1e-9) break;
+    phi = clamp(phi - g / dg, -0.7, 0.7);
+  }
+  local(phi);
+  const r = reach2(_gf.y, _gf.z, Math.hypot(b[1], b[2]), Math.hypot(c[1], c[2]), leg.sign);
+  const th2 = wrapA(Math.atan2(b[1], b[2]) - r.a), th3 = wrapA(Math.atan2(c[1], c[2]) - th2 - Math.atan2(_gf.y - r.ey, _gf.z - r.ez));
+  _gQa.copy(_gM).multiply(_gQb.setFromAxisAngle(_gX, th2 + th3)).invert().multiply(_gQb.setFromAxisAngle(_gX, toe));
+  o['Thigh' + leg.s] = [th1 / DEG, 0, phi / DEG]; o['Shin' + leg.s] = [th2 / DEG, 0, 0]; o['Tarsus' + leg.s] = [th3 / DEG, 0, 0]; o['Toe' + leg.s] = eulerOf(_gQa);
+}
+function birdWalk(u, A) {
+  const G = A.gait, { duty, stride } = G, D = duty * stride, o = fold(true);
+  const { c2, dy, roll, yaw, sway } = walkHips(G, u);
+  o.Hips = { r: [0, yaw, roll], p: [sway, dy, 0] };
+  _gQh.setFromEuler(_gE.set(0, yaw * DEG, roll * DEG, 'YXZ'));
+  _gP.set(G.hips[0] + sway, G.hips[1] + dy, G.hips[2]);
+  for (const leg of G.legs) {
+    // the foot is placed by its toe tip, which stays put on the ground through the stance (the heel rolling up onto it
+    // at the end); in the swing the tip leaves and lands at the ground's speed, rising first and settling last
+    const ph = fract(u + (leg.s === 'L' ? 0 : 0.5)), f = leg.foot, R = G.toeReach;
+    let tz, ty = 0, p, th1;
+    if (ph < duty) { const s = ph / duty; tz = R + G.zc + D * (0.5 - s); p = G.heel * sstep(0.78, 1, s); th1 = -G.femur + 2 * G.femur * s; }
+    else {
+      const w = (ph - duty) / (1 - duty), mf = 2 * G.femur * (1 - duty) / duty;
+      // (the toes are picked up before they move on, and set down before the weight comes onto them)
+      tz = R + G.zc - D / 2 + stride * mjerk(clamp((w - 0.08) / 0.77, 0, 1)) - stride * (1 - duty) * w;
+      ty = G.lift * sstep(0, 0.25, w) * (1 - sstep(0.62, 1, w));
+      p = lerp(G.heel, G.toe, sstep(0, 0.3, w)) * (1 - sstep(0.55, 0.88, w));
+      th1 = hermite(w, G.femur, -G.femur, mf, mf);
+    }
+    legReach(o, leg, _gF.set(f[0], ty + f[1] * Math.cos(p) + R * Math.sin(p), f[2] + tz + f[1] * Math.sin(p) - R * Math.cos(p)), th1, p);
+  }
+  // head: a hold and a thrust each step (head-bobbers), otherwise carried level; either way it keeps its attitude
+  const N = G.neck, tau = fract(2 * u), th = 0.42, half = stride / 2, hold = half * (1 - th), m = -half * th;
+  const zr = G.bob * (tau < th ? hermite(tau / th, -hold / 2, hold / 2, m, m) : hold / 2 - half * (tau - th));
+  _gQa.copy(_gQh).invert();
+  _gd.set(0, -0.6 * G.bobA * c2, zr).applyQuaternion(_gQa);
+  const ty = N.n2[1] + N.n3[1] + _gd.y, tz = N.n2[2] + N.n3[2] + _gd.z;
+  const r = reach2(ty, tz, Math.hypot(N.n2[1], N.n2[2]), Math.hypot(N.n3[1], N.n3[2]), N.sign);
+  const a1 = wrapA(Math.atan2(N.n2[1], N.n2[2]) - r.a), a2 = wrapA(Math.atan2(N.n3[1], N.n3[2]) - a1 - Math.atan2(ty - r.ey, tz - r.ez));
+  _gQa.copy(_gQh).multiply(_gQb.setFromAxisAngle(_gX, a1 + a2)).invert().multiply(_gQb.setFromAxisAngle(_gX, G.nod * c2 * DEG));
+  o.Neck1 = [a1 / DEG, 0, 0]; o.Neck2 = [a2 / DEG, 0, 0]; o.Head = eulerOf(_gQa);
+  o.Tail = [G.tailUp + 2 * c2, -1.2 * yaw + 3 * Math.sin(TAU * u), 0];
+  return o;
+}
 const BIRD_CLIPS = {
   perch: { label: 'Perch / idle', loop: true, dur: () => 4.2, frames: 43, build: (u, A) => {
     const look = Math.sin(TAU * u) * 28 * pulseSq(u, 0.15, 0.45), cock = 10 * pulseSq(u, 0.6, 0.8), breathe = 2 * Math.sin(TAU * 3 * u);
     return Object.assign(fold(true), birdLegs({}, 0, 0), { Hips: { r: [breathe, 0, 0], p: [0, -0.004 * A.L * Math.sin(TAU * 2 * u), 0] }, Neck2: [0, look * 0.4, 0], Head: [-cock * 0.3, look * 0.6, cock], Tail: [-6 * pulseSq(u, 0.85, 0.92), 0, 0] });
   } },
-  walk: { label: 'Walk', loop: true, dur: (A) => A.T.walk, frames: 33, build: (u, A) => {
+  walk: { label: 'Walk', loop: true, dur: (A) => A.T.walk, frames: 41, build: (u, A) => {
+    if (A.gait) return birdWalk(u, A);
     const s = Math.sin(TAU * u), bob = Math.sin(TAU * 2 * u);
     return Object.assign(fold(true), birdLegs({}, 22 * s, Math.sin(TAU * u - 0.6)), { Hips: { r: [0, 3 * s, 2 * s], p: [0, 0.01 * A.L * Math.abs(bob), 0] }, Neck1: [6 * bob, 0, 0], Head: [-6 * bob, 0, 0], Tail: [2 * bob, 4 * s, 0] });
   } },
@@ -1629,10 +1860,13 @@ const BIRD_CLIPS = {
     const bodyPitch = A.pitch * 0.88 + 4 * s;
     const neckBend = -A.pitch * 0.5;
     const tailCock = 3 * s;
-    const o = Object.assign(fold(false), flightLegs({}, bodyPitch), {
-      Hips: { r: [bodyPitch, 0, 0], p: [0, bodyBob - 0.03 * A.L * s, 0] },
-      Neck1: [neckBend, 0, 0], Head: [neckBend * 0.55, 0, 0], Tail: [tailCock, 0, 0]
-    });
+    // Digital Diorama revision 8: flightless birds (penguins, ostriches, kiwis) flap standing, as they do in display or to
+    // keep their balance; they used to lie face down on the ground in the flight posture
+    const o = A.flightless ? Object.assign(fold(false), birdLegs({}, 0, 0), { Hips: { r: [2 * s, 0, 0], p: [0, 0.004 * A.L * down, 0] }, Tail: [tailCock, 0, 0] })
+      : Object.assign(fold(false), flightLegs({}, bodyPitch), {
+        Hips: { r: [bodyPitch, 0, 0], p: [0, bodyBob - 0.03 * A.L * s, 0] },
+        Neck1: [neckBend, 0, 0], Head: [neckBend * 0.55, 0, 0], Tail: [tailCock, 0, 0]
+      });
     for (const [sfx, k] of [['L', 1], ['R', -1]]) {
       o['Humerus' + sfx] = bodyEuler(humerusX, 0, humerusZ(k), A.pitch);
       o['Forearm' + sfx] = bodyEuler(0, forearmY(k), forearmZ(k), A.pitch);
@@ -1649,10 +1883,12 @@ const BIRD_CLIPS = {
     const neckBend = -A.pitch * 0.45;
     const headDip = -5 * s;
     const tailRudder = 6 * s;
-    const o = Object.assign(fold(false), flightLegs({}, bodyPitch), {
-      Hips: { r: [bodyPitch, 0, 5 * s], p: [0, bodyBob, 0] },
-      Neck1: [neckBend, 0, 0], Head: [neckBend * 0.5, headDip, -6 * s], Tail: [0, 0, tailRudder]
-    });
+    // (flightless birds hold their wings out standing, as they do to cool off or to sun themselves)
+    const o = A.flightless ? Object.assign(fold(false), birdLegs({}, 0, 0), { Hips: { r: [0, 0, 2 * s], p: [0, 0, 0] }, Head: [0, headDip, 0], Tail: [0, 0, tailRudder * 0.5] })
+      : Object.assign(fold(false), flightLegs({}, bodyPitch), {
+        Hips: { r: [bodyPitch, 0, 5 * s], p: [0, bodyBob, 0] },
+        Neck1: [neckBend, 0, 0], Head: [neckBend * 0.5, headDip, -6 * s], Tail: [0, 0, tailRudder]
+      });
     for (const [sfx, k] of [['L', 1], ['R', -1]]) {
       o['Humerus' + sfx] = bodyEuler(0, 0, k * (dihedral + 1.5 * s * k), A.pitch);
       o['Forearm' + sfx] = bodyEuler(0, 0, -k * 3, A.pitch);
@@ -1844,6 +2080,9 @@ export function createAsset(userParams = {}) {
   const C = zonesFor(p.colorway, p, S.palette);
   const span = S.wing.span * S.L;
   const A = { L: S.L, pitch: S.pitch, T: { walk: clamp(0.55 * Math.sqrt(S.legLen * S.L / 0.03), 0.25, 1.6), hop: clamp(0.5 * Math.sqrt(S.L / 0.1), 0.3, 1.2), flap: clamp(0.38 * Math.sqrt(span / 0.5), 0.12, 1.4) } };
+  // Digital Diorama revision 8: the walk plants its feet; its duration follows from the stride and a Froude-scaled pace
+  A.gait = birdGaitSetup(B.rig, S, p.species, parts); A.T.walk = A.gait.T;
+  if (S.flightless ?? FLIGHTLESS.has(p.species)) A.flightless = true;
   const clip = BIRD_CLIPS[p.pose] || BIRD_CLIPS.perch, pose = clip.build(clip.loop ? p.posePhase % 1 : p.posePhase, A);
   // Flight clips always use spread wings regardless of instantaneous stroke phase; the bone-scale
   // keys handle the fold/swap for skinned playback, so static mode only needs the clip name.
@@ -1867,7 +2106,14 @@ export function createClips(asset, extra = null) {
   if (!ud || !ud.rig || ud.rig.mode !== 'skinned' || !ud.anim) return [];
   const specs = Object.entries(BIRD_CLIPS).map(([name, c]) => ({ name, ...c }));
   if (Array.isArray(extra)) for (const e of extra) if (e && typeof e.build === 'function' && e.name && !BIRD_CLIPS[e.name]) specs.push({ loop: true, frames: 31, dur: () => e.duration || 2, ...e });
-  return specs.map((c) => bakeClip(ud.rig, c.name, typeof c.dur === 'function' ? c.dur(ud.anim) : c.dur, c.frames || 31, (u) => c.build(u, ud.anim), c.loop !== false));
+  return specs.map((c) => {
+    const dur = typeof c.dur === 'function' ? c.dur(ud.anim) : c.dur, clip = bakeClip(ud.rig, c.name, dur, c.frames || 31, (u) => c.build(u, ud.anim), c.loop !== false);
+    // Digital Diorama revision 8: stride metadata (distance per cycle, the hip height it was timed for), so the app
+    // plays the walk at the rate that keeps the planted feet still, as it does the mammals' gaits
+    const G = ud.anim.gait;
+    if (c.name === 'walk' && G) clip.userData = { loop: true, gait: 'walk', stride: G.stride, speed: +(G.stride / dur).toFixed(4), hipH: G.hipH };
+    return clip;
+  });
 }
 export function setPose(asset, name = 'perch', phase = 0.25) {
   const ud = asset && asset.userData, c = BIRD_CLIPS[name];
