@@ -119,11 +119,18 @@ function fbm(x, y, z, s = 0, oct = 3) {
   for (let i = 0; i < oct; i++) { r += a * vnoise(x * f, y * f, z * f, s + i * 31); n += a; a *= 0.5; f *= 2.03; }
   return r / n;
 }
-/** Cellular (Worley) noise: [nearest, second nearest] feature distances. */
+/**
+ * Cellular (Worley) noise: [nearest, second nearest] feature distances. (Digital Diorama revision 8: the home cell is
+ * searched first and a neighbouring cell is skipped when even its nearest corner is no closer than the second-nearest
+ * point found so far; the same result, about twice as fast.)
+ */
+const WORLEY_ORDER = [0, -1, 1];
 function worley(x, y, z, s = 0) {
-  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z), fx = x - ix, fy = y - iy, fz = z - iz;
   let f1 = 9, f2 = 9;
-  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+  for (const dx of WORLEY_ORDER) for (const dy of WORLEY_ORDER) for (const dz of WORLEY_ORDER) {
+    const bx = dx < 0 ? fx : dx > 0 ? 1 - fx : 0, by = dy < 0 ? fy : dy > 0 ? 1 - fy : 0, bz = dz < 0 ? fz : dz > 0 ? 1 - fz : 0;
+    if (bx * bx + by * by + bz * bz >= f2 * f2) continue;
     const cx = ix + dx, cy = iy + dy, cz = iz + dz;
     const px = cx + hash3(cx, cy, cz, s), py = cy + hash3(cx, cy, cz, s + 7), pz = cz + hash3(cx, cy, cz, s + 13);
     const d = Math.hypot(px - x, py - y, pz - z);
@@ -652,7 +659,7 @@ function paintAtlas(parts, cfg, hexOf) {
     if (c[3] && grain > 0) m = 1 + grain * ((0.6 * vnoise(P.x * f1, P.y * f1, P.z * f1 * 0.4, 17) + 0.4 * vnoise(P.x * f2, P.y * f2, P.z * f2, 29)) - 0.5) * 2;
     out[o] = c[0] * m; out[o + 1] = c[1] * m; out[o + 2] = c[2] * m;
   };
-  for (const pt of patches) paintPatch(pt, place.get(pt), data, AW, shade, cfg.soft !== false);
+  for (const pt of patches) paintPatch(pt, place.get(pt), data, AW, shade, cfg.soft !== false, cfg.crease);
   let white = null;
   for (const [it, pl] of place) if (it.white) white = [(pl.x + 2) / AW, (pl.y + 2) / AH];
   const tex = new THREE.DataTexture(data, AW, AH, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -670,7 +677,29 @@ function paintAtlas(parts, cfg, hexOf) {
 }
 
 /** Rasterises one patch's painter into its tile (lattice-sampled; uniform blocks skip the painter). */
-function paintPatch(pt, tile, data, AW, shade, soft) {
+/**
+ * Digital Diorama revision 8: a periodic 2D net of creases (the cell edges of a jittered grid, Worley f2 - f1), exact and
+ * built once. paintPatch draws it over a patch's texels for creased skin (`cfg.crease`: elephants): a patch's texels are
+ * laid out at an even spacing over the surface, so the net needs no 3D noise per texel, only one read.
+ */
+const CREASE_TILE = 128, CREASE_CELLS = 10;
+let CREASE2 = null;
+function creaseTile() {
+  if (CREASE2) return CREASE2;
+  const N = CREASE_TILE, C = CREASE_CELLS, F = new Float32Array(N * N), wr = (i) => ((i % C) + C) % C;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const px = ((x + 0.5) / N) * C, py = ((y + 0.5) / N) * C, cx = Math.floor(px), cy = Math.floor(py);
+    let f1 = 9, f2 = 9;
+    for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) {
+      const i = cx + dx, j = cy + dy, d = Math.hypot(i + 0.1 + 0.8 * hash3(wr(i), wr(j), 0, 81) - px, j + 0.1 + 0.8 * hash3(wr(i), wr(j), 0, 82) - py);
+      if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
+    }
+    F[y * N + x] = f2 - f1;
+  }
+  return (CREASE2 = F);
+}
+
+function paintPatch(pt, tile, data, AW, shade, soft, crease = null) {
   const { grid, K, J, t, at, zoneAt, wrap } = pt, { x: X0, y: Y0, w, h } = tile, A = Math.round(255 * (pt.gloss ?? 1));
   const rowK = new Int32Array(h), rowF = new Float32Array(h), colJ = new Int32Array(w), colF = new Float32Array(w);
   let k = 0;
@@ -692,12 +721,23 @@ function paintPatch(pt, tile, data, AW, shade, soft) {
   const lat = new Array(lw * (ch + 1));
   for (let cy = 0; cy <= ch; cy++) for (let cx = 0; cx <= cw; cx++) lat[cy * lw + cx] = zoneOf(Math.min(cx * B, w - 1), Math.min(cy * B, h - 1));
   const rgb = new Float32Array(w * h * 3);
+  // creases (see creaseTile): cells about `crease.cell` texels across; round a loft a whole number of tiles, so the net
+  // closes on itself; offset per patch
+  let ct = null, sx = 1, sy = 1, ox = 0, oy = 0, cwid = 0, cdark = 1;
+  if (crease) {
+    ct = creaseTile(); const N = CREASE_TILE, s = (N / CREASE_CELLS) / crease.cell;
+    sy = s; sx = wrap ? (N * Math.max(1, Math.round((w * s) / N))) / w : s;
+    ox = (pt.K * 37 + pt.J * 11) % N; oy = (pt.K * 13 + pt.J * 29) % N; cwid = crease.width; cdark = crease.dark;
+  }
   for (let by = 0; by < ch; by++) for (let bx = 0; bx < cw; bx++) {
     const z = lat[by * lw + bx], uni = z === lat[by * lw + bx + 1] && z === lat[(by + 1) * lw + bx] && z === lat[(by + 1) * lw + bx + 1];
     for (let y = by * B; y < Math.min(h, by * B + B); y++) for (let x = bx * B; x < Math.min(w, bx * B + B); x++) {
       let zz = z;
       if (uni) pos(x, y); else zz = zoneOf(x, y);
       shade(zz, P, rgb, (y * w + x) * 3);
+      if (ct && crease.zones.includes(zz) && ct[((Math.floor(y * sy) + oy) % CREASE_TILE) * CREASE_TILE + ((Math.floor(x * sx) + ox) % CREASE_TILE)] < cwid) {
+        const o = (y * w + x) * 3; rgb[o] *= cdark; rgb[o + 1] *= cdark; rgb[o + 2] *= cdark;
+      }
     }
   }
   if (soft && w > 2 && h > 2) {
@@ -736,32 +776,83 @@ function smoothNormals(geo, deg = COAT_CREASE) {
   const pos = geo.attributes.position.array, n = pos.length / 3;
   geo.computeBoundingBox();
   const bb = geo.boundingBox, eps = Math.max(1e-9, bb.max.distanceTo(bb.min) * 2e-6);
-  const fn = new Float32Array(n), keys = new Array(n), groups = new Map();
+  // (Digital Diorama revision 8: vertices are grouped by their quantised position through an integer hash with chains,
+  // not string keys; the same groups, about three times faster. fn: each face's normal, un: its unit normal, both
+  // stored in the slots of the face's first vertex)
+  const fn = new Float32Array(n), un = new Float32Array(n), q = new Int32Array(n * 3), hs = new Int32Array(n), next = new Int32Array(n), head = new Map();
   for (let f = 0; f < n; f += 3) {
     const ax = pos[f * 3], ay = pos[f * 3 + 1], az = pos[f * 3 + 2];
     const ux = pos[f * 3 + 3] - ax, uy = pos[f * 3 + 4] - ay, uz = pos[f * 3 + 5] - az, vx = pos[f * 3 + 6] - ax, vy = pos[f * 3 + 7] - ay, vz = pos[f * 3 + 8] - az;
-    fn[f] = uy * vz - uz * vy; fn[f + 1] = uz * vx - ux * vz; fn[f + 2] = ux * vy - uy * vx;
-    for (let k = 0; k < 3; k++) {
-      const i = f + k, key = `${Math.round(pos[i * 3] / eps)},${Math.round(pos[i * 3 + 1] / eps)},${Math.round(pos[i * 3 + 2] / eps)}`;
-      keys[i] = key;
-      const g = groups.get(key);
-      if (g) g.push(f); else groups.set(key, [f]);
-    }
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz) || 1;
+    fn[f] = nx; fn[f + 1] = ny; fn[f + 2] = nz; un[f] = nx / l; un[f + 1] = ny / l; un[f + 2] = nz / l;
+  }
+  for (let i = 0; i < n; i++) {
+    const qx = Math.round(pos[i * 3] / eps), qy = Math.round(pos[i * 3 + 1] / eps), qz = Math.round(pos[i * 3 + 2] / eps);
+    q[i * 3] = qx; q[i * 3 + 1] = qy; q[i * 3 + 2] = qz;
+    const h = hs[i] = Math.imul(qx, 73856093) ^ Math.imul(qy, 19349663) ^ Math.imul(qz, 83492791), first = head.get(h);
+    next[i] = first === undefined ? -1 : first; head.set(h, i);
   }
   const cosC = Math.cos(deg * DEG), nor = new Float32Array(n * 3);
-  const unit = (f) => { const l = Math.hypot(fn[f], fn[f + 1], fn[f + 2]) || 1; return [fn[f] / l, fn[f + 1] / l, fn[f + 2] / l]; };
   for (let i = 0; i < n; i++) {
-    const f = i - (i % 3), me = unit(f);
+    const f = i - (i % 3), mx = un[f], my = un[f + 1], mz = un[f + 2], qx = q[i * 3], qy = q[i * 3 + 1], qz = q[i * 3 + 2];
     let sx = 0, sy = 0, sz = 0;
-    for (const g of groups.get(keys[i])) {
-      const o = unit(g);
-      if (o[0] * me[0] + o[1] * me[1] + o[2] * me[2] < cosC) continue;
+    for (let j = head.get(hs[i]); j !== -1; j = next[j]) {
+      if (q[j * 3] !== qx || q[j * 3 + 1] !== qy || q[j * 3 + 2] !== qz) continue;
+      const g = j - (j % 3);
+      if (un[g] * mx + un[g + 1] * my + un[g + 2] * mz < cosC) continue;
       sx += fn[g]; sy += fn[g + 1]; sz += fn[g + 2];
     }
     const l = Math.hypot(sx, sy, sz);
-    if (l > 1e-20) { nor[i * 3] = sx / l; nor[i * 3 + 1] = sy / l; nor[i * 3 + 2] = sz / l; } else { nor[i * 3] = me[0]; nor[i * 3 + 1] = me[1]; nor[i * 3 + 2] = me[2]; }
+    if (l > 1e-20) { nor[i * 3] = sx / l; nor[i * 3 + 1] = sy / l; nor[i * 3 + 2] = sz / l; } else { nor[i * 3] = mx; nor[i * 3 + 1] = my; nor[i * 3 + 2] = mz; }
   }
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+}
+
+/**
+ * Digital Diorama revision 5: blends normals across the seams where limbs leave the body. Body and legs are
+ * separate surfaces, so even where they meet smoothly their normals jump and the join shades as a hard crease.
+ * Each vertex of either surface that lies within `radius` of the other bends its normal toward the nearest
+ * vertex of the other one (half way at contact, none at the radius), so the shading runs on across the join.
+ */
+function blendSeamNormals(geoA, geoB, radius) {
+  const pa = geoA.attributes.position.array, pb = geoB.attributes.position.array, na = geoA.attributes.normal.array, nb = geoB.attributes.normal.array;
+  const inv = 1 / radius, r2 = radius * radius;
+  const hk = (cx, cy, cz) => ((cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791)) | 0;
+  const boxOf = (p) => { const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; for (let i = 0; i < p.length; i += 3) for (let k = 0; k < 3; k++) { if (p[i + k] < b[k]) b[k] = p[i + k]; if (p[i + k] > b[k + 3]) b[k + 3] = p[i + k]; } return b; };
+  const ba = boxOf(pa), bb = boxOf(pb);
+  const inBox = (b, x, y, z) => x > b[0] - radius && x < b[3] + radius && y > b[1] - radius && y < b[4] + radius && z > b[2] - radius && z < b[5] + radius;
+  // hash grid of one surface's vertices near the other surface's bounds
+  const grid = (p, b) => { const m = new Map(); for (let i = 0; i < p.length; i += 3) { if (!inBox(b, p[i], p[i + 1], p[i + 2])) continue; const k = hk(Math.floor(p[i] * inv), Math.floor(p[i + 1] * inv), Math.floor(p[i + 2] * inv)); const l = m.get(k); if (l) l.push(i); else m.set(k, [i]); } return m; };
+  const blend = (p, n, b, m, po, no) => {
+    const out = n.slice(), memo = new Map();
+    for (let i = 0; i < p.length; i += 3) {
+      const x = p[i], y = p[i + 1], z = p[i + 2];
+      if (!inBox(b, x, y, z)) continue;
+      // non-indexed geometry repeats each position; search once per position
+      const pk = `${x},${y},${z}`;
+      let hit = memo.get(pk);
+      if (hit === undefined) {
+        let best = -1, bd = r2;
+        const cx = Math.floor(x * inv), cy = Math.floor(y * inv), cz = Math.floor(z * inv);
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+          const l = m.get(hk(cx + dx, cy + dy, cz + dz)); if (!l) continue;
+          for (const j of l) { const ex = po[j] - x, ey = po[j + 1] - y, ez = po[j + 2] - z, d = ex * ex + ey * ey + ez * ez; if (d < bd) { bd = d; best = j; } }
+        }
+        hit = best < 0 ? null : [best, Math.sqrt(bd)];
+        memo.set(pk, hit);
+      }
+      if (!hit) continue;
+      const [j, d] = hit;
+      if (n[i] * no[j] + n[i + 1] * no[j + 1] + n[i + 2] * no[j + 2] < 0.2) continue;
+      const w = 0.5 * (1 - d / radius) ** 2;
+      const nx = n[i] * (1 - w) + no[j] * w, ny = n[i + 1] * (1 - w) + no[j + 1] * w, nz = n[i + 2] * (1 - w) + no[j + 2] * w, l = Math.hypot(nx, ny, nz) || 1;
+      out[i] = nx / l; out[i + 1] = ny / l; out[i + 2] = nz / l;
+    }
+    return out;
+  };
+  const outA = blend(pa, na, bb, grid(pb, ba), pb, nb), outB = blend(pb, nb, ba, grid(pa, bb), pa, na);
+  na.set(outA); nb.set(outB);
+  geoA.attributes.normal.needsUpdate = true; geoB.attributes.normal.needsUpdate = true;
 }
 
 const MAT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.82, metalness: 0.0, side: THREE.DoubleSide });
@@ -846,12 +937,20 @@ function finish(build, opt) {
     solid = MAT.clone(); solid.flatShading = !smooth; solid.name = 'coat';
     if (coat) { solid.map = coat.tex; coatGloss(solid); }
   }
+  // geometries per part, with normals blended across the body / limb seams (see blendSeamNormals)
+  const geoOf = new Map(live.map(p => [p, toGeo(p)]));
+  if (smooth && opt.seamRadius) {
+    const body = live.find(p => p.name === 'body' && !p.glass);
+    if (body) for (const p of live) if (/^leg-/.test(p.name) && !p.glass) blendSeamNormals(geoOf.get(body), geoOf.get(p), opt.seamRadius);
+    // (Digital Diorama revision 8: other parts that meet along a shared row, such as the elephant's face and trunk)
+    for (const [a, b] of opt.seams || []) { const A = live.find(p => p.name === a && !p.glass), Bp = live.find(p => p.name === b && !p.glass); if (A && Bp) blendSeamNormals(geoOf.get(A), geoOf.get(Bp), opt.seamRadius * 0.5); }
+  }
   for (const glass of [false, true]) {
     const list = live.filter(p => p.glass === glass);
     if (!list.length) continue;
     const mat = glass ? GLASS_MAT : solid;
     if (merge) {
-      const geos = list.map(toGeo), merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+      const geos = list.map(p => geoOf.get(p)), merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
       if (geos.length > 1) geos.forEach(g => g.dispose());
       if (!merged) continue;
       merged.computeBoundingBox(); merged.computeBoundingSphere();
@@ -860,7 +959,7 @@ function finish(build, opt) {
       const used = new Map();
       for (const p of list) {
         const k = used.get(p.name) || 0; used.set(p.name, k + 1);
-        root.add(meshOf(toGeo(p), mat, k ? `${p.name}-${k + 1}` : p.name, { part: p.name, group: p.group, glass }));
+        root.add(meshOf(geoOf.get(p), mat, k ? `${p.name}-${k + 1}` : p.name, { part: p.name, group: p.group, glass }));
       }
     }
   }
@@ -1988,36 +2087,40 @@ function birdMarks(S, base) {
   return (c) => {
     const z0 = base(c), { part, u = 0, a = 0, P } = c, sa = typeof a === 'number' ? Math.sin(a) : 0;
     if (!P) return z0;
-    const x = P.x * k, y = P.y * k, zz = P.z * k, n = fbm(x * 4, y * 4, zz * 4, seed) - 0.5;
+    // (Digital Diorama revision 8: the wobble noise is only worked out where a mark asks for it; the same marks, a
+    // third of the painter's time saved on heavily marked birds)
+    const x = P.x * k, y = P.y * k, zz = P.z * k;
+    let n0 = null;
+    const nz = () => (n0 === null ? (n0 = fbm(x * 4, y * 4, zz * 4, seed) - 0.5) : n0);
     const under = (part === 'body' && sa < 0.05) || (part === 'neck' && sa < -0.15);
     const upper = (part === 'body' || part === 'neck') && !under;
     if (under && (z0 === 'belly' || z0 === S.pattern.breast || z0 === 'body')) {
       if (part === 'neck' && M.throatPlain) return z0;
       switch (M.belly) {
-        case 'bars': return bars(y * 7 * f + n * 0.5, 1, (M.barW ?? 0.22) + 0.1 * n) ? dark : z0;
-        case 'chevrons': return bars(y * 7 * f + Math.abs(x) * 2.2 + n * 0.4, 1, 0.2) ? dark : z0;
-        case 'streaks': { const [d] = worley(x * 9 * f, y * 3 * f, zz * 9 * f, seed); return d < 0.17 + 0.05 * n ? dark : z0; }
+        case 'bars': return bars(y * 7 * f + nz() * 0.5, 1, (M.barW ?? 0.22) + 0.1 * nz()) ? dark : z0;
+        case 'chevrons': return bars(y * 7 * f + Math.abs(x) * 2.2 + nz() * 0.4, 1, 0.2) ? dark : z0;
+        case 'streaks': { const [d] = worley(x * 9 * f, y * 3 * f, zz * 9 * f, seed); return d < 0.17 + 0.05 * nz() ? dark : z0; }
         case 'spots': { const [d] = worley(x * 11 * f, y * 11 * f, zz * 11 * f, seed); return d < 0.2 ? dark : z0; }
       }
     }
     if (upper && z0 === 'body') {
       switch (M.back) {
         case 'scaled': { const [d1, d2] = worley(x * 10 * f, y * 6 * f, zz * 10 * f, seed + 3); return d2 - d1 < 0.1 ? lightZ : d1 < 0.18 ? dark : z0; }
-        case 'streaks': { const [d] = worley(x * 12 * f, y * 9 * f, zz * 3.2 * f, seed + 3); return d < 0.22 + 0.06 * n ? dark : z0; }
+        case 'streaks': { const [d] = worley(x * 12 * f, y * 9 * f, zz * 3.2 * f, seed + 3); return d < 0.22 + 0.06 * nz() ? dark : z0; }
         case 'spots': { const [d] = worley(x * 12 * f, y * 12 * f, zz * 12 * f, seed + 3); return d < 0.17 ? lightZ : z0; }
-        case 'bars': return bars(zz * 8 * f + n * 0.4, 1, 0.2) ? dark : z0;
+        case 'bars': return bars(zz * 8 * f + nz() * 0.4, 1, 0.2) ? dark : z0;
         case 'stripe': return Math.abs(Math.cos(a)) < 0.2 && sa > 0.75 ? lightZ : z0;
       }
     }
     if (part === 'fold' || part === 'wing') {
       const v = a;
       switch (M.wing) {
-        case 'edged': return Math.abs(fract(v * (part === 'fold' ? 5 : 9) + n * 0.2) - 0.5) > 0.38 && z0 !== 'flight' ? lightZ : z0;
+        case 'edged': return Math.abs(fract(v * (part === 'fold' ? 5 : 9) + nz() * 0.2) - 0.5) > 0.38 && z0 !== 'flight' ? lightZ : z0;
         case 'spots': return Math.cos(TAU * u * 9 * f) > 0.5 && Math.cos(TAU * v * 6) > 0.55 ? (M.spotZone ?? lightZ) : z0;
-        case 'bars': return bars(u * 8 * f + v * 0.6 + n * 0.3, 1, 0.2) ? dark : z0;
+        case 'bars': return bars(u * 8 * f + v * 0.6 + nz() * 0.3, 1, 0.2) ? dark : z0;
       }
     }
-    if (part === 'tail' && M.tail === 'bars') return bars(u * 6 * f + n * 0.2, 1, 0.22) ? dark : z0;
+    if (part === 'tail' && M.tail === 'bars') return bars(u * 6 * f + nz() * 0.2, 1, 0.22) ? dark : z0;
     if (part === 'body' && M.breast === 'spots' && sa < 0.2 && u > 0.55) { const [d] = worley(x * 13 * f, y * 13 * f, zz * 13 * f, seed + 5); return d < 0.2 ? dark : z0; }
     return z0;
   };

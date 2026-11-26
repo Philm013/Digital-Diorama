@@ -207,11 +207,18 @@ function fbm(x, y, z, s = 0, oct = 3) {
   for (let i = 0; i < oct; i++) { r += a * vnoise(x * f, y * f, z * f, s + i * 31); n += a; a *= 0.5; f *= 2.03; }
   return r / n;
 }
-/** Cellular (Worley) noise: [nearest, second nearest] feature distances. */
+/**
+ * Cellular (Worley) noise: [nearest, second nearest] feature distances. (Digital Diorama revision 8: the home cell is
+ * searched first and a neighbouring cell is skipped when even its nearest corner is no closer than the second-nearest
+ * point found so far; the same result, about twice as fast.)
+ */
+const WORLEY_ORDER = [0, -1, 1];
 function worley(x, y, z, s = 0) {
-  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z), fx = x - ix, fy = y - iy, fz = z - iz;
   let f1 = 9, f2 = 9;
-  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+  for (const dx of WORLEY_ORDER) for (const dy of WORLEY_ORDER) for (const dz of WORLEY_ORDER) {
+    const bx = dx < 0 ? fx : dx > 0 ? 1 - fx : 0, by = dy < 0 ? fy : dy > 0 ? 1 - fy : 0, bz = dz < 0 ? fz : dz > 0 ? 1 - fz : 0;
+    if (bx * bx + by * by + bz * bz >= f2 * f2) continue;
     const cx = ix + dx, cy = iy + dy, cz = iz + dz;
     const px = cx + hash3(cx, cy, cz, s), py = cy + hash3(cx, cy, cz, s + 7), pz = cz + hash3(cx, cy, cz, s + 13);
     const d = Math.hypot(px - x, py - y, pz - z);
@@ -4144,11 +4151,11 @@ function earGuard(info, s) {
     if (!info.has[bone]) continue;
     let fan = (s.__fan && s.__fan[bone]) ?? 0;
     for (let it = 0; it < 8; it++) {
-      const fk = fkOf(info, s), Me = fk(bone);
+      const fk = fkOf(info, s), Me = fk(bone), inv = { Chest: fk('Chest').clone().invert(), Neck1: fk('Neck1').clone().invert() };
       let need = 0;
       for (const P of E.edge) {
         const W = P.clone().sub(info.headV[bone]).applyMatrix4(Me), ref = P.z < info.neckZ ? 'Chest' : 'Neck1';
-        const R = W.applyMatrix4(fk(ref).clone().invert()).add(info.headV[ref]);
+        const R = W.applyMatrix4(inv[ref]).add(info.headV[ref]);
         const r = Math.max(0.05 * info.U, Math.hypot(P.x - E.pivot.x, P.z - E.pivot.z));
         need = Math.max(need, (clr - info.depthAt(R)) / r);
       }
@@ -4254,23 +4261,29 @@ function eleLieDown(info, s, t) {
       }
     }
   };
-  const q = V3(), lowest = () => {
+  const q = V3(), lowest = (step = 1) => {
     const fk = fkOf(info, s);
     let low = Infinity;
-    for (const lm of info.limbs) for (const { P, W } of lm.surf || []) {
+    for (const lm of info.limbs) { const S = lm.surf || []; for (let k = 0; k < S.length; k += step) {
+      const { P, W } = S[k];
       let y = 0;
       for (const [bi, w] of W) { const b = info.bones[bi]; y += w * q.copy(P).sub(info.headV[b]).applyMatrix4(fk(b)).y; }
       low = Math.min(low, y);
-    }
+    } }
     return low;
   };
-  // (the surface is sampled every other point round the leg: a small margin covers what lies between)
-  const margin = 0.0017 * U;
+  // (the surface is sampled every other point round the leg: a small margin covers what lies between. Digital Diorama
+  // revision 8: a lift once found is kept for that stage of lying down, the bisection reads every third surface point and
+  // the result is checked against all of them; the sit clip baked six times faster)
+  const margin = 0.0017 * U, memo = info.lieMemo || (info.lieMemo = new Map()), key = t.toFixed(5);
+  if (memo.has(key)) { pose(memo.get(key)); return; }
   pose(0);
-  if (lowest() >= margin) return;
+  if (lowest() >= margin) { memo.set(key, 0); return; }
   let lo = 0, hi = drop + 0.1 * U;
-  for (let i = 0; i < 9; i++) { const m = (lo + hi) / 2; pose(m); if (lowest() < margin) lo = m; else hi = m; }
+  for (let i = 0; i < 9; i++) { const m = (lo + hi) / 2; pose(m); if (lowest(3) < margin) lo = m; else hi = m; }
   pose(hi);
+  for (let i = 0; i < 6 && lowest() < margin; i++) { hi += 0.002 * U; pose(hi); }
+  memo.set(key, hi);
 }
 /** Once per asset: the head dip that lets the trunk reach the grass, the curl that brings its tip to the mouth, and the
  *  forward curl that keeps a lying elephant's trunk on the ground (solved through the skeleton, so every size works). */
