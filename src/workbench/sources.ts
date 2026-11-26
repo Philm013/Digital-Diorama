@@ -177,6 +177,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         region('Coat painter', declaration('makePainter')),
         region('Head', declaration('tetraHead')),
         region('Ears', declaration('tetraEars')),
+        region('Elephant ear', declaration('tetraFanEar')),
         region('Torso', declaration('tetraTorso')),
         region('Limbs', declaration('tetraLimbJoints')),
         region('Hind leg layout', declaration('HIND_LAYOUT')),
