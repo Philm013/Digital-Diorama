@@ -595,10 +595,28 @@ function mixW(A, B, t) {
 
 /* ── clips & poses: samples are { Bone: [rx, ry, rz] degrees | { r: [...], p: [dx, dy, dz] } } ── */
 const _e = new THREE.Euler(), _q = new THREE.Quaternion();
-function bakeClip(info, name, duration, frames, sample, loop = true) {
+/** Bakes a clip from sample(u), 0..1, at `frames` even keys; with `refine`, also wherever the joints turn fast (see below). */
+function bakeClip(info, name, duration, frames, sample, loop = true, refine = false) {
   const times = [], samples = [];
-  for (let i = 0; i < frames; i++) { const u = i / (frames - 1); times.push(u * duration); samples.push(sample(loop ? u % 1 : u) || {}); }
-  if (loop) samples[frames - 1] = samples[0];
+  let us = Array.from({ length: frames }, (_, i) => i / (frames - 1)), ss = us.map(u => sample(loop ? u % 1 : u) || {});
+  if (loop) ss[frames - 1] = ss[0];
+  // Digital Diorama revision 8: a key half way between two keys wherever the joints turn so fast between them (a leg near
+  // full stretch at the end of a gallop's stance swung its thigh 22° in one key) that interpolating their rotations moves
+  // a planted foot off its place (a giraffe's sank 2 cm); up to three times, so a fast stretch gets up to seven keys more
+  if (refine) {
+    // intervals to check: every one at first, then only the halves of those just split
+    let todo = us.slice(0, -1).map((_, i) => i);
+    for (let pass = 0; pass < 3 && todo.length; pass++) {
+      const add = [];
+      for (const i of todo) { const m = (us[i] + us[i + 1]) / 2, sm = sample(loop ? m % 1 : m) || {}; if (sampleGap(info, ss[i], ss[i + 1], sm) > 1.5) add.push([i, m, sm]); }
+      // insert from the end so the earlier indices stay valid, and list the two halves for the next pass
+      const next = [];
+      for (let k = add.length - 1; k >= 0; k--) { const [i, m, sm] = add[k]; us.splice(i + 1, 0, m); ss.splice(i + 1, 0, sm); }
+      add.forEach(([i], k) => { const at = i + k; next.push(at, at + 1); });
+      todo = next;
+    }
+  }
+  for (let i = 0; i < us.length; i++) { times.push(us[i] * duration); samples.push(ss[i]); }
   const tracks = [];
   for (const b of info.bones) {
     const rq = [], pv = [];
@@ -619,6 +637,14 @@ function bakeClip(info, name, duration, frames, sample, loop = true) {
   const clip = new THREE.AnimationClip(name, duration, tracks);
   clip.userData = { loop };
   return clip;
+}
+/** The most any bone's rotation in sample `m` differs (degrees) from half way between samples `a` and `b`. */
+const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qm = new THREE.Quaternion();
+function sampleGap(info, a, b, m) {
+  const quat = (s, n, q) => { const v = s[n], r = !v ? null : Array.isArray(v) ? v : v.r; _e.set((r ? r[0] : 0) * DEG, (r ? r[1] : 0) * DEG, (r ? r[2] : 0) * DEG, 'YXZ'); return q.setFromEuler(_e); };
+  let worst = 0;
+  for (const n of info.bones) { quat(a, n, _qa).slerp(quat(b, n, _qb), 0.5); worst = Math.max(worst, _qa.angleTo(quat(m, n, _qm)) / DEG); }
+  return worst;
 }
 function applySample(rig, sample) {
   for (const e of rig.list) {
@@ -4313,7 +4339,7 @@ export function createClips(asset) {
     // (Digital Diorama revision 7: 41-65 keys a cycle; with 21-41, the joints' interpolation between keys sank fast feet
     // 1-2 cm into the ground at touchdown, though every baked pose was exact)
     const v = Math.sqrt(G.fr * 9.81 * h), stride = G.lambda * h, dur = stride / v, frames = clamp(Math.round(dur * 64), 41, 65);
-    const clip = bakeClip(info, name, dur, frames, (u) => sampleFor(info, name, u), true);
+    const clip = bakeClip(info, name, dur, frames, (u) => sampleFor(info, name, u), true, true);
     clip.userData = { loop: true, gait: G.id, stride, speed: v, hipH: h, fr: G.fr };
     out.push(clip);
   }
