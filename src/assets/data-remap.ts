@@ -71,7 +71,8 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   // tiny sand-coloured desert fox with enormous ears and a black tail tip
   'fennec-fox': mammal('fox', {
     size: 0.52, earSize: 1.8,
-    specOverride: { points: 0, earZone: 'body', earTip: 0, tailTip: 0.12, tailTipZone: 'marking', palette: { body: '#e2c79c', belly: '#f7efe2', marking: '#3a2c20', eye: '#2a1d14', nose: '#1d1715' } },
+    // (the huge ears spread outward in a V: Digital Diorama revision 7)
+    specOverride: { points: 0, earZone: 'body', earTip: 0, tailTip: 0.12, tailTipZone: 'marking', ear: { spread: 34 }, palette: { body: '#e2c79c', belly: '#f7efe2', marking: '#3a2c20', eye: '#2a1d14', nose: '#1d1715' } },
   }),
   'eastern-gray-squirrel': mammal('squirrel', {
     size: 1.25, earStyle: 'pointed',
