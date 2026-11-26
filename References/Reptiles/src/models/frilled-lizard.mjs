@@ -602,7 +602,10 @@ export function createAsset(userParams = {}) {
   const f0 = -Math.PI / 2 + 0.38, f1 = Math.PI * 1.5 - 0.38, NS = 48;
   const spoke = (i) => {
     const ph = lerp(f0, f1, i / NS), dx = Math.cos(ph), dy = Math.sin(ph);
-    const rr = Rf * (1 + 0.03 * Math.sin(ph * 9)) * (1 - 0.16 * Math.max(0, -dy));
+    let rr = Rf * (1 + 0.03 * Math.sin(ph * 9)) * (1 - 0.16 * Math.max(0, -dy));
+    // Digital Diorama revision 8: the lower spokes stop at the ground (the open frill rests its lower edge on it), they
+    // reached 5-6 cm into it with the default posture
+    if (dy < 0) rr = Math.min(rr, Math.max(0, (cy - 0.004 * k + dy * 1.08 * ri) / (-dy * 1.08 * Math.sin(psi) + 0.04)));
     const v = (r, back) => [cx + dx * (ri + r * Math.sin(psi)) * 1.06, cy + dy * (ri + r * Math.sin(psi)) * 1.08 - r * 0.04, cz - r * Math.cos(psi) - back];
     return [[cx + dx * ri, cy + dy * ri, cz - 0.004 * k], v(rr * 0.5, 0.012 * k * p.frillOpen), v(rr, 0.004 * k)];
   };

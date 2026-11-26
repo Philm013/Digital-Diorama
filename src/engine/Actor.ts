@@ -455,8 +455,12 @@ export class Actor {
   }
 
   private animateRig(dt: number, t: number, rel: number) {
-    const moving = rel > 0.08;
-    this.gaitPhase += dt * (moving ? 6 + rel * 4 : 0);
+    const moving = rel > 0.08, stroke = this.model!.legStroke;
+    // Digital Diorama revision 8: pivot legs step at the cadence whose back-swing keeps pace with the ground (half a
+    // cycle per stroke, within 2-30 rad/s); at 6 + 4·rel whatever their length, a gecko's feet skidded about 15 cm a
+    // step and a Komodo dragon's back-swung twice as fast as it walked. Hoppers keep the old beat.
+    const cadence = stroke && this.def.loco !== 'hop' ? clamp((Math.PI * rel) / stroke, 2, 30) : 6 + rel * 4;
+    this.gaitPhase += dt * (moving ? cadence : 0);
     const flying = this.airborne || (this.isFlyer && moving);
     for (const r of this.model!.rig) {
       let u: number;
