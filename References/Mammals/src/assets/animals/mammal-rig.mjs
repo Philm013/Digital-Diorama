@@ -722,7 +722,7 @@ function paintAtlas(parts, cfg, hexOf) {
     if (c[3] && grain > 0) m = 1 + grain * ((0.6 * vnoise(P.x * f1, P.y * f1, P.z * f1 * 0.4, 17) + 0.4 * vnoise(P.x * f2, P.y * f2, P.z * f2, 29)) - 0.5) * 2;
     out[o] = c[0] * m; out[o + 1] = c[1] * m; out[o + 2] = c[2] * m;
   };
-  for (const pt of patches) paintPatch(pt, place.get(pt), data, AW, shade, cfg.soft !== false);
+  for (const pt of patches) paintPatch(pt, place.get(pt), data, AW, shade, cfg.soft !== false, cfg.crease);
   let white = null;
   for (const [it, pl] of place) if (it.white) white = [(pl.x + 2) / AW, (pl.y + 2) / AH];
   const tex = new THREE.DataTexture(data, AW, AH, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -740,7 +740,29 @@ function paintAtlas(parts, cfg, hexOf) {
 }
 
 /** Rasterises one patch's painter into its tile (lattice-sampled; uniform blocks skip the painter). */
-function paintPatch(pt, tile, data, AW, shade, soft) {
+/**
+ * Digital Diorama revision 8: a periodic 2D net of creases (the cell edges of a jittered grid, Worley f2 - f1), exact and
+ * built once. paintPatch draws it over a patch's texels for creased skin (`cfg.crease`: elephants): a patch's texels are
+ * laid out at an even spacing over the surface, so the net needs no 3D noise per texel, only one read.
+ */
+const CREASE_TILE = 128, CREASE_CELLS = 10;
+let CREASE2 = null;
+function creaseTile() {
+  if (CREASE2) return CREASE2;
+  const N = CREASE_TILE, C = CREASE_CELLS, F = new Float32Array(N * N), wr = (i) => ((i % C) + C) % C;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const px = ((x + 0.5) / N) * C, py = ((y + 0.5) / N) * C, cx = Math.floor(px), cy = Math.floor(py);
+    let f1 = 9, f2 = 9;
+    for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) {
+      const i = cx + dx, j = cy + dy, d = Math.hypot(i + 0.1 + 0.8 * hash3(wr(i), wr(j), 0, 81) - px, j + 0.1 + 0.8 * hash3(wr(i), wr(j), 0, 82) - py);
+      if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
+    }
+    F[y * N + x] = f2 - f1;
+  }
+  return (CREASE2 = F);
+}
+
+function paintPatch(pt, tile, data, AW, shade, soft, crease = null) {
   const { grid, K, J, t, at, zoneAt, wrap } = pt, { x: X0, y: Y0, w, h } = tile, A = Math.round(255 * (pt.gloss ?? 1));
   const rowK = new Int32Array(h), rowF = new Float32Array(h), colJ = new Int32Array(w), colF = new Float32Array(w);
   let k = 0;
@@ -762,12 +784,23 @@ function paintPatch(pt, tile, data, AW, shade, soft) {
   const lat = new Array(lw * (ch + 1));
   for (let cy = 0; cy <= ch; cy++) for (let cx = 0; cx <= cw; cx++) lat[cy * lw + cx] = zoneOf(Math.min(cx * B, w - 1), Math.min(cy * B, h - 1));
   const rgb = new Float32Array(w * h * 3);
+  // creases (see creaseTile): cells about `crease.cell` texels across; round a loft a whole number of tiles, so the net
+  // closes on itself; offset per patch
+  let ct = null, sx = 1, sy = 1, ox = 0, oy = 0, cwid = 0, cdark = 1;
+  if (crease) {
+    ct = creaseTile(); const N = CREASE_TILE, s = (N / CREASE_CELLS) / crease.cell;
+    sy = s; sx = wrap ? (N * Math.max(1, Math.round((w * s) / N))) / w : s;
+    ox = (pt.K * 37 + pt.J * 11) % N; oy = (pt.K * 13 + pt.J * 29) % N; cwid = crease.width; cdark = crease.dark;
+  }
   for (let by = 0; by < ch; by++) for (let bx = 0; bx < cw; bx++) {
     const z = lat[by * lw + bx], uni = z === lat[by * lw + bx + 1] && z === lat[(by + 1) * lw + bx] && z === lat[(by + 1) * lw + bx + 1];
     for (let y = by * B; y < Math.min(h, by * B + B); y++) for (let x = bx * B; x < Math.min(w, bx * B + B); x++) {
       let zz = z;
       if (uni) pos(x, y); else zz = zoneOf(x, y);
       shade(zz, P, rgb, (y * w + x) * 3);
+      if (ct && crease.zones.includes(zz) && ct[((Math.floor(y * sy) + oy) % CREASE_TILE) * CREASE_TILE + ((Math.floor(x * sx) + ox) % CREASE_TILE)] < cwid) {
+        const o = (y * w + x) * 3; rgb[o] *= cdark; rgb[o + 1] *= cdark; rgb[o + 2] *= cdark;
+      }
     }
   }
   if (soft && w > 2 && h > 2) {
@@ -806,30 +839,34 @@ function smoothNormals(geo, deg = COAT_CREASE) {
   const pos = geo.attributes.position.array, n = pos.length / 3;
   geo.computeBoundingBox();
   const bb = geo.boundingBox, eps = Math.max(1e-9, bb.max.distanceTo(bb.min) * 2e-6);
-  const fn = new Float32Array(n), keys = new Array(n), groups = new Map();
+  // (Digital Diorama revision 8: vertices are grouped by their quantised position through an integer hash with chains,
+  // not string keys; the same groups, about three times faster. fn: each face's normal, un: its unit normal, both
+  // stored in the slots of the face's first vertex)
+  const fn = new Float32Array(n), un = new Float32Array(n), q = new Int32Array(n * 3), hs = new Int32Array(n), next = new Int32Array(n), head = new Map();
   for (let f = 0; f < n; f += 3) {
     const ax = pos[f * 3], ay = pos[f * 3 + 1], az = pos[f * 3 + 2];
     const ux = pos[f * 3 + 3] - ax, uy = pos[f * 3 + 4] - ay, uz = pos[f * 3 + 5] - az, vx = pos[f * 3 + 6] - ax, vy = pos[f * 3 + 7] - ay, vz = pos[f * 3 + 8] - az;
-    fn[f] = uy * vz - uz * vy; fn[f + 1] = uz * vx - ux * vz; fn[f + 2] = ux * vy - uy * vx;
-    for (let k = 0; k < 3; k++) {
-      const i = f + k, key = `${Math.round(pos[i * 3] / eps)},${Math.round(pos[i * 3 + 1] / eps)},${Math.round(pos[i * 3 + 2] / eps)}`;
-      keys[i] = key;
-      const g = groups.get(key);
-      if (g) g.push(f); else groups.set(key, [f]);
-    }
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz) || 1;
+    fn[f] = nx; fn[f + 1] = ny; fn[f + 2] = nz; un[f] = nx / l; un[f + 1] = ny / l; un[f + 2] = nz / l;
+  }
+  for (let i = 0; i < n; i++) {
+    const qx = Math.round(pos[i * 3] / eps), qy = Math.round(pos[i * 3 + 1] / eps), qz = Math.round(pos[i * 3 + 2] / eps);
+    q[i * 3] = qx; q[i * 3 + 1] = qy; q[i * 3 + 2] = qz;
+    const h = hs[i] = Math.imul(qx, 73856093) ^ Math.imul(qy, 19349663) ^ Math.imul(qz, 83492791), first = head.get(h);
+    next[i] = first === undefined ? -1 : first; head.set(h, i);
   }
   const cosC = Math.cos(deg * DEG), nor = new Float32Array(n * 3);
-  const unit = (f) => { const l = Math.hypot(fn[f], fn[f + 1], fn[f + 2]) || 1; return [fn[f] / l, fn[f + 1] / l, fn[f + 2] / l]; };
   for (let i = 0; i < n; i++) {
-    const f = i - (i % 3), me = unit(f);
+    const f = i - (i % 3), mx = un[f], my = un[f + 1], mz = un[f + 2], qx = q[i * 3], qy = q[i * 3 + 1], qz = q[i * 3 + 2];
     let sx = 0, sy = 0, sz = 0;
-    for (const g of groups.get(keys[i])) {
-      const o = unit(g);
-      if (o[0] * me[0] + o[1] * me[1] + o[2] * me[2] < cosC) continue;
+    for (let j = head.get(hs[i]); j !== -1; j = next[j]) {
+      if (q[j * 3] !== qx || q[j * 3 + 1] !== qy || q[j * 3 + 2] !== qz) continue;
+      const g = j - (j % 3);
+      if (un[g] * mx + un[g + 1] * my + un[g + 2] * mz < cosC) continue;
       sx += fn[g]; sy += fn[g + 1]; sz += fn[g + 2];
     }
     const l = Math.hypot(sx, sy, sz);
-    if (l > 1e-20) { nor[i * 3] = sx / l; nor[i * 3 + 1] = sy / l; nor[i * 3 + 2] = sz / l; } else { nor[i * 3] = me[0]; nor[i * 3 + 1] = me[1]; nor[i * 3 + 2] = me[2]; }
+    if (l > 1e-20) { nor[i * 3] = sx / l; nor[i * 3 + 1] = sy / l; nor[i * 3 + 2] = sz / l; } else { nor[i * 3] = mx; nor[i * 3 + 1] = my; nor[i * 3 + 2] = mz; }
   }
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
 }
@@ -968,6 +1005,8 @@ function finish(build, opt) {
   if (smooth && opt.seamRadius) {
     const body = live.find(p => p.name === 'body' && !p.glass);
     if (body) for (const p of live) if (/^leg-/.test(p.name) && !p.glass) blendSeamNormals(geoOf.get(body), geoOf.get(p), opt.seamRadius);
+    // (Digital Diorama revision 8: other parts that meet along a shared row, such as the elephant's face and trunk)
+    for (const [a, b] of opt.seams || []) { const A = live.find(p => p.name === a && !p.glass), Bp = live.find(p => p.name === b && !p.glass); if (A && Bp) blendSeamNormals(geoOf.get(A), geoOf.get(Bp), opt.seamRadius * 0.5); }
   }
   for (const glass of [false, true]) {
     const list = live.filter(p => p.glass === glass);
@@ -2070,7 +2109,8 @@ function blendLimbRoots(B, S, L) {
     if (!lm.emitLeg || !lm.grid || !lm.us) continue;
     const g = lm.grid, rows = g.rows, R = g.R, ku = lm.us;
     // tuck from the mid-thigh to the stifle (hind), from the middle of the upper arm to the elbow (fore)
-    const [uIn, uOut] = lm.front ? [ku[3], lerp(ku[3], ku[4], 0.8)] : [ku[2], lerp(ku[2], ku[3], 0.8)];
+    // (Digital Diorama revision 8: a limb may set its own range, `tuck`: the elephant's)
+    const [uIn, uOut] = lm.tuck ?? (lm.front ? [ku[3], lerp(ku[3], ku[4], 0.8)] : [ku[2], lerp(ku[2], ku[3], 0.8)]);
     for (let r = 0; r < rows.length; r++) {
       const row = rows[r], tuck = 1 - sstep(uIn, uOut, g.us[r]);
       const ctr = row.reduce((s, q) => s.add(q), V3()).divideScalar(R);
@@ -2569,6 +2609,400 @@ function capeEdgeU(S, U, sa) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
+ *  ELEPHANT  (Digital Diorama revision 8: a dedicated builder)
+ *  The generic tetrapod path made a grey lump of the African elephant: head and neck one shapeless mass with a bump
+ *  over the shoulders, ears hanging off the head like curtains, a bulbous rump overhanging hind legs that pinched
+ *  below it, thin legs ending in cylinders with dot toenails, a thin trunk. It is now built on its own, laid out from
+ *  an adult bush elephant bull (fractions of its shoulder height U, 3 m) and checked against the species photo, side
+ *  and front photographs and mounted skeletons:
+ *   - body: one loft from the steep rump to the short neck, highest at the withers, the back dipping behind them and
+ *     rising a little at the hips (0.9) before the rump falls to the tail; 1.1 long from the point of shoulder to the
+ *     point of buttock; a deep chest, the belly line lowest (0.44) just behind the forelegs;
+ *   - head and trunk: one loft, so the forehead slopes forward and down into the trunk (one dome, no saddle); the head
+ *     carried low, its top level with the shoulders; a small low eye about half way between the ear and the trunk
+ *     with the temporal hollow behind it; a pointed lower lip under the trunk; the trunk as wide as the face at its
+ *     base, tapering steadily to a two-fingered tip about 0.1 above the ground, with ring folds;
+ *   - ears: shells 0.58 tall and 0.43 wide shaped like the map of Africa, hung from a curved root line from above
+ *     and behind the eye down to the corner of the mouth and laid back over the neck and shoulder outside the body
+ *     (concave toward it), with a rolled top edge and a thickened rim; they fan about that root line;
+ *   - legs: pillars (elbow 0.47, carpus 0.2; hip joint 0.7, stifle 0.4 with its fold bulging forward where the leg
+ *     meets the belly, hock 0.16), lofted with their feet (round fore, 0.16 across; oval hind), which flare a little
+ *     at the ground, with ring folds at the carpus, hock and ankle and broad flat pale toenails (4 fore, 3 hind);
+ *   - tusks from skin sheaths beside the trunk base, curving down, forward and up; a tail with a flat black tuft;
+ *     grey-brown skin with its creases and folds painted into the coat atlas.
+ *  Body heights are remapped between the belly line and the withers and leg heights scale with the legs, so `legLen`
+ *  lengthens the legs and keeps the body; `bodyLen`, `headSize`, `earSize` and `muzzleLen` (the trunk) scale their
+ *  parts. Bone names, clip names and the clip solver are the tetrapod rig's.
+ * ════════════════════════════════════════════════════════════════════════════ */
+/** Scales and landmark maps of the elephant builder; also the fields the shared helpers read (painter, skins, clips). */
+function eleLayout(S, p) {
+  const ref = SPECIES.elephant, legK = Math.sqrt(p.legLen || 1), H = S.H, U = H / legK, D = S.depth * H, floor = H - D;
+  const L = { elephant: true, H, U, D, limbs: [] };
+  L.kLen = (S.len * H) / (ref.len * U);              // bodyLen
+  L.hs = S.headLen / ref.headLen / legK;              // headSize (× 1.3 for calves)
+  L.es = (S.ear.len || ref.ear.len) / ref.ear.len;    // earSize (× 1.15 for calves)
+  L.ts = S.snout / ref.snout;                         // muzzleLen: the trunk (× 0.8 for calves)
+  L.yb = (y) => floor + ((y - 0.425) / 0.575) * D;    // a height of the reference bull's body, between belly line and withers
+  L.yl = (y) => (y / 0.425) * floor;                  // a height below its belly line (scales with the legs)
+  L.zb = (z) => z * L.kLen * U;
+  const A = V3(0, L.yb(0.8), L.zb(0.62)), R = U * L.hs;
+  /** A point of the reference bull's head (z, y; x across), scaled by the head size about the poll. */
+  L.hp = (z, y, x = 0) => V3(x * R, A.y + (y - 0.8) * R, A.z + (z - 0.62) * R);
+  L.R = R;
+  L.Lt = S.len * H; L.zF = L.zb(0.54); L.zB = L.zb(-0.56); L.yR = L.yb(0.73); L.Dr = L.yb(0.73) - L.yb(0.545); L.hw = 0.273 * U;
+  L.elbowY = L.yl(0.47); L.nd = V3(0, 0.15, 1).normalize(); L.Lh = 0.4 * R; L.ch = 0.4 * R; L.cw = 0.3 * R;
+  return L;
+}
+
+/** Torso and neck: one loft through the stations of the reference bull; creates the axial bones. */
+function eleTorso(B, S, L) {
+  const det = B.det, rig = B.rig, U = L.U;
+  // station: name, z, top, bottom, half-width (× U), side narrowing toward the top and toward the belly
+  const keys = [
+    ['rump', -0.505, 0.665, 0.5, 0.17, 0.72, 0.8],
+    ['haunch', -0.37, 0.935, 0.465, 0.236, 0.76, 0.86],
+    ['flank', -0.21, 0.925, 0.448, 0.258, 0.66, 0.9],
+    ['loin', -0.05, 0.912, 0.432, 0.272, 0.62, 0.92],
+    ['barrel', 0.11, 0.952, 0.425, 0.276, 0.6, 0.92],
+    ['chest', 0.27, 1.0, 0.435, 0.26, 0.56, 0.88],
+    ['shoulder', 0.41, 0.988, 0.46, 0.232, 0.6, 0.86],
+    ['neckRoot', 0.515, 0.945, 0.495, 0.2, 0.7, 0.84],
+    ['neck1', 0.585, 0.91, 0.53, 0.178, 0.82, 0.86],
+    ['neckTop', 0.655, 0.9, 0.55, 0.162, 0.9, 0.9],
+  ].map(([n, z, top, bot, w, sT, sB]) => { const t = L.yb(top), b = L.yb(bot), c = lerp(b, t, 0.4); return { n, c: V3(0, c, L.zb(z)), ht: t - c, hb: c - b, w: w * U, sT, sB }; });
+  const curve = makePath(keys.map(k => k.c)), ku = knotUs(curve, keys.length);
+  keys.forEach((k, i) => { k.u = ku[i]; });
+  const Uo = Object.fromEntries(keys.map(k => [k.n, k.u]));
+  const pW = prof(keys.map(k => [k.u, k.w])), pHT = prof(keys.map(k => [k.u, k.ht])), pHB = prof(keys.map(k => [k.u, k.hb]));
+  const stT = prof(keys.map(k => [k.u, k.sT])), stB = prof(keys.map(k => [k.u, k.sB]));
+  // the side narrows over the back and under the belly: widest about 40 % of the way up, a rounded roof over the spine
+  const sect = (u, a, x, y, h1, h2) => { const yn = Math.min(1, Math.abs(y) / Math.max(1e-9, y >= 0 ? h1 : h2)); return [x * lerp(1, y >= 0 ? stT(u) : stB(u), sstep(0.04, 0.92, yn)), y]; };
+  // surface anatomy (radial factors): the spine along the back, the points of the hips, the shoulder blade and the
+  // triceps over the elbow, the hollow of the flank in front of the thigh
+  const G = (v, c, w) => Math.exp(-(((v - c) / w) ** 2));
+  const uSc = lerp(Uo.chest, Uo.shoulder, 0.35), uEl = lerp(Uo.chest, Uo.shoulder, 0.75), uHo = lerp(Uo.haunch, Uo.flank, 0.8);
+  const bump = (u, a) => {
+    const sa = Math.sin(a), ca = Math.abs(Math.cos(a));
+    let f = 0.014 * G(ca, 0, 0.09) * (sa > 0 ? 1 : 0) * sstep(Uo.rump, Uo.haunch, u) * (1 - sstep(Uo.shoulder, Uo.neckRoot, u));
+    f += 0.03 * G(u, Uo.haunch, 0.045) * G(ca, 0.66, 0.15) * (sa > 0 ? 1 : 0);
+    f += 0.026 * G(u, uSc, 0.06) * G(sa, 0.52, 0.28);
+    f += 0.022 * G(u, uEl, 0.05) * G(sa, -0.42, 0.28);
+    f -= 0.02 * G(u, uHo, 0.05) * G(sa, 0.02, 0.32);
+    return f;
+  };
+  const g = loft({ curve, seg: Math.round(44 * det), rad: 2 * Math.round(13 * det + 3), w: pW, ht: pHT, hb: pHB, nt: 2.05, nb: 2.3,
+    cap0: { type: 'round', len: 0.36, n: 4 }, cap1: { type: 'round', len: 0.6, n: 3 }, bend: 0.85, bump, sect });
+  L.torso = g; L.torsoCurve = curve; L.uOf = { ...Uo, neck2: lerp(Uo.neck1, Uo.neckTop, 0.5) };
+  L.torsoW = pW; L.torsoHt = pHT; L.torsoHb = pHB;
+  const at = (u, bias = 0.25) => { const f = g.frame(u); return f.c.addScaledVector(f.up, bias * pHT(u)); };
+  rig.add('Root', null, [0, 0, 0]);
+  rig.add('Hips', 'Root', at(Uo.haunch));
+  rig.add('Spine1', 'Hips', at(Uo.loin));
+  rig.add('Spine2', 'Spine1', at(Uo.barrel));
+  rig.add('Chest', 'Spine2', at(Uo.chest));
+  rig.add('Neck1', 'Chest', at(Uo.neckRoot, 0.1));
+  rig.add('Neck2', 'Neck1', at(L.uOf.neck2, 0));
+  L.axial = rig.spec(['Hips', 'Spine1', 'Spine2', 'Chest', 'Neck1', 'Neck2', 'Head'], [0, Uo.loin, Uo.barrel, Uo.chest, Uo.neckRoot + 0.02, L.uOf.neck2, Uo.neckTop - 0.01], 0.32);
+  return g;
+}
+
+/** Leg joints for the clip solver (graviportal: pillars, pad feet touching down at their front edge). */
+function eleLimbLayout(B, S, L) {
+  const U = L.U, z = L.zb;
+  for (const front of [true, false]) for (const side of [1, -1]) {
+    const x = side * (front ? 0.14 : 0.145) * U, J = (xx, y, zz, w, d) => ({ p: V3(xx, Math.max(0, y), zz), w: w * U, d: (d ?? w) * U });
+    // fore: top of the shoulder blade, shoulder joint, elbow, carpus, pad joint, front edge of the sole
+    // hind: hip joint, stifle, hock, pad joint, front edge of the sole
+    const joints = front
+      ? [J(x * 0.55, L.yb(0.9), z(0.31), 0.05, 0.07), J(x, L.yb(0.655), z(0.455), 0.085, 0.115), J(x, L.yl(0.47), z(0.35), 0.09, 0.11), J(x, L.yl(0.205), z(0.37), 0.078), J(x, L.yl(0.062), z(0.377), 0.079), J(x, 0, z(0.377) + 0.082 * U, 0.082)]
+      : [J(x, L.yb(0.7), z(-0.36), 0.1, 0.165), J(x * 1.03, L.yl(0.4), z(-0.322), 0.095, 0.12), J(x, L.yl(0.16), z(-0.35), 0.076, 0.08), J(x, L.yl(0.06), z(-0.341), 0.068, 0.076), J(x, 0, z(-0.341) + 0.081 * U, 0.069)];
+    const sfx = side > 0 ? 'L' : 'R', bones = (front ? LIMB_BONES.front : LIMB_BONES.hind).map(n => n + sfx);
+    const rj = joints[front ? 1 : 0], reach = Math.max(rj.w, rj.d * 0.7) * 2.4;
+    L.limbs.push({ front, side, sfx, st: 'graviportal', kind: 'graviportal', foot: 'pad', footType: 'pad', joints, bones, inf: front ? [1, 2, 1] : [0, 1, 0], reach, pull: 0.55 });
+  }
+}
+
+/** A leg lofted with its foot through its side-view outline; ring folds, a flat sole, toenails. */
+function eleLeg(B, S, L, lm) {
+  const det = B.det, rig = B.rig, U = L.U, yb = L.yb, yl = L.yl, J = lm.joints.map(j => j.p), side = lm.side, x = J[1].x;
+  // station: height, z (× U), front and back half-depths, half-width (× U)
+  const st = lm.front ? [
+    [yb(0.88), 0.33, 0.06, 0.065, 0.05], [yb(0.77), 0.395, 0.1, 0.11, 0.078], [yb(0.655), 0.43, 0.115, 0.13, 0.095], [yb(0.555), 0.39, 0.115, 0.135, 0.1],
+    [yl(0.47), 0.355, 0.1, 0.135, 0.1], [yl(0.4), 0.36, 0.096, 0.105, 0.096], [yl(0.31), 0.365, 0.088, 0.093, 0.09], [yl(0.245), 0.368, 0.082, 0.085, 0.085],
+    [yl(0.205), 0.37, 0.085, 0.085, 0.087], [yl(0.16), 0.372, 0.079, 0.079, 0.08], [yl(0.11), 0.374, 0.075, 0.075, 0.076], [yl(0.07), 0.376, 0.077, 0.077, 0.078],
+    [yl(0.03), 0.377, 0.081, 0.081, 0.081], [0, 0.377, 0.082, 0.082, 0.082],
+  ] : [
+    [yb(0.82), -0.37, 0.1, 0.11, 0.065], [yb(0.7), -0.365, 0.17, 0.19, 0.108], [yb(0.57), -0.355, 0.165, 0.188, 0.112], [yl(0.415), -0.3, 0.13, 0.175, 0.104],
+    [yl(0.34), -0.325, 0.102, 0.135, 0.094], [yl(0.27), -0.338, 0.091, 0.108, 0.087], [yl(0.205), -0.344, 0.083, 0.09, 0.082], [yl(0.16), -0.348, 0.08, 0.096, 0.081],
+    [yl(0.115), -0.345, 0.075, 0.079, 0.072], [yl(0.07), -0.342, 0.077, 0.08, 0.07], [yl(0.03), -0.341, 0.08, 0.083, 0.07], [0, -0.341, 0.081, 0.083, 0.069],
+  ];
+  const pts = st.map((s, i) => V3(i === 0 ? x * 0.6 : x, s[0], L.zb(s[1])));
+  const curve = makePath(pts), ku = knotUs(curve, pts.length);
+  const pF = prof(st.map((s, i) => [ku[i], s[2] * U])), pB = prof(st.map((s, i) => [ku[i], s[3] * U])), pW = prof(st.map((s, i) => [ku[i], s[4] * U]));
+  const yAt = prof(st.map((s, i) => [ku[i], s[0]]));
+  // rows three times denser on the lower leg, so the ring folds there are real creases
+  const uLow = ku[st.findIndex(s => s[0] <= yl(0.27))], NT = 240, cdf = [0];
+  for (let i = 1; i <= NT; i++) cdf.push(cdf[i - 1] + ((i - 0.5) / NT >= uLow ? 3.2 : 1));
+  const dist = (t) => { const c = t * cdf[NT]; let i = 1; while (i < NT && cdf[i] < c) i++; return (i - 1 + (c - cdf[i - 1]) / Math.max(1e-9, cdf[i] - cdf[i - 1])) / NT; };
+  const rings = lm.front ? [0.045, 0.08, 0.115, 0.18, 0.215, 0.25] : [0.045, 0.08, 0.115, 0.135, 0.17, 0.205], sig = 0.0065 * U;
+  const bump = (u) => { const y = yAt(u); let f = 0; for (const r of rings) { const d = (y - yl(r)) / sig; if (d * d < 9) f += Math.exp(-d * d); } return -0.04 * f; };
+  const g = loft({ curve, seg: Math.round(40 * det), rad: 2 * Math.round(7 * det + 2), dist, w: pW, ht: pF, hb: pB, nt: 2.1, nb: 2.1, up: [0, 0, 1], bump,
+    cap0: { type: 'round', len: 0.5, n: 3 }, cap1: 'flat', bend: 0.4, antifold: false });
+  // the sole flat on the ground
+  for (const q of g.rows[g.main[1]]) q.y = 0;
+  if (g.tip1) g.tip1.y = 0;
+  lm.grid = g; lm.us = ku;
+  // only the top of the shoulder blade / ilium is tucked into the body; the elephant's thigh and upper arm are the
+  // outline of the body there (tucked into the narrower rump they pinched)
+  lm.tuck = lm.front ? [ku[1], ku[2]] : [ku[0], ku[1]];
+  // skin by joint planes; the foot below a level plane at the pad joint, so it stays flat as the leg tilts
+  const nb = lm.bones.length, sj = J.slice(0, nb).concat([J[nb - 1].clone().add(V3(0, -0.05 * U, 0))]);
+  const h = lm.front ? J[1].y : J[0].y;
+  const skin = planeSkin(rig, sj, lm.bones, lm.front ? [0.07 * h, 0.06 * h, 0.035 * h, 0.03 * h] : [0.1 * h, 0.05 * h, 0.03 * h], lm.front ? [-0.3, 0.45] : [-0.25, 0.5], lm.front ? 'Chest' : 'Hips');
+  const nm = `leg-${lm.front ? 'front' : 'hind'}-${side > 0 ? 'left' : 'right'}`;
+  lm.emitLeg = () => emit(B.part(nm, { group: 'legs' }), g, (u, a, P) => B.paint({ part: P.y < yl(0.1) ? 'foot' : 'leg', u, a, P, front: lm.front, side }), skin);
+  // broad flat pale toenails round the front edge of the foot: four on the fore feet, three on the hind
+  const part = B.part(`foot-${nm.slice(4)}`, { group: 'feet' }), W = rig.W(lm.bones[nb - 1]), yN = 0.025 * U;
+  let lo = 0, hi = 1; for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (yAt(m) > yN) lo = m; else hi = m; }
+  for (const th of lm.front ? [-0.98, -0.33, 0.33, 0.98] : [-0.62, 0, 0.62]) {
+    const { p, n } = g.at(lo, Math.PI / 2 - th), nn = V3(n.x, 0, n.z).normalize(), c = p.clone().addScaledVector(nn, -0.003 * U); c.y = yN;
+    emit(part, ellipsoid(c, 0.03 * U, 0.023 * U, 0.011 * U, nn, [0, 1, 0], 3, 2 * Math.round(3 * det + 1)), 'hoof', W);
+  }
+  return g;
+}
+
+/** Head and trunk: one loft from the back of the skull over the brow, down the forehead and along the trunk. */
+function eleHead(B, S, L) {
+  const det = B.det, rig = B.rig, U = L.U, R = L.R, hp = L.hp;
+  const head = [[0.6, 0.79], [0.7, 0.8], [0.81, 0.775], [0.905, 0.715], [0.965, 0.635]].map(([z, y]) => hp(z, y)), base = head[4];
+  // the trunk hangs from its base (× muzzleLen about the base), its tip a little forward and clear of the ground
+  const yMin = 0.06 * L.H;
+  const trunk = [[1.0, 0.53], [1.012, 0.42], [1.016, 0.31], [1.012, 0.21], [1.02, 0.135], [1.042, 0.098]].map(([z, y]) => base.clone().lerp(hp(z, y), L.ts));
+  for (const q of trunk) if (q.y < yMin) { q.z += (yMin - q.y) * 0.8; q.y = yMin; }
+  const path = [...head, ...trunk], curve = makePath(path), ku = knotUs(curve, path.length), uB = ku[4];
+  const tOf = (u) => clamp((u - uB) / (1 - uB), 0, 1);
+  // head sections at the five head stations: half-width, forehead and underside half-heights (× head scale)
+  const hk = [[0.158, 0.13, 0.2], [0.175, 0.178, 0.222], [0.168, 0.165, 0.2], [0.128, 0.117, 0.127], [0.085, 0.084, 0.085]].map(k => k.map(v => v * R));
+  const hW = prof(hk.map((k, i) => [ku[i], k[0]])), hT = prof(hk.map((k, i) => [ku[i], k[1]])), hBt = prof(hk.map((k, i) => [ku[i], k[2]]));
+  const rTip = 0.026 * R, tr = (t, r0) => lerp(r0, rTip, Math.pow(t, 0.9));
+  const W = (u) => u <= uB ? hW(u) : tr(tOf(u), hk[4][0]) * lerp(1, 1.03, sstep(0, 0.1, tOf(u)));
+  const HT = (u) => u <= uB ? hT(u) : tr(tOf(u), hk[4][1]);
+  const HB = (u) => u <= uB ? hBt(u) : tr(tOf(u), hk[4][2]) * lerp(1, 0.9, sstep(0, 0.1, tOf(u)));
+  const NT = prof([[ku[0], 2.2], [ku[1], 2.45], [ku[2], 2.5], [ku[3], 2.45], [uB, 2.05], [1, 2.0]]), NB = prof([[ku[0], 2.2], [ku[2], 2.2], [ku[3], 2.1], [uB, 2.0], [lerp(uB, 1, 0.1), 2.35], [1, 2.3]]);
+  // rows: the head, then three a ring fold along the trunk (a crease row between two plain ones)
+  const nR = det >= 0.9 ? 16 : 10, Kh = Math.max(8, Math.round(18 * det)), Kt = 3 * nR, K = Kh + Kt;
+  const dist = (t) => { const k = t * K; return k <= Kh ? (k / Kh) * uB : uB + ((k - Kh) / Kt) * (1 - uB); };
+  // the temporal hollow above and behind the eye; the trunk's ring folds, deeper over its top
+  const uF = lerp(ku[2], ku[3], 0.12);
+  const bump = (u, a) => {
+    const sa = Math.sin(a);
+    if (u <= uB) { const e = Math.atan2(sa, Math.abs(Math.cos(a))); return -0.09 * Math.exp(-(((u - uF) / 0.035) ** 2) - ((e - 0.36) / 0.2) ** 2); }
+    const t = tOf(u);
+    return -0.07 * Math.pow(Math.abs(Math.cos(Math.PI * t * nR)), 12) * (0.45 + 0.55 * Math.max(0, sa)) * sstep(0.04, 0.12, t) * (1 - sstep(0.9, 0.97, t));
+  };
+  const g = loft({ curve, seg: K, dist, rad: 2 * Math.round(9 * det + 3), w: W, ht: HT, hb: HB, nt: NT, nb: NB, up: [0, 1, 0], bump,
+    cap0: { type: 'round', len: 0.7, n: 3 }, cap1: 'flat', bend: 0.25, antifold: false });
+  L.trunkTipRest = trunk[trunk.length - 1].clone();
+  L.head = g; L.headO = head[0].clone(); L.hd = base.clone().sub(head[0]).normalize(); L.hu = V3(0, 1, 0); L.Lh = head[0].distanceTo(base);
+  L.headS = { s0: 0.6, sEye: 0.5, uB, ku };
+  rig.add('Head', 'Neck2', hp(0.61, 0.775));
+  // trunk bones along the trunk, from its base
+  const tcurve = makePath([base, ...trunk]), names = [], tus = [];
+  for (let i = 0; i < 5; i++) { names.push('Trunk' + (i + 1)); tus.push(i / 5); rig.add('Trunk' + (i + 1), i ? 'Trunk' + i : 'Head', tcurve.getPointAt(i / 5), tcurve.getPointAt((i + 1) / 5)); }
+  const spec = rig.spec(names, tus, 0.4), headW = rig.W('Head');
+  const skin = (u) => { const w = sstep(uB - 0.04, uB + 0.06, u); return w <= 0 ? headW : mixW(headW, rig.chain(spec, tOf(u)), w); };
+  // two parts sharing the row at the trunk base (the trunk can be hidden; finish blends their normals across it)
+  const kb = g.main[0] + Kh, nr = g.rows.length;
+  const sub = (k0, k1, tip0, tip1) => ({ rows: g.rows.slice(k0, k1 + 1), us: g.us.slice(k0, k1 + 1), R: g.R, closed: false, tip0, tip1, main: [0, k1 - k0] });
+  const uE = lerp(ku[2], ku[3], 0.3);
+  const mouth = (u, a) => u > lerp(ku[2], ku[3], 0.85) && u < uB - 0.01 && Math.abs(a - 1.5 * Math.PI) < 0.32;
+  emit(B.part('head', { group: 'head' }), sub(0, kb, g.tip0, null), (u, a, P) => mouth(u, a) ? 'mouth' : B.paint({ part: 'head', u, a, P, s0: 0.6 }), skin);
+  emit(B.part('trunk', { group: 'head' }), sub(kb, nr - 1, null, g.tip1), (u, a, P) => tOf(u) > 0.995 ? 'nose' : B.paint({ part: 'trunk', u: tOf(u), a, P, rings: nR * 2.5 }), skin);
+  // the trunk's two fingers: lips of its tip, front and back
+  const tipF = g.frame(1), tPart = B.part('trunk', { group: 'head' }), T5 = rig.W('Trunk5');
+  for (const s of [1, -1]) {
+    const c = tipF.c.clone().addScaledVector(tipF.up, s * HT(1) * 0.7).addScaledVector(tipF.t, -0.004 * R);
+    emit(tPart, ellipsoid(c.addScaledVector(tipF.t, 0.012 * R), 0.011 * R, 0.008 * R, 0.017 * R, tipF.t, tipF.up, 3, 2 * Math.round(3 * det + 1)), (u, a, P) => B.paint({ part: 'trunk', u: 1, a, P }), T5);
+  }
+  // ── the jaw: short and deep, ending in the pointed lower lip under the trunk; hinged under the ear
+  const jp = [hp(0.715, 0.628), hp(0.8, 0.585), hp(0.88, 0.562), hp(0.948, 0.566)];
+  const jk = [[0.082, 0.036, 0.052], [0.078, 0.032, 0.052], [0.054, 0.025, 0.038], [0.022, 0.013, 0.016]].map(k => k.map(v => v * R));
+  const jc = makePath(jp), jku = knotUs(jc, jp.length);
+  const jg = loft({ curve: jc, seg: Math.round(12 * det), rad: 2 * Math.round(6 * det + 2), w: prof(jk.map((k, i) => [jku[i], k[0]])), ht: prof(jk.map((k, i) => [jku[i], k[1]])), hb: prof(jk.map((k, i) => [jku[i], k[2]])),
+    nt: 1.9, nb: 2.2, up: [0, 1, 0], cap0: { type: 'round', len: 0.6, n: 2 }, cap1: { type: 'round', len: 1.1, n: 2 }, bend: 0.5 });
+  rig.add('Jaw', 'Head', hp(0.72, 0.648), jp[3]);
+  L.jaw = jg; L.lipRest = jp[3].clone();
+  emit(B.part('jaw', { group: 'head' }), jg, (u, a, P) => Math.sin(a) > 0.75 && u > 0.35 && u < 0.85 ? 'mouth' : B.paint({ part: 'jaw', u, a, P, s0: 0.6 }), rig.W('Jaw'));
+  // ── small eyes set low on the side of the head, with heavy lids
+  const eyeR = 0.0118 * R * (S.eye / SPECIES.elephant.eye);
+  L.eyes = [1, -1].map((side) => {
+    const dir = V3(side * 0.93, -0.16, 0.33).normalize(), hit = surfaceToward(g, g.frame(uE).c, dir, ku[1], ku[3]);
+    return { c: hit.p.clone().addScaledVector(hit.n, -eyeR * 0.45), dir: hit.n.clone().lerp(dir, 0.35).normalize(), side };
+  });
+  for (const { c, dir } of L.eyes) {
+    emit(B.part('eyes', { group: 'head' }), ellipsoid(c, eyeR, eyeR * 0.85, eyeR, dir, V3(0, 1, 0), Math.round(6 * det + 2), 2 * Math.round(5 * det + 2)), (u) => u > 0.86 ? 'pupil' : 'eye', headW);
+    if (det >= 0.9) {
+      const bas = basisFrom(dir, V3(0, 1, 0)), ring = [];
+      for (let i = 0; i < 14; i++) { const t = (i / 14) * TAU; ring.push(c.clone().addScaledVector(dir, eyeR * 0.2).addScaledVector(bas.s, Math.cos(t) * eyeR * 1.0).addScaledVector(bas.u, Math.sin(t) * eyeR * 0.85)); }
+      emit(B.part('eyelids', { group: 'head' }), loft({ pts: ring, closed: true, seg: 14, rad: 5, w: eyeR * 0.24, ht: eyeR * 0.24, hb: eyeR * 0.24, up: dir }), 'lid', headW);
+    }
+  }
+  return g;
+}
+
+/** Max |x| of the head, jaw and torso near (z, y): what an ear must lie outside of. */
+function eleSideX(L) {
+  const cell = 0.012 * L.U, m = new Map(), key = (y, z) => `${Math.floor(y / cell)},${Math.floor(z / cell)}`;
+  for (const g of [L.head, L.jaw, L.torso]) for (const row of g.rows) for (const q of row) { const k = key(q.y, q.z); if (Math.abs(q.x) > (m.get(k) || 0)) m.set(k, Math.abs(q.x)); }
+  return (y, z) => { const cy = Math.floor(y / cell), cz = Math.floor(z / cell); let b = 0; for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) b = Math.max(b, m.get(`${cy + dy},${cz + dz}`) || 0); return b; };
+}
+
+/** Ears: an Africa-shaped shell hung from a curved root line on the side of the head and laid back over the neck and shoulder. */
+function eleEars(B, S, L) {
+  const det = B.det, rig = B.rig, U = L.U, E = L.es * U, sideX = eleSideX(L);
+  // outline (z forward, y up; × ear size) from the top of the root: front edge (the top corner, down the root to its
+  // bottom at the corner of the mouth), top edge, back edge (bulging high up, then sweeping down and forward), and the
+  // free lower edge from the root to the pointed lobe
+  const P = (a) => a.map(([z, y]) => V3(0, y, z));
+  const cF = makePath(P([[-0.004, 0.1], [-0.008, 0.055], [0, 0], [0.006, -0.135], [0.01, -0.27]]));
+  const cT = makePath(P([[-0.004, 0.1], [-0.11, 0.118], [-0.23, 0.112], [-0.33, 0.08]]));
+  const cB = makePath(P([[-0.33, 0.08], [-0.385, 0.015], [-0.402, -0.07], [-0.377, -0.17], [-0.31, -0.27], [-0.2, -0.355], [-0.08, -0.4]]));
+  const cL = makePath(P([[0.01, -0.27], [0.004, -0.33], [-0.03, -0.375], [-0.08, -0.4]]));
+  const c00 = cF.getPointAt(0), c10 = cB.getPointAt(0), c01 = cF.getPointAt(1), c11 = cB.getPointAt(1);
+  const coons = (u, v) => cT.getPointAt(u).multiplyScalar(1 - v).add(cL.getPointAt(u).multiplyScalar(v)).add(cF.getPointAt(v).multiplyScalar(1 - u)).add(cB.getPointAt(v).multiplyScalar(u))
+    .sub(c00.clone().multiplyScalar((1 - u) * (1 - v))).sub(c10.clone().multiplyScalar(u * (1 - v))).sub(c01.clone().multiplyScalar((1 - u) * v)).sub(c11.clone().multiplyScalar(u * v));
+  const nu = Math.round(16 * det) + 2, nv = Math.round(14 * det) + 2;
+  L.earInfo = {};
+  for (const side of [1, -1]) {
+    const rt = L.hp(0.748, 0.872), rb = L.hp(0.772, 0.61);
+    const RT = V3(side * sideX(rt.y, rt.z), rt.y, rt.z), RB = V3(side * sideX(rb.y, rb.z), rb.y, rb.z);
+    // the outline laid out on the body: z, y from the outline; x outside the head, neck and shoulder, a little further
+    // off toward the free back edge and the lobe, then smoothed so the shell bends evenly (concave toward the body)
+    const grid = [], xs = [];
+    for (let i = 0; i <= nu; i++) {
+      grid.push([]); xs.push([]);
+      for (let j = 0; j <= nv; j++) {
+        const u = i / nu, v = j / nv, q = coons(u, v), y = RT.y + q.y * E, z = RT.z + q.z * E;
+        grid[i].push(V3(0, y, z));
+        xs[i].push(sideX(y, z) + U * (0.008 + 0.042 * sstep(0.04, 1, u) + 0.03 * sstep(0.45, 1, v)));
+      }
+    }
+    const K = 3, sm = (a, i, j) => { let s = 0, n = 0; for (let di = -K; di <= K; di++) for (let dj = -K; dj <= K; dj++) { const ii = clamp(i + di, 0, nu), jj = clamp(j + dj, 0, nv); s += a[ii][jj]; n++; } return s / n; };
+    const dil = xs.map((row, i) => row.map((_, j) => { let m = 0; for (let di = -K; di <= K; di++) for (let dj = -K; dj <= K; dj++) m = Math.max(m, xs[clamp(i + di, 0, nu)][clamp(j + dj, 0, nv)]); return m; }));
+    const xsm = dil.map((row, i) => row.map((_, j) => sm(dil, i, j)));
+    for (let i = 0; i <= nu; i++) for (let j = 0; j <= nv; j++) {
+      const u = i / nu, v = j / nv, q = grid[i][j], curl = (1 - sstep(0, 0.14, v)) ** 2;
+      // the top margin rolls outward and over; the back margin turns out a little; soft folds run down the ear
+      const x = xsm[i][j] + E * (0.026 * curl * Math.pow(Math.sin(Math.PI * clamp(u * 1.08, 0, 1)), 0.6) + 0.02 * sstep(0.8, 1, u) * (1 - 0.5 * v) + 0.009 * Math.sin(TAU * (1.4 * u + 0.6 * v) - 0.5) * sstep(0.15, 0.45, u));
+      q.x = side * x; q.y -= E * 0.012 * curl;
+    }
+    const bone = side > 0 ? 'EarL' : 'EarR', pivot = RT.clone().lerp(RB, 0.5);
+    rig.add(bone, 'Head', pivot, grid[Math.round(nu * 0.6)][Math.round(nv * 0.45)]);
+    // which face of the sheet looks toward the body (the pinker inner skin)
+    const n0 = new THREE.Vector3().crossVectors(grid[nu][Math.round(nv / 2)].clone().sub(grid[0][Math.round(nv / 2)]), grid[Math.round(nu / 2)][nv].clone().sub(grid[Math.round(nu / 2)][0]));
+    const inner = n0.x * side < 0 ? 1 : -1;
+    sheet(B.part('ears', { group: 'ears' }), { nu, nv, f: (u, v) => grid[Math.round(u * nu)][Math.round(v * nv)].clone(),
+      th: (u, v) => E * (0.009 + 0.018 * (1 - sstep(0, 0.14, u)) + 0.009 * Math.max(sstep(0.86, 1, u), sstep(0.88, 1, v), 1 - sstep(0, 0.1, v))),
+      zone: (u, v, face) => face === inner && v > 0.13 && u > 0.1 ? 'skin' : B.paint({ part: 'ear', u, a: v * TAU, P: grid[Math.round(u * nu)][Math.round(v * nv)] }),
+      skin: (u) => u < 0.14 ? rig.W2('Head', bone, u / 0.14) : rig.W(bone) });
+    // what the clips need: the fan axis (the root line, upward) and points along the free edges to keep clear of the body
+    const edge = [];
+    for (const [u, v] of [[1, 0.1], [1, 0.3], [1, 0.5], [0.85, 0.8], [0.55, 0.95], [0.3, 1], [0.7, 0.05], [0.4, 0.02]]) edge.push(grid[Math.round(u * nu)][Math.round(v * nv)].clone());
+    L.earInfo[bone] = { axis: RT.clone().sub(RB).normalize(), pivot, edge, side };
+  }
+}
+
+/** Tusks from skin sheaths beside the trunk base, curving down, forward and up. */
+function eleTusks(B, S, L) {
+  const T = S.tusks;
+  if (!T || T.style === 'none' || !(T.len > 0)) return;
+  const det = B.det, U = L.U, len = T.len * U, r0 = (T.thk ?? 0.064) * len, part = B.part('tusks', { group: 'horns' }), W = B.rig.W('Head');
+  for (const side of [1, -1]) {
+    const I0 = L.hp(0.89, 0.65, 0.08 * side), E = L.hp(0.935, 0.6, 0.1 * side);
+    const d0 = V3(side * 0.12, -0.9, 0.4).normalize(), d1 = V3(-side * 0.06, 0.5, 0.86).normalize(), N = 10, pts = [I0, E];
+    let q = E.clone();
+    for (let i = 1; i <= N; i++) { const t = (i - 0.5) / N; q = q.clone().addScaledVector(d0.clone().lerp(d1, sstep(0, 1, t) * 0.7 + t * 0.3).normalize(), len / N); pts.push(q); }
+    const c = makePath(pts), uE = knotUs(c, pts.length)[1];
+    emit(part, loft({ curve: c, seg: Math.round(14 * det), rad: 2 * Math.round(4 * det + 2), w: (u) => r0 * (u < uE ? 1.05 : 1 - 0.42 * Math.pow((u - uE) / (1 - uE), 1.6)), ht: (u) => r0 * (u < uE ? 1.05 : 1 - 0.42 * Math.pow((u - uE) / (1 - uE), 1.6)), hb: (u) => r0 * (u < uE ? 1.05 : 1 - 0.42 * Math.pow((u - uE) / (1 - uE), 1.6)),
+      cap0: 'flat', cap1: { type: 'round', len: 1.2, n: 3 }, bend: 0.3 }), 'teeth', W);
+    // the sheath of skin the tusk leaves the face through, with its folds
+    const sg = loft({ pts: [E.clone().addScaledVector(d0, -0.03 * U), E.clone().addScaledVector(d0, 0.042 * U)], seg: Math.round(5 * det + 1), rad: 2 * Math.round(5 * det + 2),
+      w: (u) => r0 * lerp(1.6, 1.13, u), ht: (u) => r0 * lerp(1.6, 1.13, u), hb: (u) => r0 * lerp(1.6, 1.13, u), bump: (u) => -0.06 * Math.pow(Math.abs(Math.cos(Math.PI * u * 3)), 8), cap0: 'flat', cap1: 'open', bend: 0 });
+    emit(part, sg, (u, a, P) => B.paint({ part: 'head', u: 0.9, a, P }), W);
+  }
+}
+
+/** Tail: hangs close down the rump, its flat tuft of black bristles at the end. */
+function eleTail(B, S, L) {
+  const T = S.tail;
+  if (!T || T.style === 'none' || !(T.len > 0)) return;
+  if (T.style !== 'tuft') return tetraTail(B, S, L);
+  const rig = B.rig, det = B.det, U = L.U, len = T.len * U, r0 = (T.thk ?? 0.017) * U;
+  const y0 = L.yb(0.705), clearZ = (y) => rearZAt(L, y, 0) - r0 - 0.008 * U;
+  const pts = [V3(0, y0 + 0.01 * U, rearZAt(L, y0, 0) + 0.02 * U)];
+  for (let i = 1; i <= 8; i++) { const t = i / 8, y = y0 - t * len * 0.97; pts.push(V3(0, y, Math.min(rearZAt(L, y0, 0) - 0.02 * U - 0.035 * U * Math.sin(Math.PI * Math.min(1, t * 1.6)), y > L.yb(0.5) ? clearZ(y) : Infinity))); }
+  const curve = makePath(pts);
+  const g = loft({ curve, seg: Math.round(16 * det), rad: 2 * Math.round(4 * det + 2), w: (u) => r0 * (1 - 0.5 * u), ht: (u) => r0 * (1 - 0.5 * u), hb: (u) => r0 * (1 - 0.5 * u),
+    cap0: { type: 'round', len: 0.5, n: 2 }, cap1: { type: 'round', len: 0.7, n: 2 }, bend: 0.4 });
+  const nb = T.bones ?? 4, names = [], us = [];
+  for (let i = 0; i < nb; i++) { names.push('Tail' + (i + 1)); us.push(i / nb); rig.add('Tail' + (i + 1), i ? 'Tail' + i : 'Hips', curve.getPointAt(i / nb), curve.getPointAt(Math.min(1, (i + 1) / nb))); }
+  const spec = rig.spec(names, us, 0.4);
+  L.tail = { grid: g, curve, bones: names, len, spec };
+  emit(B.part('tail', { group: 'tail' }), g, (u, a, P) => B.paint({ part: 'tail', u, a, P }), (u) => u < 0.06 ? rig.W2('Hips', 'Tail1', u / 0.06) : rig.chain(spec, u));
+  // the tuft: stiff black bristles in a flat fan either side of the tip
+  const t0 = curve.getPointAt(0.84), t1 = curve.getPointAt(1).clone().add(V3(0, -0.07 * U, -0.004 * U));
+  const hg = loft({ pts: [t0, t0.clone().lerp(t1, 0.5), t1], seg: Math.round(8 * det), rad: 2 * Math.round(4 * det + 2), up: [0, 0, -1],
+    w: (u) => U * (0.008 + 0.03 * Math.sin(Math.PI * Math.min(1, u * 1.15 + 0.05))), ht: (u) => U * 0.007 * (1 - 0.5 * u), hb: (u) => U * 0.007 * (1 - 0.5 * u),
+    bump: (u, a) => 0.25 * Math.max(0, Math.sin(a * 9 + u * 13)) * u, cap0: { type: 'round', len: 0.5, n: 2 }, cap1: { type: 'round', len: 0.4, n: 2 }, bend: 0.3 });
+  emit(B.part('tail', { group: 'tail' }), hg, 'mane', (u, a, P) => rig.near(P, names.slice(-2), 0.06 * U));
+}
+
+/** Coat painter: the species' zones, then the folds of an elephant's skin (the fine net of creases between them is drawn
+ *  by the coat atlas itself: `crease` in the species preset, see creaseTile). */
+function elePainter(S, L) {
+  const generic = makePainter(S, L), U = L.U, yFoot = L.yl(0.1), sd = (S.seed ?? 7) | 0, kn = 3 / U;
+  // a fold: a narrow wavy band round a part (phase ph), broken where the noise is low
+  const fold = (ph, width) => Math.abs(fract(ph) - 0.5) > 0.5 - width;
+  return (q) => {
+    const zone = generic(q);
+    if (zone !== 'body') return zone;
+    const { part, P } = q, u = q.u ?? 0, a = q.a ?? 0, n = vnoise(P.x * kn, P.y * kn, P.z * kn, sd + 3);
+    switch (part) {
+      case 'trunk':
+        // ring folds round the trunk, deeper over its top
+        return fold(u * (q.rings ?? 40) + 0.7 * (n - 0.5), 0.09) ? (Math.sin(a) > -0.3 ? 'pattern' : 'marking') : zone;
+      case 'leg': case 'foot':
+        // rings of folds round the legs, the feet a little darker with dust and mud
+        if (fold(P.y / (0.028 * U) + 1.6 * (n - 0.5), 0.07) && vnoise(P.x * kn * 3, P.y * kn, P.z * kn * 3, sd + 5) > 0.38) return 'pattern';
+        return P.y < yFoot ? 'belly' : zone;
+      case 'torso': case 'neck':
+        // long upright folds down the flanks behind the shoulder and in front of the thigh
+        return Math.abs(Math.sin(a)) < 0.75 && fold(P.z / (0.06 * U) + 2.2 * (n - 0.5), 0.05) && vnoise(P.x * kn, P.y * kn * 0.4, P.z * kn * 2, sd + 7) > 0.56 ? 'marking' : zone;
+      default: return zone;
+    }
+  };
+}
+
+/** Builds an elephant (torso, legs, head and trunk, ears, tusks, tail) into B; returns its layout. */
+function elephantBuild(B, S, p) {
+  const L = eleLayout(S, p);
+  eleTorso(B, S, L);
+  B.paint = elePainter(S, L);
+  eleLimbLayout(B, S, L);
+  tetraLimbBones(B, L);
+  eleHead(B, S, L);
+  if (S.ear && S.ear.style !== 'none') { if (S.ear.style === 'fan') eleEars(B, S, L); else tetraEars(B, S, L); }
+  for (const lm of L.limbs) eleLeg(B, S, L, lm);
+  // (the limb roots are blended into the body before either is emitted)
+  blendLimbRoots(B, S, L);
+  for (const lm of L.limbs) lm.emitLeg();
+  emit(B.part('body', { group: 'body' }), L.torso, (u, a, P) => B.paint({ part: u > L.uOf.neckRoot ? 'neck' : 'torso', u, a, P }), tetraTorsoSkin(B, L));
+  eleTail(B, S, L);
+  eleTusks(B, S, L);
+  return L;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
  *  COAT PAINTER — maps (part, u, a, P) to a zone key. Patterns are evaluated in
  *  rest space scaled by body height, so stripes / spots scale with the animal.
  * ════════════════════════════════════════════════════════════════════════════ */
@@ -2899,17 +3333,14 @@ const SPECIES_DEFS = {
     headAng: 15, headLen: 0.33, headD: 0.43, headW: 0.37, snout: 0.36, eye: 0.042, legThk: 1.32, cheek: 1.32, ear: { style: 'round', len: 0.17, w: 0.95, s: 0.24, a: 0.82 },
     tail: { style: 'thin', len: 0.95, thk: 0.045, set: -45, curl: 25, tipCurl: 15 }, pattern: 'tiger', countershade: 0.55, cheeks: true, earZone: 'pattern',
     palette: pal({ body: '#d27a2c', belly: '#f3ead8', pattern: '#1b1310', marking: '#1b1310', eye: '#c8a034', nose: '#c07a72' }) },
-  // Digital Diorama revision 7: high shoulders, the back sloping down to a lower, rounded rump, a deep round belly and a
-  // more compact body (it was long, flat-backed and boxy)
-  elephant: { label: 'African Elephant', fam: { stance: 'graviportal', nose: 'none' }, keel: 0.2, waist: 0.02, hind: { kY: 0.5, kZ: 0.06, aY: 0.19, aZ: -0.02 }, H: 3.0, len: 0.9, depth: 0.5, width: 0.92, rump: 0.84, rumpDepth: 0.98, tuck: 0, belly: 0.4,
-    withers: 0.12, withersBack: 0.6, withersFront: 0.22, nt: 1.95, nb: 1.7, croupFlat: 0.9, croupSlope: 0.3,
-    // Digital Diorama revision: a big domed head; ears hang back over the shoulders from their front edge
-    // (they used to spread both ways from the root and jut forward over the face); a longer, thicker trunk;
-    // the back dips behind the shoulders
-    neckAng: 12, neckLen: 0.08, neckThk: 0.95, neckW: 0.9, headAng: 42, headLen: 0.38, headD: 0.7, headW: 0.46, snout: 0.28, snoutW: 0.62, snoutD: 0.62, stop: 0, dome: 1.2, eye: 0.025, eyeS: 0.6, eyeYaw: 78, eyeEl: 0, legThk: 1.2, nails: 4, sag: 0.04,
-    ear: { style: 'fan', fanH: 0.62, fanW: 0.4, fanTop: 0.4, fanGap: 0.09, len: 1.12, w: 0.42, s: 0.2, a: 1.05 }, trunk: { len: 0.78, thk: 0.19, curl: 0.6 }, tusks: { style: 'elephant', len: 0.42, thk: 0.1, s: 0.78, a: 0.75 },
-    tail: { style: 'tuft', len: 0.38, thk: 0.02, set: -80, tuft: 1.8 }, countershade: 0,
-    palette: pal({ body: '#7f7a74', belly: '#77726c', marking: '#5d5853', mane: '#2b2826', skin: '#8f7d78', hoof: '#cfc6b6', teeth: '#efe5cc' }) },
+  // Digital Diorama revision 8: built by its own builder (see ELEPHANT); these numbers are its scales: len, the torso from
+  // the point of shoulder to the point of buttock, depth, withers to belly line (× shoulder height); headLen, snout, eye,
+  // ear.len, tusks and tail are the reference sizes the headSize, muzzleLen, earSize and tail sliders scale
+  elephant: { label: 'African Elephant', builder: 'elephant', fam: { stance: 'graviportal', nose: 'none' }, H: 3.0, len: 1.1, depth: 0.575, width: 1, rump: 0.84,
+    neckLen: 0.08, headLen: 0.4, snout: 0.5, eye: 0.03, legThk: 1.2, nails: 4, countershade: 0, grain: 0, crease: { cell: 9, width: 0.07, dark: 0.78, zones: ['body', 'belly', 'skin', 'marking'] },
+    ear: { style: 'fan', len: 1 }, trunk: { len: 1 }, tusks: { style: 'elephant', len: 0.45, thk: 0.07 },
+    tail: { style: 'tuft', len: 0.37, thk: 0.017 }, gaits: { walk: 'walk', trot: 'amble', gallop: null }, pantograph: 1,
+    palette: pal({ body: '#867f77', belly: '#776f68', marking: '#6c665f', pattern: '#57524c', mane: '#22201e', skin: '#8f7d77', hoof: '#d4cbba', teeth: '#efe6cf', nose: '#4b4542', lid: '#59524c', eye: '#3c2a1e', mouth: '#a27270' }) },
   giraffe: { label: 'Giraffe', fam: UNGULATE, hind: { kY: 0.78, kZ: 0.12, aY: 0.53, aZ: -0.07, fY: 0.12, fZ: -0.06, cY: 0.045 }, hindShape: { breech: 0.08, hams: 0, inset: 0.06 }, H: 3.0, len: 0.62, depth: 0.34, width: 0.82, rump: 0.82, rumpDepth: 0.9, tuck: 0.2, withers: 0.25,
     neckAng: 62, neckLen: 0.66, neckThk: 0.5, neckW: 0.62, headAng: 60, headLen: 0.19, headD: 0.24, headW: 0.2, snout: 0.55, snoutW: 0.6, snoutD: 0.5, stop: 0.1, eye: 0.06, eyeS: 0.3, legThk: 0.55, tibiaSlope: 0.7,
     ear: { style: 'pointed', len: 0.4, w: 0.42, s: 0.12, a: 1.05, spread: 70, tilt: -5, turn: 35 }, horns: { style: 'ossicones', len: 0.45, thk: 0.07, s: 0.1, a: 0.42 },
@@ -3223,7 +3654,10 @@ function gaitSetFor(S, p) {
 // (Digital Diorama revision 7: elephants walk with short steps and hardly bob; their columnar legs could only follow the
 // standard strides by sinking the body a quarter of a metre)
 const GAIT_TUNE = { cheetah: { gallop: { lambda: 3.8, spine: 15, bob: 0.04 } }, rabbit: { trot: { lambda: 2.2, fr: 0.7 }, gallop: { lambda: 2.6 } }, squirrel: { trot: { lambda: 2.2, fr: 0.7 } },
-  elephant: { walk: { lambda: 1.05 }, trot: { lambda: 1.45 } }, otter: { walk: { lift: 0.1 } } };
+  // (Digital Diorama revision 8: walk duty 0.65 and an amble that never leaves the ground (duty 0.55); short, slow steps (a
+  // pillar leg cannot lengthen, so long ones made the body sink and the other legs fold); each foot's stance centred under
+  // its girdle; the feet lifted ~0.06 of the height; the carpus folding back in the swing)
+  elephant: { walk: { lambda: 0.85, fr: 0.09, duty: 0.65, lift: 0.09, bob: 0.008, hindO: -0.12, frontO: 0.05, flexF: 55, flexH: 12, dropK: 4 }, trot: { lambda: 1.15, fr: 0.4, duty: 0.55, lift: 0.09, bob: 0.02, hindO: -0.1, frontO: 0.05, flexF: 62, flexH: 16, dropK: 5 } }, otter: { walk: { lift: 0.1 } } };
 const RIGS = new WeakMap();
 
 /* ── planar helpers in a bone's (z, y) plane: ψ = atan2(z, y); a rotation about +X by δ adds δ to ψ ── */
@@ -3503,11 +3937,14 @@ function gaitSample(info, name, u, raw = false) {
   if (G.run) earsTo(info, s, -6);
   const fk = fkOf(info, s);
   for (const { lm, tr } of tracks) if (tr) solveLeg(info, fk, lm, { c: lm.tip.clone().add(V3(0, tr.dy, tr.dz)), toe: tr.toe, heel: tr.heel * (lm.foot === 'sole' ? 1 : 0), flex: tr.flex }, s);
+  // (Digital Diorama revision 8: an elephant's ears move gently with its steps, and are kept clear of the body)
+  if (info.elephant && !raw) { earFan(info, s, 'EarL', 6 + 4 * Math.sin(TAU * u * 2 + 0.6)); earFan(info, s, 'EarR', 6 + 4 * Math.sin(TAU * u * 2 + 2.2)); earGuard(info, s); }
   return s;
 }
 
 function sampleFor(info, name, u) {
   if (info.gaits[name]) { adaptStrides(info); return gaitSample(info, name, u); }
+  if (info.elephant && ELE_CLIP_SPEC[name]) return eleSample(info, name, u);
   const s = {}, h = info.hipH, H = info.H;
   switch (name) {
     case 'idle': {
@@ -3631,6 +4068,166 @@ function lieDown(info, s, t) {
   }
 }
 
+/* ── Elephant clips (Digital Diorama revision 8) ──
+ * An elephant's ears fan about their root lines (earFan) and never touch the body: earGuard fans an ear further out
+ * whenever a pose would bring its free edge within a few centimetres of the shoulder or neck (a turned or lowered head
+ * swings the ear behind it into the shoulder). Idle shifts the weight from side to side over planted feet while the
+ * trunk swings and curls and the ears fan; graze reaches the trunk down to the grass in front of the forefeet, curls it
+ * round a tuft and swings it up to the mouth; alert spreads the ears wide and lifts the head; roar is a trumpet, the
+ * trunk raised up and forward, the ears spread and the mouth open; sit is lying down. */
+const ELE_CLIP_SPEC = { idle: [6, 73, true], graze: [4.8, 61, true], alert: [3.2, 41, true], roar: [2.4, 49, false], sit: [2.4, 37, false] };
+/** Sets an elephant's ear to `deg` degrees fanned out about its root line (in the head's frame). */
+function earFan(info, s, bone, deg) {
+  const E = info.ears && info.ears[bone];
+  if (!E || !info.has[bone]) return;
+  const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromAxisAngle(E.axis, -E.side * deg * DEG), 'YXZ');
+  s[bone] = [e.x / DEG, e.y / DEG, e.z / DEG];
+  (s.__fan || (s.__fan = {}))[bone] = deg;
+}
+/** Fans each ear further out until its free edges clear the body (see the note above). */
+function earGuard(info, s) {
+  if (!info.ears) return;
+  const clr = 0.014 * info.U;
+  for (const [bone, E] of Object.entries(info.ears)) {
+    if (!info.has[bone]) continue;
+    let fan = (s.__fan && s.__fan[bone]) ?? 0;
+    for (let it = 0; it < 8; it++) {
+      const fk = fkOf(info, s), Me = fk(bone);
+      let need = 0;
+      for (const P of E.edge) {
+        const W = P.clone().sub(info.headV[bone]).applyMatrix4(Me), ref = P.z < info.neckZ ? 'Chest' : 'Neck1';
+        const R = W.applyMatrix4(fk(ref).clone().invert()).add(info.headV[ref]);
+        const r = Math.max(0.05 * info.U, Math.hypot(P.x - E.pivot.x, P.z - E.pivot.z));
+        need = Math.max(need, (clr - info.depthAt(R)) / r);
+      }
+      if (need <= 1e-3) break;
+      fan += (need / DEG) * 1.15 + 0.5;
+      earFan(info, s, bone, fan);
+    }
+  }
+}
+/** The trunk tip's place in a sample (model space). */
+const trunkTip = (info, s) => info.trunkTip.clone().sub(info.headV.Trunk5).applyMatrix4(fkOf(info, s)('Trunk5'));
+/** The elephant's own clips (gaits are the shared ones: see gaitSample). */
+function eleSample(info, name, u) {
+  const s = {}, h = info.hipH, n = info.trunk.length;
+  const trunk = (f) => info.trunk.forEach((b, i) => addRot(info, s, b, f(i)));
+  switch (name) {
+    case 'idle': {
+      // the weight shifts from side to side over planted feet (the body rocking a little), the head turns and nods,
+      // the trunk swings and twice curls its tip up, the ears fan
+      const w = Math.sin(TAU * u), curl = Math.max(0, Math.sin(TAU * u * 2 - 1)) ** 2;
+      rootAt(s, [0.022 * h * w, -0.003 * h * (1 - Math.cos(2 * TAU * u)) / 2, 0.004 * h * Math.sin(TAU * u + 1)]);
+      addRot(info, s, 'Hips', [0, 0, 1.2 * w]); addRot(info, s, 'Chest', [0, 0, -0.8 * w]);
+      addRot(info, s, 'Neck1', [1.5 * Math.sin(TAU * u * 2), 4 * Math.sin(TAU * u - 0.5), 0]); addRot(info, s, 'Head', [1.5 * Math.sin(TAU * u * 2 + 1), 2 * Math.sin(TAU * u), 0]);
+      trunk((i) => [(i < 2 ? 4 : 2) * Math.sin(TAU * u - i * 0.6) + curl * [0, 5, 16, 30, 38][i], 0, 7 * Math.sin(TAU * u - i * 0.7)]);
+      earFan(info, s, 'EarL', 6 + 24 * Math.max(0, Math.sin(TAU * u * 3)) ** 2); earFan(info, s, 'EarR', 6 + 24 * Math.max(0, Math.sin(TAU * u * 3 - 0.6)) ** 2);
+      tailWave(info, s, 16, 0, 2, u);
+      plantFeet(info, s);
+      break;
+    }
+    case 'graze': {
+      // reach (the head dips and the trunk reaches the grass in front), grasp (the tip curls round a tuft), lift it to the
+      // mouth (the trunk curls back under itself), chew, and reach again
+      const reach = sstep(0, 0.2, u) * (1 - sstep(0.34, 0.52, u)) + sstep(0.86, 1, u);
+      const grasp = sstep(0.22, 0.34, u) * (1 - sstep(0.7, 0.8, u)), mouth = sstep(0.34, 0.56, u) * (1 - sstep(0.72, 0.9, u));
+      const dip = info.grazeDip * reach;
+      addRot(info, s, 'Neck1', [3 + dip * 0.5 - 4 * mouth, 2 * Math.sin(TAU * u), 0]); addRot(info, s, 'Head', [3 + dip * 0.5 - 5 * mouth, 0, 0]);
+      trunk((i) => [[-4, -3, -2, -2, -2][i] * reach + [0, 0, 6, 22, 34][i] * grasp * (1 - mouth) + info.mouthCurl[i] * mouth, 0, 2 * Math.sin(TAU * u - i * 0.6)]);
+      addRot(info, s, 'Jaw', [mouth * (6 + 4 * Math.max(0, Math.sin(TAU * u * 6))), 0, 0]);
+      earFan(info, s, 'EarL', 8 + 6 * Math.sin(TAU * u)); earFan(info, s, 'EarR', 8 + 6 * Math.sin(TAU * u + 1));
+      tailWave(info, s, 12, 0, 1, u);
+      plantFeet(info, s);
+      break;
+    }
+    case 'alert': {
+      // ears spread wide, the head raised, the trunk lifted forward with its tip curled up to test the air
+      const k = sstep(0, 0.25, u) * (1 - sstep(0.85, 1, u)) * 0.3 + 0.7;
+      addRot(info, s, 'Neck1', [-9 * k, 3 * Math.sin(TAU * u), 0]); addRot(info, s, 'Neck2', [-4 * k, 0, 0]); addRot(info, s, 'Head', [-9 * k, 4 * Math.sin(TAU * u + 0.5), 0]);
+      trunk((i) => [[-12, -8, -4, 10, 20][i] * k + 3 * Math.sin(TAU * u * 2 - i * 0.5), 0, 3 * Math.sin(TAU * u - i)]);
+      const fan = 50 + 5 * Math.sin(TAU * u * 2);
+      earFan(info, s, 'EarL', fan); earFan(info, s, 'EarR', fan);
+      tailWave(info, s, 5, 22, 1, u);
+      rootAt(s, [0, 0.004 * h, -0.006 * h]);
+      plantFeet(info, s);
+      break;
+    }
+    case 'roar': {
+      // a trumpet: the head thrown up, the trunk raised up and forward, the ears spread and the mouth open
+      const o = sstep(0, 0.28, u) * (1 - sstep(0.78, 1, u));
+      rootAt(s, [0, -0.01 * h * o, -0.025 * h * o]);
+      addRot(info, s, 'Chest', [-3 * o, 0, 0]);
+      addRot(info, s, 'Neck1', [-12 * o, 0, 0]); addRot(info, s, 'Head', [-14 * o, 0, 0]); addRot(info, s, 'Jaw', [24 * o, 0, 0]);
+      trunk((i) => [[-36, -34, -30, -22, -12][i] * o + 3 * o * Math.sin(TAU * u * 3 - i), 0, 0]);
+      earFan(info, s, 'EarL', 10 + 58 * o); earFan(info, s, 'EarR', 10 + 58 * o);
+      tailWave(info, s, 10, 20 * o, 2, u);
+      plantFeet(info, s);
+      break;
+    }
+    case 'sit': {
+      eleLieDown(info, s, sstep(0, 0.7, u));
+      break;
+    }
+    default: break;
+  }
+  earGuard(info, s);
+  return s;
+}
+/** Lying down (sternal): the belly on the ground, the forelegs stretched forward along it, the hind legs kneeling with the
+ *  shins back along the ground, the head held up and the trunk laid forward on the ground. */
+function eleLieDown(info, s, t) {
+  const U = info.U, drop = Math.max(0, info.bellyH - 0.025 * U) * t;
+  rootAt(s, [0, -drop, 0]);
+  addRot(info, s, 'Neck1', [-6 * t, 0, 0]); addRot(info, s, 'Head', [-4 * t, 0, 0]);
+  info.trunk.forEach((b, i) => addRot(info, s, b, [info.lieCurl[i] * t, 0, 0]));
+  earFan(info, s, 'EarL', 6); earFan(info, s, 'EarR', 6);
+  tailWave(info, s, 2, -6 * t, 1, 0);
+  const fk = fkOf(info, s);
+  for (const lm of info.limbs) {
+    if (!lm.chain) continue;
+    const J = lm.J;
+    if (lm.front) {
+      const lr = J[3].distanceTo(J[2]), C = V3(J[3].x, lerp(J[3].y, 0.06 * U, t), lerp(J[3].z, J[2].z + 0.9 * lr, t));
+      solveLeg(info, fk, lm, { C, mc: lerp(lm.mcRest, 96, t), toeRel: 0, scap: -4 * t }, s);
+    } else {
+      const lt = J[2].distanceTo(J[1]), A = V3(J[2].x, lerp(J[2].y, 0.07 * U, t), lerp(J[2].z, J[1].z + 0.08 * U - 0.95 * lt, t));
+      solveLeg(info, fk, lm, { A, mt: lerp(lm.mtRest, -94, t), toeRel: 0 }, s);
+    }
+  }
+}
+/** Once per asset: the head dip that lets the trunk reach the grass, the curl that brings its tip to the mouth, and the
+ *  forward curl that keeps a lying elephant's trunk on the ground (solved through the skeleton, so every size works). */
+function eleMotionSetup(info) {
+  const U = info.U, rad = [0.085, 0.07, 0.055, 0.042, 0.032].map(r => r * U * info.headScale);
+  const trunkLow = (s) => { const fk = fkOf(info, s); let m = trunkTip(info, s).y - 0.026 * U * info.headScale; info.trunk.forEach((b, i) => { m = Math.min(m, V3().applyMatrix4(fk(b)).y - rad[i]); }); return m; };
+  const pose = (f) => { const s = {}; f(s); return s; };
+  // graze: the dip (split between neck and head) that puts the tip just above the ground in front
+  let lo = 0, hi = 40;
+  for (let i = 0; i < 18; i++) {
+    const d = (lo + hi) / 2, s = pose((s) => { addRot(info, s, 'Neck1', [3 + d * 0.5, 0, 0]); addRot(info, s, 'Head', [3 + d * 0.5, 0, 0]); info.trunk.forEach((b, j) => addRot(info, s, b, [[-4, -3, -2, -2, -2][j], 0, 0])); });
+    if (trunkTip(info, s).y > 0.012 * U) lo = d; else hi = d;
+  }
+  info.grazeDip = hi;
+  // to the mouth: the curl (a fixed shape, scaled) whose tip comes closest to the lower lip
+  const shape = [2, 16, 32, 46, 52];
+  let best = 1, bd = Infinity;
+  for (let k = 0.6; k <= 2.2; k += 0.02) {
+    const s = pose((s) => { addRot(info, s, 'Neck1', [-1, 0, 0]); addRot(info, s, 'Head', [-2, 0, 0]); info.trunk.forEach((b, j) => addRot(info, s, b, [shape[j] * k, 0, 0])); });
+    const d = trunkTip(info, s).distanceTo(info.mouthP.clone().sub(info.headV.Jaw).applyMatrix4(fkOf(info, s)('Jaw')));
+    if (d < bd) { bd = d; best = k; }
+  }
+  info.mouthCurl = shape.map(a => a * best);
+  info.mouthMiss = bd;
+  // lying down: the forward curl that keeps the trunk off the ground with the body lowered
+  const lie = [-40, -28, -18, -10, -4];
+  let k = 0;
+  for (; k <= 2; k += 0.05) {
+    const s = pose((s) => { rootAt(s, [0, -Math.max(0, info.bellyH - 0.025 * U), 0]); addRot(info, s, 'Neck1', [-6, 0, 0]); addRot(info, s, 'Head', [-4, 0, 0]); info.trunk.forEach((b, j) => addRot(info, s, b, [lie[j] * k, 0, 0])); });
+    if (trunkLow(s) >= 0.005 * U) break;
+  }
+  info.lieCurl = lie.map(a => a * k);
+}
+
 const CLIP_SPEC = { idle: [3.2, 49, true], graze: [2.4, 37, true], alert: [2.2, 33, true], roar: [1.8, 37, false], sit: [1.6, 25, false] };
 
 /**
@@ -3647,7 +4244,8 @@ const CLIP_SPEC = { idle: [3.2, 49, true], graze: [2.4, 37, true], alert: [2.2, 
 function dropCurve(info, name) {
   const G = info.gaits[name];
   if (G.drops) return G.drops;
-  const N = 48, K = 3, raw = { H: [], F: [] };
+  // (Digital Diorama revision 8: `dropK`, the smoothing window, wider for the elephant's heavy, slow body)
+  const N = 48, K = G.dropK ?? 3, raw = { H: [], F: [] };
   for (let i = 0; i < N; i++) { const t = gaitSample(info, name, i / N, true); raw.H.push(t.__dropH); raw.F.push(t.__dropF); }
   const smooth = (a) => {
     const dil = a.map((_, i) => { let m = 0; for (let d = -K; d <= K; d++) m = Math.max(m, a[(i + d + N) % N]); return m; });
@@ -3685,7 +4283,7 @@ export function createClips(asset) {
     clip.userData = { loop: true, gait: G.id, stride, speed: v, hipH: h, fr: G.fr };
     out.push(clip);
   }
-  for (const [n, [d, f, loop]] of Object.entries(CLIP_SPEC)) out.push(bakeClip(info, n, d, f, (u) => sampleFor(info, n, u), loop));
+  for (const [n, [d, f, loop]] of Object.entries(info.elephant ? ELE_CLIP_SPEC : CLIP_SPEC)) out.push(bakeClip(info, n, d, f, (u) => sampleFor(info, n, u), loop));
   return out;
 }
 /** Poses a skinned asset at a clip phase (no mixer needed). */
@@ -3713,7 +4311,9 @@ function motionInfo(S, p, L, rig) {
       out.ks = lm.st === 'graviportal' || chain === 'sole' ? 0.25 : 0.45;
     } else {
       out.kneeSide = Math.sign(cr(sub(W[2], W[0]), sub(W[1], W[0]))) || 1;
-      out.kp = lm.st === 'graviportal' ? 0.4 : 0.9;
+      // (Digital Diorama revision 8: `pantograph`, how far the cannon follows the thigh; 1 tilts a pillar leg as one piece over
+      // its flat foot, so the elephant's knee stays straight through the stance)
+      out.kp = S.pantograph ?? (lm.st === 'graviportal' ? 0.4 : 0.9);
       out.mtRest = Math.atan2(W[3].z - W[2].z, W[3].y - W[2].y) / DEG;
     }
     return out;
@@ -3749,22 +4349,25 @@ export function createAsset(input = {}) {
   const coatOn = p.coat !== false;
   const B = { det, rig: rigB, parts, paint: null,
     part(name, opt = {}) { if (!byName.has(name)) { const pt = new Part(name, opt); pt.coat = coatOn && !pt.glass; byName.set(name, pt); parts.push(pt); } return byName.get(name); } };
-  const L = tetraLayout(S);
-  tetraTorso(B, S, L);
-  B.paint = makePainter(S, L);
-  tetraLimbLayout(B, S, L);
-  tetraLimbBones(B, L);
-  tetraHead(B, S, L);
-  // (the torso is emitted after the limbs, whose roots are blended into it first: blendLimbRoots)
-  tetraLimbs(B, S, L);
-  emit(B.part('body', { group: 'body' }), L.torso, (u, a, P) => B.paint({ part: u > L.uOf.neckRoot ? 'neck' : 'torso', u, a, P }), tetraTorsoSkin(B, L));
-  tetraTail(B, S, L);
-  tetraHorns(B, S, L);
-  tetraTusks(B, S, L);
-  tetraTrunk(B, S, L);
-  tetraMane(B, S, L);
-  tetraQuills(B, S, L);
-  tetraUdder(B, S, L);
+  // (Digital Diorama revision 8: the elephant has its own builder; see ELEPHANT)
+  const L = S.builder === 'elephant' ? elephantBuild(B, S, p) : tetraLayout(S);
+  if (!L.elephant) {
+    tetraTorso(B, S, L);
+    B.paint = makePainter(S, L);
+    tetraLimbLayout(B, S, L);
+    tetraLimbBones(B, L);
+    tetraHead(B, S, L);
+    // (the torso is emitted after the limbs, whose roots are blended into it first: blendLimbRoots)
+    tetraLimbs(B, S, L);
+    emit(B.part('body', { group: 'body' }), L.torso, (u, a, P) => B.paint({ part: u > L.uOf.neckRoot ? 'neck' : 'torso', u, a, P }), tetraTorsoSkin(B, L));
+    tetraTail(B, S, L);
+    tetraHorns(B, S, L);
+    tetraTusks(B, S, L);
+    tetraTrunk(B, S, L);
+    tetraMane(B, S, L);
+    tetraQuills(B, S, L);
+    tetraUdder(B, S, L);
+  }
 
   const hidden = new Set(String(p.hide || '').split(',').map(s => s.trim()).filter(Boolean));
   const keep = (pt) => !hidden.has(pt.name) && !hidden.has(pt.group) && !(hidden.has('feet') && pt.group === 'feet');
@@ -3779,10 +4382,13 @@ export function createAsset(input = {}) {
     longNeck: S.neckLen > 0.45, hindHigh: S.rump > 1.1,
     hipToShoulder: rigB.head('Chest').distanceTo(rigB.head('Hips')),
     ...motionInfo(S, p, L, rigB),
+    // (Digital Diorama revision 8) the elephant's clips fan its ears about their root lines and keep them off the body
+    ...(L.elephant ? { elephant: true, ears: L.earInfo || {}, depthAt: (P) => torsoDepth(L, P).d, U: L.U, headScale: L.hs, trunkTip: L.trunkTipRest, mouthP: L.lipRest, neckZ: L.torso.frame(L.uOf.neckRoot).c.z } : {}),
   };
+  if (info.elephant) eleMotionSetup(info);
   const pose = p.pose !== 'stand' ? sampleFor(info, p.pose, p.posePhase) : null;
-  const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, grain: p.coatGrain * (S.grain ?? 1), grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat' };
-  const { root, skeleton } = finish(build, { name: `mammal-${p.species}`, merge: p.mergeForProduction, skinned: p.rigMode === 'skinned', zones, pose, coat: coatOn || coat.smooth ? coat : null, seamRadius: 0.05 * S.H });
+  const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, grain: p.coatGrain * (S.grain ?? 1), grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat', crease: S.crease || null };
+  const { root, skeleton } = finish(build, { name: `mammal-${p.species}`, merge: p.mergeForProduction, skinned: p.rigMode === 'skinned', zones, pose, coat: coatOn || coat.smooth ? coat : null, seamRadius: 0.05 * S.H, seams: L.elephant ? [['head', 'trunk']] : [] });
   let tris = 0; root.traverse(m => { if (m.isMesh) tris += m.geometry.attributes.position.count / 3; });
   root.userData = {
     species: p.species, label: S.label, params: p, dimensions: measure(root), triangles: tris, zones: Object.fromEntries(Object.entries(zones).map(([k, v]) => [k, hexStr(v)])),
