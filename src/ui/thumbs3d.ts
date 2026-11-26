@@ -7,7 +7,7 @@ import { buildModel } from '../assets/builder';
  * Rendered one at a time in the background with a private renderer, then kept
  * in memory and in IndexedDB so they appear instantly next time.
  */
-const VERSION = 'v5';
+const VERSION = 'v6';
 const SIZE = 168;
 const mem = new Map<string, string>();
 const waiting = new Map<string, Set<(url: string) => void>>();

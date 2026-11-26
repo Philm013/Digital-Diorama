@@ -181,6 +181,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         region('Limbs', declaration('tetraLimbJoints')),
         region('Hind leg layout', declaration('HIND_LAYOUT')),
         region('Hind leg surface', declaration('tetraHindLeg')),
+        region('Foreleg surface', declaration('tetraForeLeg')),
         region('Gaits', declaration('GAIT_LIB')),
         region('Leg solver (IK)', declaration('solveLeg')),
         region('Tail', declaration('tetraTail')),
