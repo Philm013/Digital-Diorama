@@ -7,7 +7,8 @@ import { buildModel } from '../assets/builder';
  * Rendered one at a time in the background with a private renderer, then kept
  * in memory and in IndexedDB so they appear instantly next time.
  */
-const VERSION = 'v8';
+// (v9, Digital Diorama revision 8: the elephant, birds' feet, the harp seal and the frilled lizard changed shape)
+const VERSION = 'v9';
 const SIZE = 168;
 const mem = new Map<string, string>();
 const waiting = new Map<string, Set<(url: string) => void>>();

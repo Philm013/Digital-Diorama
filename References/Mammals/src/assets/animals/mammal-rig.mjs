@@ -118,6 +118,23 @@
  *     steps; rabbits' and squirrels' hind feet land under the chest in the bound (their haunches stretched at push-off).
  *   - Graze: carnivores, bears and rodents sniff the ground in front of their forefeet with a shallower neck; grazers that
  *     must dip the forehand (short necks) step their forefeet forward instead of folding the elbows.
+ *
+ * REVISION 8 (Digital Diorama: the African elephant rebuilt, faster builds, keys where joints turn fast)
+ *   - Elephant: its own builder (`builder: 'elephant'` → elephantBuild, see ELEPHANT), reusing loft, sheet, emit, the Rig,
+ *     the skin helpers, the coat painter and blendLimbRoots. Torso highest at the withers, dipping and rising to the hips,
+ *     belly 0.42-0.48 H; pillar legs (elbow and stifle low, the stifle bulging forward), round fore and oval hind pads
+ *     with flat toenails (4 / 3); one loft for head and trunk (single dome, low eye with the temporal hollow, trunk ringed
+ *     and two-fingered on Trunk1-Trunk5, a hand above the ground); tusks from skin sheaths; Africa-shaped ears hung from
+ *     above the eye to the mouth's corner as a curved shell with a rolled top edge, flapping on EarL / EarR and kept clear
+ *     of the body (earGuard); wrinkled skin from a tiling crease pattern (creaseTile) plus real rings on trunk and legs.
+ *     Its own idle, graze (the trunk plucks grass and brings it to the mouth), alert, roar (trumpet) and sit (lying down,
+ *     clear of the ground) clips (ELE_CLIP_SPEC, eleSample); walk and amble through the shared gait machinery with
+ *     straight stance legs (a pantograph that keeps the stifle straight) and flexing knees in the swing. Ids, params, bone
+ *     and clip names are unchanged.
+ *   - Clips: a gait clip gains keys where a joint turns more than 1.5° between two (bakeClip refine, sampleGap), so fast
+ *     feet no longer dip between keys (giraffe and llama gallops sank 1.5 cm); dropCurve's smoothing width per gait (dropK).
+ *   - Speed: smoothNormals hashes quantised positions instead of string keys, the coat painter skips the grain where it
+ *     is off; an elephant builds in about 140 ms instead of 230.
  */
 
 import * as THREE from 'three';
