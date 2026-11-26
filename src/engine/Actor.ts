@@ -333,6 +333,10 @@ export class Actor {
     const rel = this.speedSmoothed / Math.max(0.2, scale);
     if (this.mixer) {
       if (!this.forcedClip) this.autoClip(rel);
+      // a gait chosen by a script still keeps its feet planted while the animal moves (and steps at its own pace in place)
+      else if (this.currentName === this.forcedClip && this.gaitMeta(this.forcedClip)) {
+        if (rel > 0.02) this.playGait(this.forcedClip, rel); else this.play(this.forcedClip, 0.25, 1);
+      }
       for (const [name] of this.holds) if (!this.restQuats.has(name)) {
         const b = m.raw.getObjectByName(name);
         if (b) this.restQuats.set(name, b.quaternion.clone());
@@ -379,11 +383,47 @@ export class Actor {
       else if (this.currentName === 'flap' || this.currentName === 'glide' || this.currentName === 'walk' || this.currentName === 'hop' || !this.currentName) this.play(this.idleClip(), 0.35);
       return;
     }
+    if (this.gaitByStride(rel)) return;
     if (rel < 0.08) {
       if (['walk', 'trot', 'gallop'].includes(this.currentName) || !this.currentName) this.play(this.idleClip(), 0.35);
     } else if (rel < 1.1 || !has('trot')) this.play('walk', 0.25, clamp(rel / 0.75, 0.5, 2));
     else if (rel < 2.4 || !has('gallop')) this.play('trot', 0.25, clamp(rel / 1.6, 0.6, 1.8));
     else this.play('gallop', 0.25, clamp(rel / 3.2, 0.7, 1.6));
+  }
+
+  /** stride metadata of a gait clip (rigged mammals: distance per cycle and the hip height it was timed for) */
+  private gaitMeta(name: string) {
+    const ud = this.actions.get(name)?.getClip().userData as { stride?: number; speed?: number; hipH?: number } | undefined;
+    return ud?.stride && ud.hipH ? (ud as { stride: number; speed?: number; hipH: number }) : null;
+  }
+
+  /** play a gait clip at the rate that carries its planted feet back at ground speed `rel`, so they don't slide */
+  private playGait(name: string, rel: number, fade = 0.25) {
+    const m = this.gaitMeta(name), a = this.actions.get(name);
+    if (!m || !a) return this.play(name, fade);
+    return this.play(name, fade, clamp((rel * a.getClip().duration) / m.stride, 0.3, 2.5));
+  }
+
+  /**
+   * Gaits for clips that carry stride metadata (the rigged mammals): picked by Froude number v²/(g·h), which is how
+   * animals of every size change gait — walk below about 0.5, trot to about 2.5, gallop above (switching back a
+   * little lower, so a steady speed never flickers between two gaits) — and played at the speed the feet need.
+   */
+  private gaitByStride(rel: number) {
+    const walk = this.gaitMeta('walk');
+    if (!walk) return false;
+    const cur = this.currentName, moving = cur === 'walk' || cur === 'trot' || cur === 'gallop';
+    const vWalk = walk.speed ?? Math.sqrt(0.2 * 9.81 * walk.hipH);
+    if (rel < vWalk * (moving ? 0.16 : 0.22)) {
+      if (moving || !cur) this.play(this.idleClip(), 0.35);
+      return true;
+    }
+    const fr = (rel * rel) / (9.81 * walk.hipH);
+    const toTrot = cur === 'trot' || cur === 'gallop' ? 0.42 : 0.5, toGallop = cur === 'gallop' ? 2.0 : 2.5;
+    let want = fr < toTrot || !this.actions.has('trot') ? 'walk' : 'trot';
+    if (want === 'trot' && fr >= toGallop && this.actions.has('gallop')) want = 'gallop';
+    this.playGait(want, rel);
+    return true;
   }
 
   private animateRig(dt: number, t: number, rel: number) {

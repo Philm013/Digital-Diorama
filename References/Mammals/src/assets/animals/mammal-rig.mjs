@@ -29,8 +29,9 @@
  * RIG      Root > Hips > Spine1 > Spine2 > Chest > Neck1 > Neck2 > Head > Jaw | EarL/R |
  *          Trunk1-5; Chest > Scapula > Arm > Forearm > Hand > Finger (L/R);
  *          Hips > Thigh > Shin > Foot > Toe (L/R); Hips > Tail1..n.
- * CLIPS    idle, walk, trot, gallop, graze, alert, roar, sit (procedural phase-offset
- *          gaits). createClips(asset), setPose(asset, name, phase).
+ * CLIPS    idle, walk, trot, gallop, graze, alert, roar, sit — footfall-accurate gaits with
+ *          planted feet (foot paths + leg IK); gait clips carry userData { gait, stride,
+ *          speed, hipH }. createClips(asset), setPose(asset, name, phase).
  * PARTS    animate: see `rig` (bone names); detach: horns, tusks, trunk, mane, tail,
  *          ears, eyes, eyelids, nose, teeth, spines, jaw, feet.
  * LICENSE  CC0 1.0 Universal — this module and all generated geometry.
@@ -53,6 +54,17 @@
  *   - Coat atlas: painters are rasterised into one texture per asset instead of one colour per
  *     quad, so stripes, spots, rosettes, masks and patch edges are smooth curves (see COAT ATLAS).
  *   - Smooth, crease-aware normals and glossy eyes. Options: coat, coatGrain, shading.
+ *
+ * REVISION 4 (Digital Diorama: hind legs and motion, checked against skeletons and photos)
+ *   - Hind joints come from real proportions (HIND LIMB LAYOUT): fetlocks at 12-19 % of the hip
+ *     height (they sat at 4-7 %, leaving no pasterns), stifles high in the flank on deep-bodied
+ *     ungulates, plantigrade shins upright over the heel, crouched rodent and rabbit legs folded
+ *     inside the haunch. Species tune them with `hind: {...}` / `hindShape: {...}`.
+ *   - The hind leg is lofted through its side-view outline (HIND LEG SURFACE): a broad thigh from
+ *     flank fold to point of buttock, gaskin, Achilles and point of hock, skinned by joint planes.
+ *   - Real hooves (coronary band, sloped toe wall, cloven claws) and compact paws.
+ *   - Clips rewritten (CLIPS & POSES): planted feet on foot paths solved by leg IK, each family's
+ *     real footfalls, Froude-scaled timing and stride metadata; lying down for hoofed animals.
  */
 
 import * as THREE from 'three';
@@ -1327,6 +1339,46 @@ function tetraEars(B, S, L) {
   }
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+ *  HIND LIMB LAYOUT (Digital Diorama revision 4: hind legs checked against skeletons and photos)
+ *  The old layout put the stifle on the belly line and derived the hock from body depth, so deep-bodied
+ *  ungulates stood on posts with a kink, fetlocks sat at 4-7 % of the height (no pasterns), plantigrade
+ *  shins sloped back ~30° and folded rodent legs hung below the body as a "V". Landmarks are now
+ *  fractions of the hip-joint height h, read off real skeletons: stifle (kY, kZ), hock / ankle (aY, aZ),
+ *  fetlock / paw joint (fY, fZ) and coronet (cY); Z is forward of the hip joint. Plantigrade and crouched
+ *  feet give the heel → toe length (`foot`), digitigrade paws the paw-joint → toe length (`toe`).
+ *  Species override any of these with `hind: {...}`.
+ * ════════════════════════════════════════════════════════════════════════════ */
+const HIND_LAYOUT = {
+  // horse: hip joint 1.3 m, stifle 0.9, hock 0.6 (under the point of buttock), fetlock 0.24, coronet 0.08
+  ungulate: { kY: 0.70, kZ: 0.15, aY: 0.46, aZ: -0.09, fY: 0.17, fZ: -0.075, cY: 0.062, pastern: 55, wall: 52 },
+  // wolf: stifle in the flank fold well forward of the hip, hock a third of the way up, upright rear pastern
+  digitigrade: { kY: 0.67, kZ: 0.19, aY: 0.31, aZ: -0.12, fY: 0.075, fZ: -0.095, toe: 0.13 },
+  // bear: knee about half way up, shin near vertical, heel under the hip, a long sole reaching forward
+  plantigrade: { kY: 0.48, kZ: 0.11, aY: 0.1, aZ: -0.035, foot: 0.36 },
+  // elephant: a straight column, the knee low on the leg, the ankle a fifth of the way up
+  graviportal: { kY: 0.52, kZ: 0.08, aY: 0.2, aZ: -0.03, fY: 0.06 },
+  // rabbit / squirrel / mouse at rest: the knee folded forward inside the flank, heel at the rear, long foot flat
+  crouch: { kY: 0.52, kZ: 0.38, aY: 0.07, aZ: -0.19, foot: 0.62 },
+};
+/** Merged hind layout for a species (`kind` = the HIND_LAYOUT entry it starts from). */
+function hindLayoutFor(S, st) {
+  const kind = st === 'digitigrade' && (S.crouch || 0) >= 0.5 ? 'crouch' : HIND_LAYOUT[st] ? st : 'digitigrade';
+  return { kind, ...HIND_LAYOUT[kind], ...(S.hind || {}) };
+}
+/** Hip-joint height: the leg root sits this far below the croup. */
+const hipHeightOf = (S, L) => L.yR - (S.hipDrop ?? 0.4) * L.Dr;
+/**
+ * Hoof proportions from the coronet radius r and the coronet height cy: ground half-length a / half-width b,
+ * coronary band half-sizes, and how far ahead of the coronet the toe meets the ground (the toe wall slopes
+ * forward at `wall` degrees from the ground). Cloven hooves are two claws of half-width b/2.
+ */
+function hoofDims(S, r, cy, wall = 52) {
+  const a = 1.55 * r * (S.hoofLen ?? 1), b = 1.45 * r * (S.hoofW ?? 1), ac = r * 1.05, bc = r * 1.08;
+  const toeH = cy + 0.22 * r;
+  return { a, b, ac, bc, toeH, heelH: cy * 0.58, toe: ac + toeH / Math.tan(wall * DEG) };
+}
+
 /**
  * Limb joint layouts. Each template returns joints top → ground ({p, w, d} with lateral / fore-aft
  * half-thickness) for a stance. Joint heights derive from body depth so leg length is a real rebuild.
@@ -1359,9 +1411,14 @@ function tetraLimbJoints(S, L, front, side) {
     }
     const el = J(sx * 0.98 + sp * 0.3, C + 0.03 * H, sz - 0.075 * H, 0.058, 0.07);
     if (st === 'ungulate') {
-      const ca = J(sx * 0.93 + sp * 0.6, 0.53 * C, el.p.z + 0.01 * H, 0.04, 0.045), fe = J(sx * 0.9 + sp, 0.11 * C, ca.p.z + 0.005 * H, 0.032, 0.04);
-      const co = J(sx * 0.9 + sp, 0.035 * H, fe.p.z + 0.045 * H, 0.03, 0.032);
-      return { st, foot: 'hoof', joints: [top, sh, el, ca, fe, co, J(sx * 0.9 + sp, 0, co.p.z + 0.012 * H, 0.03)] };
+      // Digital Diorama revision 4: the fetlock and coronet match the hind leg's (they sat at 4-7 % of the height,
+      // leaving no pastern); the front pastern slopes a little flatter than the hind (~50° from the ground)
+      const hl = hindLayoutFor(S, 'ungulate'), h = hipHeightOf(S, L), fy = (hl.fFY ?? hl.fY) * h, cy = hl.cY * h;
+      const ca = J(sx * 0.93 + sp * 0.6, Math.max(0.53 * C, fy + 0.14 * h), el.p.z + 0.01 * H, 0.04, 0.045);
+      const fe = J(sx * 0.9 + sp, fy, ca.p.z + 0.005 * H, 0.032, 0.04);
+      const co = J(sx * 0.9 + sp, cy, fe.p.z + (fy - cy) / Math.tan((hl.pasternF ?? 50) * DEG), 0.03, 0.032);
+      const hd = hoofDims(S, co.w * 1.05, cy, hl.wall);
+      return { st, foot: 'hoof', joints: [top, sh, el, ca, fe, co, J(sx * 0.9 + sp, 0, co.p.z + hd.toe, 0.03)] };
     }
     if (st === 'plantigrade') {
       const wr = J(sx * 0.95 + sp, 0.075 * H, el.p.z + 0.03 * H, 0.04, 0.042);
@@ -1407,39 +1464,159 @@ function tetraLimbJoints(S, L, front, side) {
     const an = Jl(kn2.p.x + side * 0.12 * lu * spl, 0.13 * lu, kn2.p.z - 0.25 * lu, 0.09), so = Jl(an.p.x + side * 0.12 * lu * spl, 0.045 * lu, an.p.z + 0.12 * lu, 0.075, 0.04);
     return { st, foot: S.flippers ? 'flipper' : 'hand', lu, joints: [h0, kn2, an, so, Jl(so.p.x + side * 0.3 * lu * spl, 0.01 * lu, so.p.z + 0.5 * lu, 0.03)] };
   }
-  // stifle: at the flank line, forward of the hip (femur ~40-50° from vertical), lateral face proud of the belly
-  const kn = J(sx * 1.04 + sp * 0.2, L.yR - (0.97 + 0.1 * cr) * L.Dr + 0.02 * H, hz + (0.1 * Math.min(H, Lt) + 0.3 * cr * L.yR), 0.06, 0.1);
-  // hock: the tibia slopes back from the stifle at a fixed anatomical angle (tan 0.95 ≈ 43°; giraffes
-  // and camels are steeper), which keeps the hock under the point of the buttock for every body
-  // length / leg length ratio; crouching species fold it back under the rump instead
-  const hockZ = (y) => lerp(kn.p.z - (kn.p.y - y) * (S.tibiaSlope ?? (st === 'ungulate' ? 0.92 : 0.8)), L.zB + 0.13 * Lt, cr);
-  if (st === 'ungulate') {
-    const hky = 0.48 * (L.yR - 0.45 * L.Dr);
-    const hk = J(sx * 0.9 + sp * 0.6, hky, Math.max(hockZ(hky), L.zB + 0.03 * Lt), 0.034, 0.055), fe = J(sx * 0.88 + sp, 0.11 * C, hk.p.z + 0.03 * H, 0.032, 0.04);
-    const co = J(sx * 0.88 + sp, 0.035 * H, fe.p.z + 0.045 * H, 0.03, 0.032);
-    return { st, foot: 'hoof', pre, joints: [hip, kn, hk, fe, co, J(sx * 0.88 + sp, 0, co.p.z + 0.012 * H, 0.03)] };
-  }
-  if (st === 'plantigrade') {
-    const an = J(sx * 0.95 + sp, 0.075 * H, hz - (0.11 + 0.06 * cr) * H, 0.042, 0.052);
-    return { st, foot: 'sole', pre, joints: [hip, J(sx * 1.02 + sp * 0.2, kn.p.y - 0.04 * H, hz + (0.08 + 0.08 * cr) * H, 0.06, 0.09), an, J(sx * 0.95 + sp, 0.03 * H, an.p.z + 0.13 * H * (S.footLen || 1), 0.045, 0.02), J(sx * 0.95 + sp, 0.012 * H, an.p.z + 0.21 * H * (S.footLen || 1), 0.038, 0.012)] };
-  }
-  if (st === 'graviportal') {
-    const an = J(sx * 0.95 + sp, 0.24 * (L.yR - 0.45 * L.Dr), hz - 0.03 * H, 0.05, 0.055);
-    return { st, foot: 'pad', pre, joints: [hip, J(sx + sp * 0.2, kn.p.y, hz + 0.03 * H, 0.068, 0.085), an, J(sx * 0.95 + sp, 0.045 * H, an.p.z + 0.01 * H, 0.056, 0.06), J(sx * 0.95 + sp, 0, an.p.z + 0.012 * H, 0.06)] };
-  }
   if (st === 'biped') {
+    const kn = J(sx * 1.04 + sp * 0.2, L.yR - (0.97 + 0.1 * cr) * L.Dr + 0.02 * H, hz + (0.1 * Math.min(H, Lt) + 0.3 * cr * L.yR), 0.06, 0.1);
     const hk = J(sx * 0.95 + sp, (S.hockH ?? 0.3) * (L.yR - 0.45 * L.Dr), hz - 0.16 * H, 0.04, 0.05), pw = J(sx * 0.95 + sp, 0.035 * H, hk.p.z + 0.06 * H, 0.032, 0.03);
     return { st, foot: S.foot || 'talon', joints: [hip, J(sx * 1.05 + sp * 0.2, hy * 0.85, hz + 0.16 * H, 0.08, 0.1), hk, pw, J(sx * 0.95 + sp, 0.01 * H, pw.p.z + 0.13 * H * (S.footLen || 1), 0.025, 0.012)] };
   }
-  // digitigrade: the stifle hangs below the belly line (not at it) and well forward of the hip, and the
-  // hock never trails behind the point of buttock, so feet stand under the quarters, not behind them
-  const knD = { ...kn, p: kn.p.clone() };
-  if (cr < 0.5) { knD.p.y = Math.min(kn.p.y, lerp(kn.p.y, 0.6 * L.yR, 1 - cr * 2)); knD.p.z = Math.max(kn.p.z, hz + 0.12 * L.yR * (1 - cr)); }
-  const hky = (S.hockH ?? 0.27) * H * (1 - 0.35 * cr);
-  const hkZd = Math.max(lerp(knD.p.z - (knD.p.y - hky) * (S.tibiaSlope ?? 0.8), L.zB + 0.13 * Lt, cr), L.zB + 0.07 * Lt);
-  const hk = J(sx * 0.92 + sp * 0.6, hky, hkZd, 0.036, 0.05);
-  const pw = J(sx * 0.9 + sp, 0.045 * H, hk.p.z + 0.04 * H, 0.034, 0.033);
-  return { st, foot: 'paw', pre, joints: [hip, knD, hk, pw, J(sx * 0.9 + sp, 0.012 * H, pw.p.z + 0.08 * H * (S.footLen || 1), 0.022, 0.012)] };
+  return tetraHindJoints(S, L, side, st, { J, hip, pre, sx, sp, th, thighW, thighD });
+}
+
+/**
+ * Hind joints from the HIND_LAYOUT landmarks (Digital Diorama revision 4). Every joint is placed relative
+ * to the hip joint, so the leg keeps real proportions whatever the body depth or length.
+ */
+function tetraHindJoints(S, L, side, st, o) {
+  const { J, hip, pre, sx, sp, th, thighW, thighD } = o;
+  const lay = hindLayoutFor(S, st), kind = lay.kind, h = hip.p.y, z0 = hip.p.z, H = L.H;
+  const kx = sx * 1.03 + sp * 0.2, ax = sx * 0.93 + sp * 0.6, fx = sx * 0.9 + sp;
+  // a folded knee stays inside the flank (it hung below the belly)
+  const ky = kind === 'crouch' ? Math.max(lay.kY * h, L.yR - 0.98 * L.Dr + 0.1 * h) : lay.kY * h;
+  const kn = kind === 'crouch' ? J(kx, ky, z0 + lay.kZ * h, 0.085, 0.13) : J(kx, ky, z0 + lay.kZ * h, 0.06, 0.1);
+  const an = J(ax, lay.aY * h, z0 + lay.aZ * h, kind === 'plantigrade' || kind === 'crouch' ? 0.042 : 0.036, 0.05);
+  const base = { st, kind, h, lay, pre, thighW, thighD };
+  if (kind === 'ungulate') {
+    const fe = J(fx, lay.fY * h, z0 + lay.fZ * h, 0.032, 0.04);
+    const cy = lay.cY * h, co = J(fx, cy, fe.p.z + (fe.p.y - cy) / Math.tan((lay.pastern ?? 55) * DEG), 0.03, 0.032);
+    const hd = hoofDims(S, co.w * 1.05, cy, lay.wall);
+    return { ...base, foot: 'hoof', joints: [hip, kn, an, fe, co, J(fx, 0, co.p.z + hd.toe, 0.03)] };
+  }
+  if (kind === 'graviportal') {
+    const pt = J(fx, lay.fY * h, an.p.z + 0.01 * h, 0.056, 0.06);
+    return { ...base, foot: 'pad', joints: [hip, kn, an, pt, J(fx, 0, pt.p.z + 0.012 * h, 0.06)] };
+  }
+  if (kind === 'plantigrade' || kind === 'crouch') {
+    // ankle above the heel; ball of the foot about 60 % of the way to the toe tips
+    const fl = (lay.foot ?? 0.36) * h;
+    return { ...base, foot: 'sole', joints: [hip, kn, an, J(fx, Math.min(an.p.y * 0.42, 0.03 * H), an.p.z + 0.6 * fl, 0.045, 0.02), J(fx, Math.min(an.p.y * 0.16, 0.012 * H), an.p.z + fl, 0.038, 0.012)] };
+  }
+  // digitigrade: hock a third of the way up, rear pastern near vertical, toes ahead of the paw joint
+  const pw = J(fx, lay.fY * h, z0 + lay.fZ * h, 0.034, 0.033);
+  return { ...base, foot: 'paw', joints: [hip, kn, an, pw, J(fx, 0.012 * H, pw.p.z + (lay.toe ?? 0.13) * h, 0.022, 0.012)] };
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ *  HIND LEG SURFACE (Digital Diorama revision 4)
+ *  A tube swept round the bones made the thigh a narrow pipe hanging under the body with a human-like
+ *  knee. Real hind legs are shaped by muscle, not bone: seen from the side the thigh is a broad slab whose
+ *  front edge runs from the flank fold to the stifle and whose back edge (the breeches) falls from the
+ *  point of buttock to the gaskin, then the Achilles tendon runs straight to the point of hock. The leg is
+ *  lofted through that OUTLINE (section centres midway between the front and back edges), so the path is
+ *  nearly straight and the quarters read as one mass from croup to hock; it is skinned by joint planes.
+ *  Extents are fractions of the hip height h (thigh: × √thickness, lower leg: × thickness).
+ * ════════════════════════════════════════════════════════════════════════════ */
+const HIND_SHAPE = {
+  ungulate: { thighF: 0.16, patella: 0.05, breech: 0.07, hams: 0.02, kneeW: 0.075, gaskF: 0.042, gaskW: 0.055, hockF: 0.04, hockB: 0.068, hockW: 0.042, canF: 0.026, canB: 0.036, canW: 0.026, fetF: 0.036, fetB: 0.05, fetW: 0.034, pastR: 0.026, corR: 0.029, inset: 0.035 },
+  digitigrade: { thighF: 0.17, patella: 0.05, breech: 0.06, hams: 0.025, kneeW: 0.08, gaskF: 0.04, gaskW: 0.06, hockF: 0.035, hockB: 0.062, hockW: 0.04, canF: 0.027, canB: 0.032, canW: 0.032, fetF: 0.032, fetB: 0.034, fetW: 0.036, inset: 0.035 },
+  plantigrade: { thighF: 0.16, patella: 0.06, breech: 0.05, hams: 0.03, kneeW: 0.11, gaskF: 0.06, gaskW: 0.09, hockF: 0.055, hockB: 0.075, hockW: 0.072, inset: 0.04 },
+  crouch: { thighF: 0.2, patella: 0.07, breech: 0, hams: 0, kneeW: 0.1, gaskF: 0.06, gaskW: 0.08, hockF: 0.05, hockB: 0.08, hockW: 0.06, inset: 0.04 },
+  graviportal: { thighF: 0.14, patella: 0.06, breech: 0.04, hams: 0.02, kneeW: 0.12, gaskF: 0.07, gaskW: 0.1, hockF: 0.07, hockB: 0.08, hockW: 0.09, canF: 0.075, canB: 0.075, canW: 0.085, fetF: 0.08, fetB: 0.08, fetW: 0.09, inset: 0.04 },
+};
+/** The torso's rear surface (smallest z) at height y near lateral position x. */
+function rearZAt(L, y, x) {
+  let best = Infinity;
+  const tol = 0.07 * L.Dr, band = 0.45 * L.hw;
+  for (const row of L.torso.rows) for (const p of row) if (Math.abs(p.y - y) < tol && Math.abs(p.x - x) < band && p.z < best) best = p.z;
+  return best === Infinity ? L.zB : best;
+}
+/**
+ * Skin weights by joint planes: bone i owns the leg between the planes that bisect the joint angles at its
+ * two ends (blended over `blend[i]` either side); the top of the thigh shares with the Hips so the quarters
+ * stay attached as the leg swings.
+ */
+function planeSkin(rig, joints, bones, blend, hipsTo = null) {
+  const J = joints.map(j => j.clone()), n = bones.length, dirs = [];
+  for (let i = 0; i < n; i++) dirs.push(J[i + 1].clone().sub(J[i]).normalize());
+  const planes = [];
+  for (let i = 1; i < n; i++) planes.push({ p: J[i], n: dirs[i - 1].clone().add(dirs[i]).normalize(), w: blend[i - 1] });
+  const L0 = J[1].distanceTo(J[0]), d = V3();
+  return (u, a, P) => {
+    let c = 1;
+    const out = [];
+    let prev = 1;
+    for (let i = 0; i < planes.length; i++) {
+      const pl = planes[i];
+      c = Math.min(c, sstep(-pl.w, pl.w, d.subVectors(P, pl.p).dot(pl.n)));
+      if (prev - c > 1e-4) out.push([rig.i(bones[i]), prev - c]);
+      prev = c;
+    }
+    if (prev > 1e-4) out.push([rig.i(bones[n - 1]), prev]);
+    let W = normW(out);
+    if (hipsTo) {
+      const s = d.subVectors(P, J[0]).dot(dirs[0]) / Math.max(1e-6, L0);
+      const leg = sstep(hipsTo[0], hipsTo[1], s);
+      if (leg < 1) W = mixW(rig.W('Hips'), W, leg);
+    }
+    return W;
+  };
+}
+/** Hind leg lofted through its side-view outline (see HIND LEG SURFACE); returns the loft. */
+function tetraHindLeg(B, S, L, lm, nm) {
+  const det = B.det, rig = B.rig, J = lm.joints, h = lm.h, k = lm.kind;
+  const th = (S.hindThk || S.legThk || 1), tq = Math.sqrt(th);
+  const sh = { ...HIND_SHAPE[k], ...(S.hindShape || {}) };
+  const hip = J[0].p, K = J[1].p, A = J[2].p, F = k === 'plantigrade' || k === 'crouch' ? null : J[3].p;
+  const butt = Math.min(rearZAt(L, hip.y, hip.x) + sh.inset * h, hip.z - 0.08 * h);
+  const buttK = Math.min(butt + sh.breech * h, K.z - 0.14 * h);
+  // lateral centre: joint x interpolated by height
+  const xs = [[lm.pre.p.y, lm.pre.p.x], [hip.y, hip.x], [K.y, K.x], [A.y, A.x], ...(F ? [[F.y, F.x]] : [])];
+  const xAt = (y) => { for (let i = 0; i < xs.length - 1; i++) if (y <= xs[i][0] && y >= xs[i + 1][0]) return lerp(xs[i][1], xs[i + 1][1], (xs[i][0] - y) / Math.max(1e-9, xs[i][0] - xs[i + 1][0])); return y > xs[0][0] ? xs[0][1] : xs[xs.length - 1][1]; };
+  const st = [];
+  const at = (y, zf, zb, w, extra = {}) => st.push({ c: V3(xAt(y), y, (zf + zb) / 2), d: Math.max(1e-4, (zf - zb) / 2), w, ...extra });
+  const hT = h * th, achB = A.z - sh.hockB * hT;
+  at(lm.pre.p.y, lm.pre.p.z + 0.82 * lm.thighD, lm.pre.p.z - 0.82 * lm.thighD, 0.82 * lm.thighW);
+  if (k === 'crouch') {
+    // folded leg at rest (rabbits, squirrels, mice): one wedge-shaped haunch from the hip down to the heel,
+    // its front edge the folded knee and the shin, its back edge the rump falling to the heel
+    const heelB = A.z - sh.hockB * hT;
+    at(hip.y, hip.z + sh.thighF * h * tq, butt, lm.thighW);
+    at(lerp(hip.y, K.y, 0.55), lerp(hip.z + sh.thighF * h * tq, K.z + sh.patella * hT, 0.62), lerp(butt, heelB, 0.25), lm.thighW * 0.95);
+    at(K.y, K.z + sh.patella * hT, lerp(butt, heelB, 0.55), lm.thighW * 0.82);
+    at(lerp(K.y, A.y, 0.5), lerp(K.z, A.z, 0.5) + sh.gaskF * hT, lerp(butt, heelB, 0.85), lm.thighW * 0.6);
+    at(A.y, A.z + sh.hockF * hT, heelB, sh.hockW * hT);
+  } else {
+  at(hip.y, hip.z + sh.thighF * h * tq, butt, lm.thighW);
+  at(lerp(hip.y, K.y, 0.5), lerp(hip.z + sh.thighF * h * tq, K.z + sh.patella * hT, 0.62), lerp(butt, buttK, 0.5) - sh.hams * h * tq, lm.thighW * 0.86);
+  at(K.y, K.z + sh.patella * hT, buttK, sh.kneeW * hT);
+  // gaskin: muscle bulge high on the tibia, then the Achilles tendon straight to the point of hock
+  const g1 = lerp(buttK, achB, 0.42);
+  at(lerp(K.y, A.y, 0.36), lerp(K.z, A.z, 0.36) + sh.gaskF * hT, g1, sh.gaskW * hT);
+  at(lerp(K.y, A.y, 0.72), lerp(K.z, A.z, 0.72) + sh.gaskF * 0.88 * hT, lerp(g1, achB, 0.62), lerp(sh.gaskW, sh.hockW, 0.6) * hT);
+  at(A.y, A.z + sh.hockF * hT, achB, sh.hockW * hT);
+  if (F) {
+    for (const f of [0.3, 0.72]) { const z = lerp(A.z, F.z, f); at(lerp(A.y, F.y, f), z + sh.canF * hT, z - sh.canB * hT, sh.canW * hT); }
+    at(F.y, F.z + sh.fetF * hT, F.z - sh.fetB * hT, sh.fetW * hT);
+  }
+  }
+  if (k === 'ungulate') {
+    // pastern sections stand square to the pastern
+    const C = J[4].p;
+    st.push({ c: F.clone().lerp(C, 0.5).add(V3(0, 0, -0.004 * hT)), d: sh.pastR * hT, w: sh.pastR * hT * 0.92, perp: true });
+    st.push({ c: C.clone(), d: sh.corR * hT, w: sh.corR * hT, perp: true });
+  }
+  const pts = st.map(s => s.c), curve = makePath(pts), ku = knotUs(curve, pts.length);
+  // horizontal outline extents → extents square to the (slightly tilted) path
+  const cosT = st.map((s, i) => { if (s.perp) return 1; const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)]; const t = b.clone().sub(a); return clamp(Math.abs(t.y) / Math.max(1e-9, t.length()), 0.45, 1); });
+  const pw = prof(st.map((s, i) => [ku[i], s.w])), pd = prof(st.map((s, i) => [ku[i], s.d * cosT[i]]));
+  const g = loft({ curve, seg: Math.round((14 + 2.6 * pts.length) * det), rad: 2 * Math.round(5 * det + 2), w: pw, ht: pd, hb: pd, nt: 2.15, nb: 2.15, up: [0, 0, 1],
+    cap0: { type: 'round', len: 0.6, n: 3 }, cap1: { type: 'round', len: 0.45, n: 2 }, bend: 0.5 });
+  lm.grid = g; lm.us = ku;
+  // joints for skinning: hip, stifle, hock, fetlock / paw joint, coronet
+  const nb = lm.bones.length, sj = J.slice(0, nb + 1).map(j => j.p);
+  // a folded haunch bends over a wide band at the knee (a narrow one creased it into a corner as the leg stretched)
+  const skin = planeSkin(rig, sj, lm.bones, k === 'crouch' ? [0.3 * h, 0.07 * h, 0.04 * h] : [0.11 * h, 0.05 * h, 0.03 * h], k === 'crouch' ? [-0.4, 0.75] : [-0.25, 0.5]);
+  emit(B.part(nm, { group: 'legs' }), g, (u, a, P) => B.paint({ part: 'leg', u, a, P, front: false, side: lm.side }), skin);
+  return g;
 }
 
 const LIMB_BONES = { front: ['Scapula', 'Arm', 'Forearm', 'Hand', 'Finger'], hind: ['Thigh', 'Shin', 'Foot', 'Toe'] };
@@ -1468,6 +1645,12 @@ function tetraLimbs(B, S, L) {
     const J = lm.joints, n = J.length;
     const foot = lm.foot === 'hand' || lm.foot === 'talon' || lm.foot === 'flipper' ? lm.foot : ((lm.front ? S.foreFoot : S.hindFoot) || S.foot || lm.foot);
     lm.footType = foot;
+    if (!lm.front && lm.kind && HIND_SHAPE[lm.kind]) {
+      const nm = `leg-hind-${lm.side > 0 ? 'left' : 'right'}`;
+      tetraHindLeg(B, S, L, lm, nm);
+      tetraFoot(B, S, L, lm, foot, nm);
+      continue;
+    }
     const endIdx = foot === 'sole' ? n - 3 : n - 2;
     const off = lm.pre ? 1 : 0;
     const jl = [...(lm.pre ? [lm.pre] : []), ...J.slice(0, endIdx + 1)];
@@ -1501,18 +1684,35 @@ function tetraFoot(B, S, L, lm, foot, nm) {
   const W = rig.W(last), part = B.part(`foot-${nm.slice(4)}`, { group: 'feet' });
   const footPaint = (u, a, P) => B.paint({ part: 'foot', u, a, P, front: lm.front, side: lm.side });
   if (foot === 'hoof' || foot === 'cloven') {
-    const c = J[n - 2].p, r = J[n - 2].w * 1.05, top = c.y + r * 0.3;
-    const halves = foot === 'cloven' ? [-1, 1] : [0];
-    for (const hx of halves) {
-      const k = foot === 'cloven' ? 0.52 : 1, x = c.x + hx * r * 0.5;
-      const g = loft({ pts: [V3(x, top, c.z), V3(x, 0, c.z)], seg: 4, rad: 2 * Math.round(5 * det + 2), up: [0, 0, 1],
-        w: (u) => lerp(0.92, 1.2, u) * r * k, ht: (u) => lerp(1.0, 1.6, u) * r, hb: (u) => lerp(0.9, 1.0, u) * r, oy: (u) => lerp(0, 0.45, u) * r,
-        nt: foot === 'cloven' ? 1.6 : 2.2, nb: 2.6, cap0: { type: 'round', len: 0.4, n: 2 }, cap1: 'flat', bend: 0, antifold: false });
-      emit(part, g, 'hoof', W);
+    // Digital Diorama revision 4: a real hoof wall (it was a cylinder pushed forward at the bottom: a wedge / boot)
+    const C = J[n - 2].p, T = J[n - 1].p, r = J[n - 2].w * 1.05, cloven = foot === 'cloven';
+    const hd = hoofDims(S, r, C.y, hindLayoutFor(S, 'ungulate').wall);
+    const f = V3(T.x - C.x, 0, T.z - C.z); if (f.lengthSq() < 1e-12) f.set(0, 0, 1); f.normalize();
+    const sd = V3(f.z, 0, -f.x), R = 2 * Math.round(6 * det + 3), NR = 5;
+    for (const cl of cloven ? [-1, 1] : [0]) {
+      // per claw: ground outline (bearing edge) and coronary band; angle a = π/2 is the toe
+      const gap = cloven ? 0.06 * hd.b : 0, bw = cloven ? hd.b * 0.5 : hd.b, bwc = cloven ? hd.bc * 0.52 : hd.bc;
+      const gC = T.clone().addScaledVector(f, -hd.a).addScaledVector(sd, cl * (bw + gap)), cC = C.clone().addScaledVector(sd, cl * bwc * 0.92);
+      const ring = (ctr, hl, hw, yOf) => Array.from({ length: R }, (_, j) => {
+        const a = (j / R) * TAU, ca = Math.cos(a), sa = Math.sin(a);
+        let x = hw * ca, z = hl * sa;
+        if (cloven) {
+          if (ca * cl < 0) x *= 0.58;                       // the flatter inner wall faces the cleft
+          x *= 1 - 0.38 * Math.max(0, sa) ** 3;             // claws taper to a point at the toe
+          z = hl * Math.sign(sa) * Math.abs(sa) ** 0.85;
+        }
+        return ctr.clone().addScaledVector(sd, x).addScaledVector(f, z).setY(yOf(sa));
+      });
+      const top = ring(cC, hd.ac, bwc, (sa) => lerp(hd.heelH, hd.toeH, (1 + sa) / 2));
+      const bot = ring(gC, hd.a, bw, () => 0);
+      const rows = [];
+      for (let k = 0; k < NR; k++) { const t = k / (NR - 1), fl = 1 + 0.05 * Math.sin(Math.PI * t * 0.9); rows.push(top.map((p, j) => { const q = p.clone().lerp(bot[j], t), c = (k === NR - 1 ? gC : cC.clone().lerp(gC, t)).clone().setY(q.y); return c.add(q.sub(c).multiplyScalar(fl)); })); }
+      const capTop = cC.clone().setY(lerp(hd.heelH, hd.toeH, 0.5) + r * 0.25);
+      emit(part, { rows, us: rows.map((_, k) => k / (NR - 1)), R, closed: false, tip0: capTop, tip1: gC.clone().setY(0), main: [0, NR - 1] }, 'hoof', W);
     }
-    if (foot === 'cloven' && S.dewclaws !== false) for (const hx of [-1, 1]) {
-      const f = J[n - 3].p;
-      emit(part, tube([f.clone().add(V3(hx * r * 0.5, -r * 0.2, -r * 0.7)), f.clone().add(V3(hx * r * 0.6, -r * 0.75, -r * 1.05))], (u) => r * 0.26 * (1 - u * 0.6), 3, 5, { cap1: 'point' }), 'hoof', W);
+    if (cloven && S.dewclaws !== false) for (const hx of [-1, 1]) {
+      const fj = J[n - 3].p;
+      emit(part, tube([fj.clone().add(V3(hx * r * 0.5, -r * 0.35, -r * 0.85)), fj.clone().add(V3(hx * r * 0.6, -r * 0.9, -r * 1.15))], (u) => r * 0.26 * (1 - u * 0.6), 3, 5, { cap1: 'point' }), 'hoof', W);
     }
     return;
   }
@@ -1528,8 +1728,30 @@ function tetraFoot(B, S, L, lm, foot, nm) {
     }
     return;
   }
-  if (foot === 'paw' || foot === 'sole') {
-    const sole = foot === 'sole', hj = sole ? J[n - 3] : J[n - 2];
+  if (foot === 'paw') {
+    // Digital Diorama revision 4: a compact paw — a rounded pad under the paw joint and arched toe bulbs in an arc
+    // ahead of it, the middle toes longest (it was a long flat slipper with stubs on the front)
+    const P = J[n - 2].p, T = J[n - 1].p, r = Math.max(J[n - 2].w, 0.018 * H * (S.legThk || 1));
+    const fwd = V3(T.x - P.x, 0, T.z - P.z); if (fwd.lengthSq() < 1e-12) fwd.set(0, 0, 1); fwd.normalize();
+    const lat = V3(fwd.z, 0, -fwd.x), len = Math.max(Math.hypot(T.x - P.x, T.z - P.z), r);
+    const pw = r * 1.08 * (S.pawW || 1), padH = Math.max(P.y, r * 0.7);
+    const pc = P.clone().addScaledVector(fwd, len * 0.12); pc.y = padH * 0.5;
+    emit(part, ellipsoid(pc, pw * 0.88, padH * 0.56, Math.max(len * 0.38, r * 0.85), fwd, [0, 1, 0], 6, 2 * Math.round(6 * det + 2)), footPaint, rig.W2(prevB, last, 0.7));
+    const toes = S.toes ?? 4, tr = pw * (toes > 4 ? 0.3 : 0.37);
+    for (let i = 0; i < toes; i++) {
+      const t = toes === 1 ? 0 : i / (toes - 1) - 0.5, at = Math.abs(t) * 2;
+      const dir = fwd.clone().addScaledVector(lat, t * 0.45).normalize();
+      const c = P.clone().addScaledVector(fwd, len * (0.66 - 0.2 * at * at)).addScaledVector(lat, t * pw * 1.45); c.y = tr * 0.92;
+      emit(part, ellipsoid(c, tr, tr * 0.92, tr * 1.3, dir, [0, 1, 0], 5, 8), footPaint, W);
+      if (S.claws) {
+        const cl = S.claws * tr, cs = c.clone().addScaledVector(dir, tr * 1.1).add(V3(0, tr * 0.1, 0));
+        emit(part, tube([cs, cs.clone().addScaledVector(dir, cl * 0.55).add(V3(0, -cl * 0.1, 0)), cs.clone().addScaledVector(dir, cl * 0.85).add(V3(0, -cl * 0.55, 0))], (u) => tr * 0.3 * (1 - u * 0.9), 4, 4, { cap1: 'point' }), 'hoof', W);
+      }
+    }
+    return;
+  }
+  if (foot === 'sole') {
+    const sole = true, hj = J[n - 3];
     const heel = hj.p, toe = J[n - 1].p, r = Math.max(hj.w, 0.018 * H * (S.legThk || 1));
     const fwd = V3(toe.x - heel.x, 0, toe.z - heel.z).normalize();
     const pawW = r * (sole ? 1.12 : 1.1) * (S.pawW || 1), pawH = r * (sole ? 0.75 : 0.95), yMid = pawH * 0.55;
@@ -1537,8 +1759,10 @@ function tetraFoot(B, S, L, lm, foot, nm) {
     const front = V3(toe.x, yMid * 0.9, toe.z);
     const len = back.distanceTo(front);
     front.addScaledVector(fwd, -0.22 * len);
-    const g = loft({ pts: [back, front], seg: 6, rad: 2 * Math.round(6 * det + 2), up: [0, 1, 0],
-      w: (u) => pawW * lerp(0.8, 1.0, sstep(0, 0.6, u)), ht: (u) => pawH * lerp(0.75, 0.55, u), hb: () => yMid * 0.95, nt: 2.2, nb: 3.4,
+    // Digital Diorama revision 4: the heel rises to the ankle, so the leg flows into the foot (a board under a cone)
+    const heelTop = Math.max(pawH * 0.75, heel.y - yMid + 0.35 * r);
+    const g = loft({ pts: [back, front], seg: 8, rad: 2 * Math.round(6 * det + 2), up: [0, 1, 0],
+      w: (u) => pawW * lerp(0.82, 1.0, sstep(0, 0.6, u)), ht: (u) => lerp(heelTop, pawH * 0.55, sstep(0, 0.75, u)), hb: () => yMid * 0.95, nt: 2.2, nb: 3.4,
       cap0: { type: 'round', len: 0.6, n: 2 }, cap1: { type: 'round', len: 0.55, n: 3 }, bend: 0, antifold: false });
     emit(part, g, footPaint, sole ? (u) => rig.W2(prevB, last, sstep(0.5, 0.85, u)) : (u) => rig.W2(prevB, last, sstep(0, 0.35, u)));
     const toes = S.toes ?? (sole ? 5 : 4), tl = (S.toeLen ?? (sole ? 0.24 : 0.3)) * len;
@@ -2120,7 +2344,7 @@ const FELID = { stance: 'digitigrade', nose: 'feline', whiskerPads: true, pupil:
   ear: { style: 'feline', len: 0.26, w: 0.85, s: 0.26, a: 0.66, spread: 26, tilt: 6, turn: 12, cup: 0.55 }, tail: { style: 'thin', len: 0.85, thk: 0.035, set: -40, curl: 30, tipCurl: 12 } };
 const URSID = { stance: 'plantigrade', nose: 'pad', claws: 1.1, toes: 5, footLen: 1.1, dome: 1.1, stop: 0.35, eyeYaw: 32, eye: 0.04, neckThk: 0.85,
   ear: { style: 'round', len: 0.2, w: 0.95, s: 0.24, a: 0.78, spread: 28, tilt: 4, turn: 12, cup: 0.5 }, tail: { style: 'thin', len: 0.1, thk: 0.06, set: -40 } };
-const RODENT = { stance: 'digitigrade', nose: 'pad', incisors: 0.09, whiskerPads: true, claws: 0.6, toes: 4, eye: 0.11, eyeYaw: 70, stop: 0.2, crouch: 0.8, hockH: 0.13, footLen: 1.6 };
+const RODENT = { stance: 'digitigrade', nose: 'pad', incisors: 0.09, whiskerPads: true, claws: 0.6, toes: 4, eye: 0.11, eyeYaw: 70, stop: 0.2, crouch: 0.8, hockH: 0.13, footLen: 1.6, thighW: 0.5, thighD: 0.52 };
 
 const SPECIES_DEFS = {
   horse: { label: 'Horse', fam: UNGULATE, H: 1.6, len: 1.02, depth: 0.44, width: 0.8, rump: 0.99, hipW: 1.06, tuck: 0.18, belly: 0.25, withers: 0.14,
@@ -2138,12 +2362,12 @@ const SPECIES_DEFS = {
     foot: 'hoof', ear: { style: 'long', len: 0.55, w: 0.36, s: 0.07, a: 0.42, spread: 20, tilt: 6, turn: 30, cup: 0.6 },
     tail: { style: 'tuft', len: 0.42, thk: 0.02, set: -72, tuft: 2 }, mane: { style: 'crest', h: 0.07 }, muzzle: 'light', muzzleS: 0.55, dorsal: true, countershade: 0.45,
     palette: pal({ body: '#8b847c', belly: '#d9d3c8', marking: '#2a2622', mane: '#2a2622', hoof: '#33302d', nose: '#2b2826' }) },
-  cow: { label: 'Dairy Cow', fam: UNGULATE, H: 1.42, len: 1.16, depth: 0.58, width: 0.86, rump: 1.0, hipW: 1.1, rumpDepth: 0.95, tuck: 0.05, belly: 0.4,
+  cow: { label: 'Dairy Cow', fam: UNGULATE, hind: { kY: 0.72, kZ: 0.14, aY: 0.45, aZ: -0.05, fY: 0.15, fZ: -0.04, cY: 0.058 }, H: 1.42, len: 1.16, depth: 0.58, width: 0.86, rump: 1.0, hipW: 1.1, rumpDepth: 0.95, tuck: 0.05, belly: 0.4,
     neckAng: 22, neckLen: 0.3, neckThk: 0.75, neckW: 0.72, headAng: 62, headLen: 0.39, headD: 0.27, headW: 0.25, snout: 0.5, snoutW: 0.8, snoutD: 0.66, stop: 0.05, cheek: 1.12, jowl: 1.2, muzzleN: 2.0, eye: 0.045, eyeS: 0.3,
     ear: { style: 'pointed', len: 0.3, w: 0.55, s: 0.12, a: 1.15, spread: 75, tilt: -10, turn: 40, cup: 0.4 }, horns: { style: 'cattle', len: 0.32, thk: 0.06, s: 0.04, a: 0.95 },
     tail: { style: 'tuft', len: 0.62, thk: 0.022, set: -84, tuft: 2.4 }, pattern: 'patches', countershade: 0.1, muzzle: 'light', muzzleS: 0.8, udder: 0.13,
     palette: pal({ body: '#f1ede4', belly: '#f4f0e8', pattern: '#1c1a19', marking: '#1c1a19', nose: '#d99a96', skin: '#d99a96', horn: '#e2d6b6', hoof: '#3b3330' }) },
-  deer: { label: 'White-tailed Deer', fam: UNGULATE, H: 1.0, len: 1.0, depth: 0.42, width: 0.78, rump: 1.02, tuck: 0.3, neckAng: 52, neckLen: 0.48, neckThk: 0.55, neckW: 0.7,
+  deer: { label: 'White-tailed Deer', fam: UNGULATE, hind: { kY: 0.73, kZ: 0.15, aY: 0.5, aZ: -0.12, fY: 0.13, fZ: -0.1, cY: 0.05, wall: 48 }, H: 1.0, len: 1.0, depth: 0.42, width: 0.78, rump: 1.02, tuck: 0.3, neckAng: 52, neckLen: 0.48, neckThk: 0.55, neckW: 0.7,
     headAng: 55, headLen: 0.31, headD: 0.26, headW: 0.22, snout: 0.55, snoutW: 0.5, snoutD: 0.5, stop: 0.15, eye: 0.06, eyeS: 0.32, legThk: 0.72,
     ear: { style: 'pointed', len: 0.5, w: 0.56, s: 0.1, a: 0.85, spread: 45, tilt: 4, turn: 35, cup: 0.6 }, horns: { style: 'whitetail', len: 1.15, thk: 0.075, s: 0.09, a: 0.5, tines: 4 },
     tail: { style: 'flat', len: 0.2, thk: 0.035, set: -20, flat: 2 }, tailUnder: true, rumpPatch: true, countershade: 0.55, muzzle: 'dark', muzzleS: 0.9,
@@ -2168,7 +2392,7 @@ const SPECIES_DEFS = {
     headAng: 15, headLen: 0.34, headD: 0.33, headW: 0.4, snout: 0.38, eye: 0.042, legThk: 1.32, cheek: 1.32, ear: { style: 'round', len: 0.17, w: 0.95, s: 0.24, a: 0.82 },
     tail: { style: 'thin', len: 0.95, thk: 0.045, set: -45, curl: 25, tipCurl: 15 }, pattern: 'tiger', countershade: 0.55, cheeks: true, earZone: 'pattern',
     palette: pal({ body: '#d27a2c', belly: '#f3ead8', pattern: '#1b1310', marking: '#1b1310', eye: '#c8a034', nose: '#c07a72' }) },
-  elephant: { label: 'African Elephant', fam: { stance: 'graviportal', nose: 'none' }, H: 3.0, len: 1.02, depth: 0.5, width: 0.92, rump: 0.93, rumpDepth: 0.92, tuck: 0, belly: 0.15,
+  elephant: { label: 'African Elephant', fam: { stance: 'graviportal', nose: 'none' }, hind: { kY: 0.5, kZ: 0.06, aY: 0.19, aZ: -0.02 }, H: 3.0, len: 1.02, depth: 0.5, width: 0.92, rump: 0.93, rumpDepth: 0.92, tuck: 0, belly: 0.15,
     // Digital Diorama revision: a big domed head; ears hang back over the shoulders from their front edge
     // (they used to spread both ways from the root and jut forward over the face); a longer, thicker trunk;
     // the back dips behind the shoulders
@@ -2176,7 +2400,7 @@ const SPECIES_DEFS = {
     ear: { style: 'fan', len: 1.12, w: 0.42, offset: 0.9, thick: 0.3, s: 0.2, a: 1.05, spread: 18, tilt: 0, turn: 10, cup: 0.06, droop: 0.3, hang: 64, moundR: 0.12, innerW: 0 }, trunk: { len: 0.8, thk: 0.16, curl: 0.6 }, tusks: { style: 'elephant', len: 0.42, thk: 0.1, s: 0.78, a: 0.75 },
     tail: { style: 'tuft', len: 0.38, thk: 0.02, set: -80, tuft: 1.8 }, countershade: 0,
     palette: pal({ body: '#7f7a74', belly: '#77726c', marking: '#5d5853', mane: '#2b2826', skin: '#8f7d78', hoof: '#cfc6b6', teeth: '#efe5cc' }) },
-  giraffe: { label: 'Giraffe', fam: UNGULATE, H: 3.0, len: 0.62, depth: 0.34, width: 0.82, rump: 0.82, rumpDepth: 0.9, tuck: 0.2, withers: 0.25,
+  giraffe: { label: 'Giraffe', fam: UNGULATE, hind: { kY: 0.78, kZ: 0.12, aY: 0.53, aZ: -0.07, fY: 0.12, fZ: -0.06, cY: 0.045 }, hindShape: { breech: 0.08, hams: 0, inset: 0.06 }, H: 3.0, len: 0.62, depth: 0.34, width: 0.82, rump: 0.82, rumpDepth: 0.9, tuck: 0.2, withers: 0.25,
     neckAng: 62, neckLen: 0.66, neckThk: 0.5, neckW: 0.62, headAng: 60, headLen: 0.19, headD: 0.24, headW: 0.2, snout: 0.55, snoutW: 0.6, snoutD: 0.5, stop: 0.1, eye: 0.06, eyeS: 0.3, legThk: 0.55, tibiaSlope: 0.7,
     ear: { style: 'pointed', len: 0.4, w: 0.42, s: 0.12, a: 1.05, spread: 70, tilt: -5, turn: 35 }, horns: { style: 'ossicones', len: 0.45, thk: 0.07, s: 0.1, a: 0.42 },
     tail: { style: 'tuft', len: 0.3, thk: 0.012, set: -80, tuft: 2.5 }, mane: { style: 'crest', h: 0.025 }, pattern: 'giraffe', countershade: 0,
@@ -2184,7 +2408,7 @@ const SPECIES_DEFS = {
   bear: { label: 'Brown Bear', fam: URSID, H: 1.1, len: 1.3, depth: 0.56, width: 0.95, rump: 0.97, tuck: 0.05, belly: 0.3, withers: 0.18, neckAng: 14, neckLen: 0.26,
     headAng: 22, headLen: 0.33, headD: 0.32, headW: 0.34, snout: 0.42, snoutW: 0.5, snoutD: 0.55, legThk: 1.25, countershade: 0.1, muzzle: 'light', muzzleS: 0.7,
     palette: pal({ body: '#6b4a2e', belly: '#5d3f27', marking: '#3a2818', hoof: '#2a2420', nose: '#161210' }) },
-  pig: { label: 'Domestic Pig', fam: UNGULATE, H: 0.8, len: 1.4, depth: 0.62, width: 0.92, rump: 1.02, hipW: 1.08, tuck: 0, belly: 0.4, neckAng: 8, neckLen: 0.06, neckThk: 0.92, neckW: 0.95,
+  pig: { label: 'Domestic Pig', fam: UNGULATE, hind: { kY: 0.66, kZ: 0.17, aY: 0.38, aZ: -0.06, fY: 0.13, fZ: -0.035, cY: 0.05 }, H: 0.8, len: 1.4, depth: 0.62, width: 0.92, rump: 1.02, hipW: 1.08, tuck: 0, belly: 0.4, neckAng: 8, neckLen: 0.06, neckThk: 0.92, neckW: 0.95,
     headAng: 28, headLen: 0.42, headD: 0.27, headW: 0.3, snout: 0.55, snoutW: 0.48, snoutD: 0.48, stop: 0.12, dome: 0.9, jowl: 1.5, eye: 0.03, nose: 'disc', muzzleN: 2.6, eyeYaw: 50,
     ear: { style: 'semiPrick', len: 0.4, w: 0.7, s: 0.2, a: 0.75, spread: 30, tilt: 18, turn: 10, breakU: 0.5 }, tail: { style: 'curly', len: 0.3, thk: 0.018, turns: 1.6 },
     countershade: 0, palette: pal({ body: '#eab3a4', belly: '#ebb8aa', skin: '#e39a8c', nose: '#d98b80', mouth: '#9c4c4a', hoof: '#a08070' }) },
@@ -2203,11 +2427,11 @@ const SPECIES_DEFS = {
     headAng: 18, headLen: 0.36, headD: 0.24, headW: 0.3, snout: 0.55, snoutW: 0.36, snoutD: 0.42, eye: 0.05, legThk: 0.8, pupil: 'slit', slitW: 0.3,
     ear: { len: 0.45, w: 0.58 }, tail: { style: 'bushy', len: 0.95, thk: 0.1, set: -35, curl: 10, bush: 1.0 }, points: 0.55, tailTip: 0.14, tailTipZone: 'belly', earTip: 0.0, earZone: 'marking', countershade: 0.6, cheeks: true, grain: 1.5, neckThk: 0.85,
     palette: pal({ body: '#c4561e', belly: '#efe6da', marking: '#231a16', eye: '#c08c2a', nose: '#181412' }) },
-  hyena: { label: 'Spotted Hyena', fam: CANID, H: 0.85, len: 1.1, depth: 0.5, width: 0.72, rump: 0.8, rumpDepth: 0.85, withers: 0.15, neckAng: 25, neckLen: 0.34, neckThk: 0.9,
+  hyena: { label: 'Spotted Hyena', fam: CANID, hind: { aY: 0.33 }, H: 0.85, len: 1.1, depth: 0.5, width: 0.72, rump: 0.8, rumpDepth: 0.85, withers: 0.15, neckAng: 25, neckLen: 0.34, neckThk: 0.9,
     headAng: 20, headLen: 0.36, headD: 0.32, headW: 0.34, snout: 0.4, snoutW: 0.55, snoutD: 0.6, eye: 0.04,
     ear: { style: 'round', len: 0.27, w: 0.85 }, tail: { style: 'bushy', len: 0.38, thk: 0.035, set: -70, bush: 0.6 }, mane: { style: 'crest', h: 0.05 }, pattern: 'hyena', countershade: 0.2, muzzle: 'dark', muzzleS: 0.6,
     palette: pal({ body: '#b49a6c', belly: '#c8b38a', pattern: '#3a2b1e', marking: '#2d241b', mane: '#3a2b1e', nose: '#151110' }) },
-  cheetah: { label: 'Cheetah', fam: FELID, H: 0.8, len: 1.25, depth: 0.44, width: 0.62, rump: 0.98, tuck: 0.65, chestW: 0.95, neckAng: 25, neckLen: 0.3, neckThk: 0.72,
+  cheetah: { label: 'Cheetah', fam: FELID, hind: { kY: 0.68, kZ: 0.18, aY: 0.34, aZ: -0.11, fY: 0.07, fZ: -0.09, toe: 0.12 }, H: 0.8, len: 1.25, depth: 0.44, width: 0.62, rump: 0.98, tuck: 0.65, chestW: 0.95, neckAng: 25, neckLen: 0.3, neckThk: 0.72,
     headAng: 12, headLen: 0.24, headD: 0.34, headW: 0.38, snout: 0.32, eye: 0.06, legThk: 0.84, claws: 0.4, ear: { style: 'round', len: 0.2, w: 0.95, s: 0.26, a: 0.85 },
     tail: { style: 'thin', len: 0.85, thk: 0.032, set: -55, curl: 30, tipCurl: 25 }, pattern: 'spots', tearMark: true, countershade: 0.55, cheeks: true,
     palette: pal({ body: '#d9a856', belly: '#f2e6cc', pattern: '#1d1712', marking: '#1d1712', eye: '#b8862a', nose: '#2a1f1a' }) },
@@ -2229,101 +2453,101 @@ const SPECIES_DEFS = {
     ear: { style: 'round', len: 0.22, w: 1.0, s: 0.2, a: 0.82 }, pattern: 'panda', countershade: 0,
     palette: pal({ body: '#f1ede4', belly: '#f1ede4', pattern: '#1b1a1a', marking: '#1b1a1a', nose: '#121010', skin: '#1b1a1a' }) },
   // Digital Diorama revision: a hunched, stocky body (it was long and stretched) and a grizzled coat
-  raccoon: { label: 'Raccoon', fam: { ...URSID, stance: 'plantigrade' }, H: 0.3, len: 1.3, depth: 0.66, width: 0.95, rump: 1.2, tuck: 0.1, neckAng: 25, neckLen: 0.22, neckThk: 0.95, legThk: 1.2, grain: 2.2,
+  raccoon: { label: 'Raccoon', fam: { ...URSID, stance: 'plantigrade' }, hind: { kY: 0.5, foot: 0.38 }, H: 0.3, len: 1.3, depth: 0.66, width: 0.95, rump: 1.2, tuck: 0.1, neckAng: 25, neckLen: 0.22, neckThk: 0.95, legThk: 1.2, grain: 2.2,
     headAng: 15, headLen: 0.42, headD: 0.3, headW: 0.42, snout: 0.45, snoutW: 0.35, snoutD: 0.4, stop: 0.45, eye: 0.05, cheek: 1.35, claws: 0.6,
     ear: { style: 'round', len: 0.26, w: 0.85, s: 0.22, a: 0.68, spread: 20 }, tail: { style: 'bushy', len: 0.85, thk: 0.085, set: -30, bush: 0.5 }, pattern: 'raccoon', countershade: 0.3, earTip: 0.0, earZone: 'belly',
     palette: pal({ body: '#8a847b', belly: '#cfc8bb', pattern: '#1e1c1a', marking: '#2b2825', nose: '#121010' }) },
-  badger: { label: 'European Badger', fam: URSID, H: 0.28, len: 2.1, depth: 0.7, width: 1.25, grain: 1.8, rump: 1.0, tuck: 0, belly: 0.2, neckAng: 10, neckLen: 0.3, neckThk: 0.85,
+  badger: { label: 'European Badger', fam: URSID, hind: { kY: 0.44, kZ: 0.12, foot: 0.42 }, H: 0.28, len: 2.1, depth: 0.7, width: 1.25, grain: 1.8, rump: 1.0, tuck: 0, belly: 0.2, neckAng: 10, neckLen: 0.3, neckThk: 0.85,
     headAng: 18, headLen: 0.55, headD: 0.24, headW: 0.32, snout: 0.5, snoutW: 0.4, snoutD: 0.45, stop: 0.05, dome: 0.9, eye: 0.03, legThk: 1.4, claws: 1.4,
     ear: { style: 'round', len: 0.14, w: 1.0, s: 0.22, a: 0.95 }, tail: { style: 'bushy', len: 0.45, thk: 0.06, set: -20, bush: 0.4 }, pattern: 'badger', countershade: 0,
     palette: pal({ body: '#8f8a84', belly: '#ece8df', pattern: '#1a1918', marking: '#1a1918', nose: '#121010' }) },
-  otter: { label: 'River Otter', fam: { stance: 'plantigrade', nose: 'pad', whiskerPads: true, claws: 0.3 }, H: 0.3, len: 2.4, depth: 0.58, width: 0.92, rump: 1.02, tuck: 0.05, neckAng: 18, neckLen: 0.42, neckThk: 0.92,
+  otter: { label: 'River Otter', fam: { stance: 'plantigrade', nose: 'pad', whiskerPads: true, claws: 0.3 }, hind: { kY: 0.46, foot: 0.46 }, H: 0.3, len: 2.4, depth: 0.58, width: 0.92, rump: 1.02, tuck: 0.05, neckAng: 18, neckLen: 0.42, neckThk: 0.92,
     headAng: 8, headLen: 0.42, headD: 0.24, headW: 0.38, snout: 0.35, snoutW: 0.6, snoutD: 0.55, stop: 0.25, dome: 0.9, eye: 0.045, eyeEl: 30, legThk: 1.2, footLen: 1.1, webbed: true, toes: 5,
     ear: { style: 'round', len: 0.12, w: 1.0, s: 0.24, a: 1.0 }, tail: { style: 'thin', len: 1.35, match: 0.75, set: -15 }, countershade: 0.45, cheeks: true,
     palette: pal({ body: '#5e432c', belly: '#a68e72', nose: '#121010', web: '#3a2a1e' }) },
   // Digital Diorama revision: a round body under a dense coat of short spines laid back (painted between the
   // modelled quills), rather than sparse long spikes on a long body
-  hedgehog: { label: 'Hedgehog', fam: { stance: 'plantigrade', nose: 'pad', claws: 0.5 }, H: 0.115, len: 1.35, depth: 0.86, width: 1.2, rump: 1.0, tuck: 0, neckAng: 15, neckLen: 0.12, neckThk: 0.95,
+  hedgehog: { label: 'Hedgehog', fam: { stance: 'plantigrade', nose: 'pad', claws: 0.5 }, hind: { kY: 0.42, kZ: 0.1, foot: 0.46 }, H: 0.115, len: 1.35, depth: 0.86, width: 1.2, rump: 1.0, tuck: 0, neckAng: 15, neckLen: 0.12, neckThk: 0.95,
     headAng: 25, headLen: 0.5, headD: 0.3, headW: 0.36, snout: 0.5, snoutW: 0.3, snoutD: 0.32, stop: 0.1, eye: 0.06, legThk: 1.4, quills: { len: 0.2, count: 560, lay: 1.35 }, spinyBack: true,
     ear: { style: 'round', len: 0.2, w: 1.0, s: 0.25, a: 0.95 }, tail: { style: 'thin', len: 0.12, thk: 0.06, set: -30 }, countershade: 0.6,
     palette: pal({ body: '#7d6a55', belly: '#cbb59a', marking: '#c9b996', pattern: '#4f3e2d', nose: '#121010', skin: '#d4a090' }) },
   // Digital Diorama revision: a compact, crouched body low on short legs (it stood on stilts like a cat) and a
   // tail as bushy as the body is deep, arching up behind the back
-  squirrel: { label: 'Red Squirrel', fam: RODENT, H: 0.095, len: 1.9, depth: 0.74, width: 0.85, rump: 1.12, rumpDepth: 1.15, tuck: 0.15, neckAng: 40, neckLen: 0.18, neckThk: 0.9,
+  squirrel: { label: 'Red Squirrel', fam: RODENT, hind: { kZ: 0.34, aZ: -0.16, foot: 0.68 }, H: 0.095, len: 1.9, depth: 0.74, width: 0.85, rump: 1.12, rumpDepth: 1.15, tuck: 0.15, neckAng: 40, neckLen: 0.18, neckThk: 0.9,
     headAng: 15, headLen: 0.5, headD: 0.38, headW: 0.44, snout: 0.32, eye: 0.12, legThk: 1.25,
     ear: { style: 'tufted', len: 0.42, w: 0.55, s: 0.2, a: 0.55, spread: 15 }, tail: { style: 'bushy', len: 1.8, thk: 0.24, set: 62, curl: -8, tipCurl: -22, bush: 0.9 },
     countershade: 0.65, palette: pal({ body: '#b5561f', belly: '#f2e4cc', marking: '#7a3812', nose: '#3a2a22', eye: '#140e0b' }) },
-  beaver: { label: 'Beaver', fam: { ...RODENT, stance: 'plantigrade', crouch: 0 }, H: 0.32, len: 2.0, depth: 0.72, width: 1.0, rump: 1.15, rumpDepth: 1.1, tuck: 0, neckAng: 20, neckLen: 0.22, neckThk: 0.95,
+  beaver: { label: 'Beaver', fam: { ...RODENT, stance: 'plantigrade', crouch: 0 }, hind: { kY: 0.45, kZ: 0.15, foot: 0.62 }, H: 0.32, len: 2.0, depth: 0.72, width: 1.0, rump: 1.15, rumpDepth: 1.1, tuck: 0, neckAng: 20, neckLen: 0.22, neckThk: 0.95,
     headAng: 15, headLen: 0.45, headD: 0.3, headW: 0.38, snout: 0.38, snoutW: 0.62, snoutD: 0.6, eye: 0.04, incisors: 0.12, webbed: 'hind', toes: 5, legThk: 1.25,
     ear: { style: 'round', len: 0.12, w: 1.0, s: 0.22, a: 0.95 }, tail: { style: 'flat', len: 0.95, thk: 0.15, set: -12, flat: 3.4 }, countershade: 0.2,
     palette: pal({ body: '#6a4426', belly: '#7a5232', marking: '#2c2420', web: '#2c2420', nose: '#151110', teeth: '#d8862a' }) },
-  capybara: { label: 'Capybara', fam: { ...RODENT, crouch: 0.2, hockH: 0.2, footLen: 1.4, eye: 0.04 }, H: 0.52, len: 1.6, depth: 0.6, width: 0.85, rump: 1.06, tuck: 0.05, neckAng: 20, neckLen: 0.2, neckThk: 0.9,
+  capybara: { label: 'Capybara', fam: { ...RODENT, crouch: 0.2, hockH: 0.2, footLen: 1.4, eye: 0.04 }, hind: { kY: 0.62, kZ: 0.2, aY: 0.24, aZ: -0.14, fY: 0.05, toe: 0.22 }, H: 0.52, len: 1.6, depth: 0.6, width: 0.85, rump: 1.06, tuck: 0.05, neckAng: 20, neckLen: 0.2, neckThk: 0.9,
     headAng: 30, headLen: 0.48, headD: 0.36, headW: 0.33, snout: 0.5, snoutW: 0.82, snoutD: 0.82, stop: 0.0, dome: 0.92, eyeEl: 30, nose: 'muzzle', nostril: 0.18,
     ear: { style: 'round', len: 0.12, w: 1.0, s: 0.12, a: 0.75 }, tail: { style: 'none', len: 0 }, countershade: 0.1,
     palette: pal({ body: '#8a6440', belly: '#9a744e', nose: '#2a1d16', skin: '#5a4030' }) },
-  sheep: { label: 'Sheep', fam: UNGULATE, H: 0.8, len: 1.15, depth: 0.62, width: 1.0, rump: 1.0, tuck: 0, belly: 0.2, neckAng: 32, neckLen: 0.26, neckThk: 0.85,
+  sheep: { label: 'Sheep', fam: UNGULATE, hind: { kY: 0.72, aY: 0.46, aZ: -0.08, fY: 0.15, fZ: -0.065, cY: 0.055 }, H: 0.8, len: 1.15, depth: 0.62, width: 1.0, rump: 1.0, tuck: 0, belly: 0.2, neckAng: 32, neckLen: 0.26, neckThk: 0.85,
     headAng: 55, headLen: 0.34, headD: 0.27, headW: 0.26, snout: 0.5, snoutW: 0.6, snoutD: 0.58, stop: 0.1, roman: 0.6, eye: 0.05, legThk: 0.85, wool: 0.06,
     ear: { style: 'pointed', len: 0.32, w: 0.42, s: 0.12, a: 1.2, spread: 80, tilt: -15, turn: 40 }, tail: { style: 'thin', len: 0.2, thk: 0.05, set: -80 },
     faceZone: 'marking', legZone: 'marking', countershade: 0, earZone: 'marking',
     palette: pal({ body: '#ece2cc', belly: '#e6dbc2', marking: '#2c2623', nose: '#1d1917', skin: '#2c2623' }) },
-  bighorn: { label: 'Bighorn Sheep', fam: UNGULATE, H: 1.0, len: 1.1, depth: 0.52, width: 0.88, rump: 1.0, tuck: 0.2, neckAng: 40, neckLen: 0.3, neckThk: 0.85,
+  bighorn: { label: 'Bighorn Sheep', fam: UNGULATE, hind: { kY: 0.72, aY: 0.46, aZ: -0.08, fY: 0.15, fZ: -0.065, cY: 0.055 }, H: 1.0, len: 1.1, depth: 0.52, width: 0.88, rump: 1.0, tuck: 0.2, neckAng: 40, neckLen: 0.3, neckThk: 0.85,
     headAng: 50, headLen: 0.3, headD: 0.29, headW: 0.27, snout: 0.5, snoutW: 0.58, snoutD: 0.55, stop: 0.15, roman: 0.4, eye: 0.05, legThk: 0.95,
     ear: { style: 'pointed', len: 0.3, w: 0.45, s: 0.14, a: 1.05, spread: 60, tilt: 0 }, horns: { style: 'ram', len: 1.45, thk: 0.17, s: 0.1, a: 0.5, curl: 1.85 },
     tail: { style: 'thin', len: 0.12, thk: 0.035, set: -60 }, rumpPatch: true, muzzle: 'light', muzzleS: 0.85, countershade: 0.35,
     palette: pal({ body: '#7a5f45', belly: '#eee4d4', horn: '#bfa77e', nose: '#2b2320' }) },
-  goat: { label: 'Domestic Goat', fam: UNGULATE, H: 0.75, len: 1.15, depth: 0.5, width: 0.8, rump: 1.02, tuck: 0.15, neckAng: 45, neckLen: 0.34, neckThk: 0.68,
+  goat: { label: 'Domestic Goat', fam: UNGULATE, hind: { kY: 0.72, aY: 0.46, aZ: -0.08, fY: 0.15, fZ: -0.065, cY: 0.055 }, H: 0.75, len: 1.15, depth: 0.5, width: 0.8, rump: 1.02, tuck: 0.15, neckAng: 45, neckLen: 0.34, neckThk: 0.68,
     headAng: 55, headLen: 0.32, headD: 0.26, headW: 0.24, snout: 0.5, snoutW: 0.55, snoutD: 0.5, stop: 0.2, eye: 0.055, legThk: 0.85,
     ear: { style: 'pointed', len: 0.42, w: 0.38, s: 0.12, a: 1.1, spread: 75, tilt: -10, turn: 40 }, horns: { style: 'goat', len: 0.8, thk: 0.07, s: 0.08, a: 0.35 },
     tail: { style: 'flat', len: 0.16, thk: 0.03, set: 55 }, mane: { style: 'none', beard: 0.45 }, countershade: 0.1,
     palette: pal({ body: '#e8e1d2', belly: '#efe9dc', marking: '#8a7a68', mane: '#d8d0bf', horn: '#a39478', nose: '#9a7d74', eye: '#c8a034' }) },
-  bison: { label: 'American Bison', fam: UNGULATE, H: 1.8, len: 1.15, depth: 0.6, width: 0.85, rump: 0.8, rumpDepth: 0.8, tuck: 0.15, withers: 0.32, chestW: 1.15,
+  bison: { label: 'American Bison', fam: UNGULATE, hind: { kY: 0.68, kZ: 0.13, aY: 0.42, aZ: -0.05, fY: 0.14, fZ: -0.04, cY: 0.058 }, H: 1.8, len: 1.15, depth: 0.6, width: 0.85, rump: 0.8, rumpDepth: 0.8, tuck: 0.15, withers: 0.32, chestW: 1.15,
     neckAng: -5, neckLen: 0.2, neckThk: 0.95, neckW: 0.95, neckLow: 0.15, headAng: 78, headLen: 0.3, headD: 0.36, headW: 0.33, snout: 0.38, snoutW: 0.75, snoutD: 0.7, stop: 0.1, dome: 1.2, eye: 0.035,
     ear: { style: 'pointed', len: 0.2, w: 0.5, s: 0.16, a: 1.25, spread: 85, tilt: -10, turn: 40 }, horns: { style: 'cattle', len: 0.22, thk: 0.07, s: 0.1, a: 1.15 },
     tail: { style: 'tuft', len: 0.3, thk: 0.02, set: -70, tuft: 2.5 }, mane: { style: 'none', beard: 0.6 }, frontMane: 0.35, countershade: 0,
     palette: pal({ body: '#5a3d26', belly: '#4f3420', mane: '#2e1f14', horn: '#1e1a17', nose: '#151210' }) },
-  gazelle: { label: "Thomson's Gazelle", fam: UNGULATE, H: 0.65, len: 1.0, depth: 0.42, width: 0.74, rump: 1.03, tuck: 0.4, neckAng: 52, neckLen: 0.42, neckThk: 0.52,
+  gazelle: { label: "Thomson's Gazelle", fam: UNGULATE, hind: { kY: 0.73, kZ: 0.15, aY: 0.5, aZ: -0.12, fY: 0.13, fZ: -0.1, cY: 0.05, wall: 48 }, H: 0.65, len: 1.0, depth: 0.42, width: 0.74, rump: 1.03, tuck: 0.4, neckAng: 52, neckLen: 0.42, neckThk: 0.52,
     headAng: 50, headLen: 0.32, headD: 0.26, headW: 0.24, snout: 0.5, snoutW: 0.5, snoutD: 0.48, stop: 0.15, eye: 0.07, legThk: 0.6,
     ear: { style: 'pointed', len: 0.45, w: 0.45, s: 0.12, a: 0.85, spread: 45 }, horns: { style: 'lyre', len: 0.95, thk: 0.06, s: 0.13, a: 0.32 },
     tail: { style: 'thin', len: 0.2, thk: 0.02, set: -40 }, tailTip: 0.5, flankStripe: true, rumpPatch: true, countershade: 0.6,
     palette: pal({ body: '#c58c4f', belly: '#f3ece0', marking: '#231a14', horn: '#3b302a', nose: '#1d1715' }) },
-  moose: { label: 'Moose', fam: UNGULATE, H: 1.9, len: 0.98, depth: 0.45, width: 0.8, rump: 0.92, rumpDepth: 0.9, tuck: 0.15, withers: 0.18, neckAng: 25, neckLen: 0.28, neckThk: 0.8,
+  moose: { label: 'Moose', fam: UNGULATE, hind: { kY: 0.72, aY: 0.49, aZ: -0.11, fY: 0.14, fZ: -0.095, cY: 0.055 }, H: 1.9, len: 0.98, depth: 0.45, width: 0.8, rump: 0.92, rumpDepth: 0.9, tuck: 0.15, withers: 0.18, neckAng: 25, neckLen: 0.28, neckThk: 0.8,
     headAng: 62, headLen: 0.36, headD: 0.24, headW: 0.2, snout: 0.62, snoutW: 0.75, snoutD: 0.8, stop: 0.05, roman: 0.9, drop: 0.25, eye: 0.03, legThk: 0.9,
     ear: { style: 'pointed', len: 0.38, w: 0.48, s: 0.12, a: 1.0, spread: 60, tilt: 0 }, horns: { style: 'palmate', len: 0.95, thk: 0.07, s: 0.12, a: 0.65 },
     tail: { style: 'thin', len: 0.06, thk: 0.03, set: -60 }, socks: 0.75, countershade: 0,
     palette: pal({ body: '#3e2b1d', belly: '#a0896d', marking: '#2a1d14', horn: '#c7b086', nose: '#1d1612' }) },
-  reindeer: { label: 'Reindeer', fam: UNGULATE, H: 1.1, len: 1.05, depth: 0.5, width: 0.84, rump: 1.0, tuck: 0.15, neckAng: 35, neckLen: 0.35, neckThk: 0.75,
+  reindeer: { label: 'Reindeer', fam: UNGULATE, hind: { kY: 0.72, aY: 0.48, aZ: -0.1, fY: 0.13, fZ: -0.085, cY: 0.05 }, H: 1.1, len: 1.05, depth: 0.5, width: 0.84, rump: 1.0, tuck: 0.15, neckAng: 35, neckLen: 0.35, neckThk: 0.75,
     headAng: 55, headLen: 0.33, headD: 0.25, headW: 0.22, snout: 0.55, snoutW: 0.7, snoutD: 0.6, stop: 0.08, eye: 0.045, legThk: 0.95, pawW: 1.2,
     ear: { style: 'pointed', len: 0.3, w: 0.5, s: 0.12, a: 0.95, spread: 55 }, horns: { style: 'antlers', len: 1.3, thk: 0.05, s: 0.1, a: 0.42, tines: 5 },
     tail: { style: 'flat', len: 0.12, thk: 0.035, set: -40 }, frontMane: 0.7, maneTop: 0.25, maneHead: false, rumpPatch: true, countershade: 0.3, muzzle: 'dark', muzzleS: 0.6, grain: 1.6,
     palette: pal({ body: '#7a6a58', belly: '#e4dccb', mane: '#ece4d4', marking: '#3d3127', horn: '#d0bc96', nose: '#2b2320' }) },
-  camel: { label: 'Dromedary Camel', fam: { ...UNGULATE, foot: 'pad', nose: 'muzzle', pupil: 'round' }, H: 1.85, len: 0.82, depth: 0.42, width: 0.78, rump: 0.92, tuck: 0.35, humps: [{ u: 0.55, h: 0.2, w: 0.42 }],
+  camel: { label: 'Dromedary Camel', fam: { ...UNGULATE, foot: 'pad', nose: 'muzzle', pupil: 'round' }, hind: { kY: 0.62, kZ: 0.2, aY: 0.5, aZ: -0.07, fY: 0.13, fZ: -0.065, cY: 0.05 }, hindShape: { thighF: 0.12, breech: 0.1, hams: 0, kneeW: 0.06 }, H: 1.85, len: 0.82, depth: 0.42, width: 0.78, rump: 0.92, tuck: 0.35, humps: [{ u: 0.55, h: 0.2, w: 0.42 }],
     neckAng: 15, neckLen: 0.55, neckThk: 0.48, neckW: 0.6, neckArch: -0.12, headAng: 25, headLen: 0.28, headD: 0.23, headW: 0.22, snout: 0.55, snoutW: 0.6, snoutD: 0.6, stop: 0.2, eye: 0.05, legThk: 0.72, tibiaSlope: 0.7,
     ear: { style: 'round', len: 0.18, w: 0.8, s: 0.12, a: 0.8, spread: 40 }, tail: { style: 'tuft', len: 0.3, thk: 0.018, set: -80, tuft: 1.6 }, countershade: 0.1,
     palette: pal({ body: '#c9a06b', belly: '#d6b585', mane: '#8a6438', hoof: '#5a4a3a', nose: '#4a3a30' }) },
-  llama: { label: 'Llama', fam: UNGULATE, H: 1.15, len: 0.95, depth: 0.5, width: 0.82, rump: 1.0, tuck: 0.15, neckAng: 78, neckLen: 0.62, neckThk: 0.55, neckW: 0.7,
+  llama: { label: 'Llama', fam: UNGULATE, hind: { kY: 0.7, aY: 0.47, aZ: -0.08, fY: 0.12, fZ: -0.06, cY: 0.05 }, H: 1.15, len: 0.95, depth: 0.5, width: 0.82, rump: 1.0, tuck: 0.15, neckAng: 78, neckLen: 0.62, neckThk: 0.55, neckW: 0.7,
     headAng: 30, headLen: 0.3, headD: 0.26, headW: 0.24, snout: 0.45, snoutW: 0.55, snoutD: 0.6, stop: 0.25, eye: 0.06, legThk: 0.85, wool: 0.05,
     ear: { style: 'long', len: 0.52, w: 0.38, s: 0.1, a: 0.5, spread: 18, tilt: 0, turn: 30, droop: 0.15 }, tail: { style: 'fluffy', len: 0.2, thk: 0.05, set: 30 },
     countershade: 0, palette: pal({ body: '#efe3cc', belly: '#efe3cc', marking: '#7a5a3a', nose: '#3a2b24' }) },
-  rhino: { label: 'White Rhinoceros', fam: { stance: 'graviportal', nose: 'muzzle', pupil: 'round', nails: 3 }, H: 1.7, len: 1.45, depth: 0.62, width: 0.92, rump: 0.96, tuck: 0.05, belly: 0.3, withers: 0.25,
+  rhino: { label: 'White Rhinoceros', fam: { stance: 'graviportal', nose: 'muzzle', pupil: 'round', nails: 3 }, hind: { kY: 0.55, kZ: 0.12, aY: 0.25, aZ: -0.05 }, H: 1.7, len: 1.45, depth: 0.62, width: 0.92, rump: 0.96, tuck: 0.05, belly: 0.3, withers: 0.25,
     neckAng: 0, neckLen: 0.18, neckThk: 0.95, neckW: 0.9, headAng: 55, headLen: 0.48, headD: 0.26, headW: 0.24, snout: 0.5, snoutW: 0.9, snoutD: 0.7, stop: 0, dome: 0.9, eye: 0.02, eyeYaw: 80, legThk: 1.25,
     ear: { style: 'pointed', len: 0.26, w: 0.42, s: 0.08, a: 0.55, spread: 30, tilt: 0, turn: 30, cup: 0.9 }, horns: { style: 'rhino', len: 0.75, thk: 0.09 },
     tail: { style: 'tuft', len: 0.3, thk: 0.03, set: -80, tuft: 1.6 }, countershade: 0,
     palette: pal({ body: '#8a847c', belly: '#827c74', horn: '#6a6058', hoof: '#57514b', skin: '#7a6e68', nose: '#4a4440' }) },
-  hippo: { label: 'Hippopotamus', fam: { stance: 'graviportal', nose: 'muzzle', pupil: 'round', nails: 4 }, H: 1.5, len: 1.55, depth: 0.72, width: 1.05, rump: 1.0, tuck: 0, belly: 0.3,
+  hippo: { label: 'Hippopotamus', fam: { stance: 'graviportal', nose: 'muzzle', pupil: 'round', nails: 4 }, hind: { kY: 0.5, kZ: 0.12, aY: 0.22, aZ: -0.04 }, H: 1.5, len: 1.55, depth: 0.72, width: 1.05, rump: 1.0, tuck: 0, belly: 0.3,
     neckAng: 5, neckLen: 0.12, neckThk: 0.95, neckW: 0.95, headAng: 25, headLen: 0.5, headD: 0.36, headW: 0.38, snout: 0.5, snoutW: 1.2, snoutD: 0.85, stop: 0.35, dome: 0.85, eye: 0.04, eyeYaw: 45, eyeEl: 45, turret: false, legThk: 1.4, nostrilA: 1.1,
     ear: { style: 'round', len: 0.1, w: 1.0, s: 0.1, a: 0.6 }, tail: { style: 'flat', len: 0.18, thk: 0.04, set: -70, flat: 2 }, countershade: 0.3,
     palette: pal({ body: '#6e605e', belly: '#c49088', skin: '#c49088', nose: '#4a3e3c', mouth: '#c47a78' }) },
-  boar: { label: 'Wild Boar', fam: UNGULATE, H: 0.85, len: 1.25, depth: 0.58, width: 0.75, rump: 0.86, rumpDepth: 0.9, tuck: 0.1, withers: 0.3, chestW: 1.08, neckAng: 5, neckLen: 0.08, neckThk: 0.95, neckW: 0.95,
+  boar: { label: 'Wild Boar', fam: UNGULATE, hind: { kY: 0.66, kZ: 0.17, aY: 0.4, aZ: -0.06, fY: 0.13, fZ: -0.035, cY: 0.05 }, H: 0.85, len: 1.25, depth: 0.58, width: 0.75, rump: 0.86, rumpDepth: 0.9, tuck: 0.1, withers: 0.3, chestW: 1.08, neckAng: 5, neckLen: 0.08, neckThk: 0.95, neckW: 0.95,
     headAng: 35, headLen: 0.48, headD: 0.26, headW: 0.26, snout: 0.6, snoutW: 0.42, snoutD: 0.42, stop: 0.0, dome: 0.85, jowl: 1.3, eye: 0.025, nose: 'disc', muzzleN: 2.6,
     ear: { style: 'pointed', len: 0.28, w: 0.55, s: 0.14, a: 0.75, spread: 35, tilt: 10 }, tusks: { style: 'boar', len: 0.08, thk: 0.15, s: 0.85, a: 0.95 },
     tail: { style: 'tuft', len: 0.3, thk: 0.012, set: -70, tuft: 2.2 }, mane: { style: 'crest', h: 0.07 }, countershade: 0,
     palette: pal({ body: '#4a3a2e', belly: '#3e3026', mane: '#241c16', nose: '#3a2e28', hoof: '#1d1814' }) },
-  anteater: { label: 'Giant Anteater', fam: { stance: 'plantigrade', nose: 'pad', claws: 2.2, toes: 4 }, H: 0.75, len: 1.5, depth: 0.55, width: 0.65, rump: 1.02, tuck: 0.05, neckAng: 15, neckLen: 0.38, neckThk: 0.7,
+  anteater: { label: 'Giant Anteater', fam: { stance: 'plantigrade', nose: 'pad', claws: 2.2, toes: 4 }, hind: { kY: 0.5, kZ: 0.1, foot: 0.3 }, H: 0.75, len: 1.5, depth: 0.55, width: 0.65, rump: 1.02, tuck: 0.05, neckAng: 15, neckLen: 0.38, neckThk: 0.7,
     headAng: 25, headLen: 0.5, headD: 0.14, headW: 0.16, snout: 0.78, snoutW: 0.35, snoutD: 0.4, stop: 0, eye: 0.022, legThk: 1.1,
     ear: { style: 'round', len: 0.1, w: 1.0, s: 0.12, a: 0.9 }, tail: { style: 'hair', len: 0.75, thk: 0.07, set: -10, hair: 1.15, hairW: 5, hairBack: 0.9 }, pattern: 'anteater', countershade: 0, grain: 2,
     palette: pal({ body: '#5e4e3e', belly: '#d9cfbd', pattern: '#121010', mane: '#4a3c30', nose: '#121010' }) },
   // Digital Diorama revision: a low, rounded body on short legs (it stood on stilts)
-  mouse: { label: 'House Mouse', fam: RODENT, H: 0.03, len: 2.4, depth: 0.82, width: 0.85, rump: 1.25, rumpDepth: 1.1, tuck: 0.1, neckAng: 30, neckLen: 0.16, neckThk: 0.9, legThk: 1.15,
+  mouse: { label: 'House Mouse', fam: RODENT, hind: { kZ: 0.3, aZ: -0.15, foot: 0.66 }, H: 0.03, len: 2.4, depth: 0.82, width: 0.85, rump: 1.25, rumpDepth: 1.1, tuck: 0.1, neckAng: 30, neckLen: 0.16, neckThk: 0.9, legThk: 1.15,
     headAng: 20, headLen: 0.55, headD: 0.32, headW: 0.38, snout: 0.45, snoutW: 0.35, snoutD: 0.38, stop: 0.15, eye: 0.09,
     ear: { style: 'round', len: 0.48, w: 0.95, s: 0.22, a: 0.6, spread: 30, tilt: 8, cup: 0.35 }, tail: { style: 'thin', len: 2.0, thk: 0.012, set: -10, curl: 18 },
     countershade: 0.4, palette: pal({ body: '#8d8478', belly: '#c9c0b2', skin: '#e2a8a0', nose: '#e2a8a0', eye: '#0c0a09' }) },
@@ -2415,90 +2639,437 @@ export const detach = ['horns', 'tusks', 'trunk', 'mane', 'tail', 'ears', 'eyes'
 export const night = { eye: { color: '#9cff6a', intensity: 0.35, describe: 'tapetum eyeshine on the iris zone' } };
 
 /* ════════════════════════════════════════════════════════════════════════════
- *  CLIPS & POSES
+ *  CLIPS & POSES (Digital Diorama revision 4: rewritten)
+ *  The old gaits swung every joint on a sine wave, so feet slid, dipped below the ground and never planted,
+ *  and every species moved alike. Now each foot follows a path — planted and carried back at body speed in
+ *  stance, lifted and swung forward in swing, the hoof breaking over at push-off and flipping in the swing —
+ *  and each leg is solved to reach it: hind legs as a pantograph (the cannon / rear pastern stays parallel to
+ *  the thigh, as in real legs), forelegs swinging the shoulder blade with the forearm and keeping the knee
+ *  straight in stance. Footfalls follow each family's real gaits (lateral walk; trot, or pace for camels and
+ *  giraffes; transverse or rotary gallop; half-bound for rabbits, squirrels and mustelids; an amble for
+ *  elephants), the body vaults over walking legs and bounces on running ones, and the spine flexes in gallops
+ *  and bounds. Clips are timed by dynamic similarity (the Froude number, from hip height), and each gait clip
+ *  records its stride so playback can match ground speed. Idle, graze, alert and roar keep the feet planted;
+ *  sit is a sit for carnivores and rodents and lying down for hoofed animals and elephants.
  * ════════════════════════════════════════════════════════════════════════════ */
-const GAITS = {
-  walk: { ph: { LH: 0, LF: 0.25, RH: 0.5, RF: 0.75 }, duty: 0.62, amp: 17, flex: 45, dur: 1.15, bob: 0.012, spine: 2 },
-  trot: { ph: { LF: 0, RH: 0, RF: 0.5, LH: 0.5 }, duty: 0.45, amp: 24, flex: 62, dur: 0.72, bob: 0.02, spine: 3 },
-  gallop: { ph: { LH: 0, RH: 0.1, LF: 0.42, RF: 0.52 }, duty: 0.34, amp: 34, flex: 80, dur: 0.52, bob: 0.035, spine: 9 },
+/* Digital Diorama revision 4: clips rewritten (see CLIPS & POSES above).
+ * Footfall patterns: phase of each foot's touchdown in the cycle (LH = left hind …), duty = fraction of the
+ * cycle a foot is on the ground (number, or { hind, front }), lambda = distance travelled per cycle in hip
+ * heights, fr = Froude number v² / (g·h) the clip is timed for, lift = swing height (× hip height),
+ * bob = body rise and fall (× hip height), spine = spine flexion in degrees (bounds and gallops), and the
+ * hoof / paw motion: sink (fetlock giving under load), roll (breakover at push-off), toe (digit flexion in
+ * swing), flexH / flexF (hock / knee flexion in swing), heel (plantigrade heel lift). */
+const GAIT_LIB = {
+  // lateral-sequence walk: left hind, left fore, right hind, right fore, a quarter cycle apart (timed as a relaxed,
+  // grazing pace; faster walking plays it quicker)
+  walk: { ph: { LH: 0, LF: 0.25, RH: 0.5, RF: 0.75 }, duty: 0.66, lambda: 1.3, fr: 0.14, lift: 0.075, bob: 0.012, run: false, sink: 6, roll: 22, toe: 45, flexH: 34, flexF: 52, heel: 30 },
+  // camels, llamas and giraffes walk with the legs of one side almost together
+  paceWalk: { ph: { LH: 0, LF: 0.12, RH: 0.5, RF: 0.62 }, duty: 0.64, lambda: 1.3, fr: 0.14, lift: 0.07, bob: 0.012, run: false, sink: 6, roll: 20, toe: 40, flexH: 32, flexF: 50, heel: 30 },
+  // diagonal pairs together, a moment of suspension between them
+  trot: { ph: { LH: 0, RF: 0, RH: 0.5, LF: 0.5 }, duty: 0.42, lambda: 2.15, fr: 1.0, lift: 0.15, bob: 0.028, run: true, sink: 12, roll: 28, toe: 65, flexH: 50, flexF: 88, heel: 38 },
+  // the legs of one side together (camels, giraffes, llamas)
+  pace: { ph: { LH: 0, LF: 0, RH: 0.5, RF: 0.5 }, duty: 0.45, lambda: 2.15, fr: 0.9, lift: 0.13, bob: 0.024, run: true, sink: 10, roll: 26, toe: 55, flexH: 45, flexF: 75, heel: 35 },
+  // elephants never leave the ground: a fast lateral-sequence walk with shorter stance
+  amble: { ph: { LH: 0, LF: 0.22, RH: 0.5, RF: 0.72 }, duty: 0.52, lambda: 1.8, fr: 0.55, lift: 0.07, bob: 0.014, run: false, sink: 3, roll: 14, toe: 20, flexH: 30, flexF: 45, heel: 20 },
+  // transverse gallop (horses, cattle, rhinos): hinds then fores, the leading leg on the same side
+  transverse: { ph: { LH: 0, RH: 0.12, LF: 0.42, RF: 0.54 }, duty: { hind: 0.3, front: 0.3 }, lambda: 3.0, fr: 4, lift: 0.2, bob: 0.045, run: true, spine: 3, sink: 16, roll: 32, toe: 80, flexH: 62, flexF: 100, heel: 40 },
+  // rotary gallop (cats, dogs, deer, antelope): the lead changes side between hinds and fores; big spine flexion
+  rotary: { ph: { LH: 0, RH: 0.1, RF: 0.44, LF: 0.54 }, duty: { hind: 0.28, front: 0.26 }, lambda: 3.3, fr: 4, lift: 0.22, bob: 0.05, run: true, spine: 10, sink: 14, roll: 30, toe: 70, flexH: 60, flexF: 95, heel: 40 },
+  // half-bound (rabbits, squirrels, mice, otters): hind feet land together, fore feet one after the other
+  bound: { ph: { LH: 0, RH: 0.03, LF: 0.5, RF: 0.6 }, duty: { hind: 0.3, front: 0.26 }, lambda: 3.0, fr: 3, lift: 0.2, bob: 0.06, run: true, spine: 16, sink: 0, roll: 30, toe: 40, flexH: 55, flexF: 70, heel: 45 },
+  // a slow hop (rabbits and squirrels rarely walk): fore feet in turn, hind feet together
+  hop: { ph: { LH: 0, RH: 0.02, LF: 0.45, RF: 0.62 }, duty: { hind: 0.52, front: 0.42 }, lambda: 1.25, hindO: -0.1, fr: 0.25, lift: 0.1, bob: 0.03, run: true, spine: 7, sink: 0, roll: 22, toe: 30, flexH: 40, flexF: 50, heel: 40 },
 };
+/** How each kind of foot rolls, sinks and flexes (multipliers on the gait's hoof values). */
+const FOOT_MOTION = {
+  hoof: { sink: 0, roll: 1, toe: 1 }, cloven: { sink: 0, roll: 1, toe: 0.9 },
+  paw: { sink: 0, roll: 0.9, toe: 0.55 }, sole: { sink: 0, roll: 0.55, toe: 0.4 }, pad: { sink: 0, roll: 0.45, toe: 0.3 },
+};
+/** Gaits of each family: which footfall pattern each clip uses (null = no such clip). */
+function gaitSetFor(S, p) {
+  const st = S.stance, sp = p.species;
+  if (S.gaits) return S.gaits;
+  if (st === 'graviportal') return sp === 'rhino' ? { walk: 'walk', trot: 'trot', gallop: 'transverse' } : { walk: 'walk', trot: 'amble', gallop: null };
+  if (sp === 'camel' || sp === 'llama' || sp === 'giraffe') return { walk: 'paceWalk', trot: 'pace', gallop: sp === 'giraffe' ? 'rotary' : 'transverse' };
+  if (S.crouch >= 0.5 && st === 'digitigrade') return sp === 'mouse' ? { walk: 'walk', trot: 'trot', gallop: 'bound' } : { walk: 'hop', trot: 'hop', gallop: 'bound' };
+  if (sp === 'hedgehog') return { walk: 'walk', trot: 'trot', gallop: null };
+  if (sp === 'otter' || sp === 'beaver' || sp === 'badger') return { walk: 'walk', trot: 'trot', gallop: 'bound' };
+  if (st === 'ungulate') return { walk: 'walk', trot: 'trot', gallop: ['deer', 'gazelle', 'reindeer', 'moose', 'goat', 'bighorn'].includes(sp) ? 'rotary' : 'transverse' };
+  return { walk: 'walk', trot: 'trot', gallop: 'rotary' };
+}
+const GAIT_TUNE = { cheetah: { gallop: { lambda: 3.8, spine: 15, bob: 0.04 } }, rabbit: { trot: { lambda: 2.2, fr: 0.7 }, gallop: { lambda: 2.6 } }, squirrel: { trot: { lambda: 2.2, fr: 0.7 } } };
 const RIGS = new WeakMap();
 
-function sampleFor(info, name, u) {
-  const s = {}, H = info.H;
-  const add = (b, r) => { if (!info.has[b]) return; const v = s[b] || [0, 0, 0]; s[b] = [v[0] + r[0], v[1] + r[1], v[2] + r[2]]; };
-  const tail = (amp, f = 1, lift = 0) => info.tail.forEach((b, i) => add(b, [-lift / info.tail.length, Math.sin(TAU * (u * f) - i * 0.6) * amp / info.tail.length, 0]));
-  const ears = (a) => { add('EarL', [0, 0, a]); add('EarR', [0, 0, -a]); };
-  if (GAITS[name]) {
-    const G = GAITS[name];
-    for (const lm of info.limbs) {
-      const key = (lm.side > 0 ? 'L' : 'R') + (lm.front ? 'F' : 'H');
-      const ph = fract(u - G.ph[key]);
-      let sw, fl;
-      if (ph < G.duty) { sw = lerp(1, -1, ph / G.duty); fl = 0; }
-      else { const t = (ph - G.duty) / (1 - G.duty); sw = lerp(-1, 1, sstep(0, 1, t)); fl = Math.sin(Math.PI * t); }
-      const b = lm.bones, A = G.amp, F = G.flex;
-      if (lm.front) {
-        if (lm.st === 'plantigrade' || lm.st === 'graviportal' || lm.st === 'digitigrade') {
-          add(b[0], [-sw * A * 0.3, 0, 0]); add(b[1], [-sw * A * 0.55 - fl * F * 0.25, 0, 0]); add(b[2], [fl * F * 0.75, 0, 0]); if (b[3]) add(b[3], [fl * F * 0.35, 0, 0]);
-        } else {
-          add(b[0], [-sw * A * 0.3, 0, 0]); add(b[1], [-sw * A * 0.5 - fl * F * 0.3, 0, 0]); add(b[2], [fl * F * 0.95, 0, 0]); if (b[3]) add(b[3], [fl * F * 0.45, 0, 0]);
-        }
-      } else {
-        add(b[0], [-sw * A * 0.75 - fl * F * 0.25, 0, 0]); add(b[1], [fl * F * 0.7, 0, 0]); if (b[2]) add(b[2], [-fl * F * 0.55, 0, 0]);
-      }
+/* ── planar helpers in a bone's (z, y) plane: ψ = atan2(z, y); a rotation about +X by δ adds δ to ψ ── */
+const v2 = (z, y) => ({ z, y });
+const P2 = (v) => ({ z: v.z, y: v.y });
+const add2 = (a, b) => v2(a.z + b.z, a.y + b.y), sub2 = (a, b) => v2(a.z - b.z, a.y - b.y), sc2 = (a, k) => v2(a.z * k, a.y * k);
+const len2 = (a) => Math.hypot(a.z, a.y), psi2 = (a) => Math.atan2(a.z, a.y), unit2 = (p) => v2(Math.sin(p), Math.cos(p));
+const rot2 = (a, d) => { const c = Math.cos(d), s = Math.sin(d); return v2(a.z * c + a.y * s, a.y * c - a.z * s); };
+const cross2 = (a, b) => a.z * b.y - a.y * b.z;
+const wrapA = (a) => { while (a > Math.PI) a -= TAU; while (a < -Math.PI) a += TAU; return a; };
+/** Two-bone IK: the middle joint for root R and target T, bone lengths a and b, on side `side` of R→T. */
+function ik2(R, T, a, b, side) {
+  const d0 = sub2(T, R), L = Math.max(1e-9, len2(d0)), d = clamp(L, Math.abs(a - b) + 1e-6, a + b - 1e-6);
+  const A = Math.acos(clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1)), base = psi2(d0);
+  const m1 = add2(R, sc2(unit2(base + A), a)), m2 = add2(R, sc2(unit2(base - A), a));
+  return Math.sign(cross2(d0, sub2(m1, R))) === side ? m1 : m2;
+}
+
+/** World (model-space) matrices of bones for a sample, memoised per call. */
+function fkOf(info, s) {
+  const M = {};
+  const get = (b) => {
+    if (M[b]) return M[b];
+    const v = s[b], r = !v ? null : Array.isArray(v) ? v : v.r, p = v && !Array.isArray(v) ? v.p : null, rest = info.rest[b];
+    _e.set((r ? r[0] : 0) * DEG, (r ? r[1] : 0) * DEG, (r ? r[2] : 0) * DEG, 'YXZ');
+    const local = new THREE.Matrix4().compose(V3(rest[0] + (p ? p[0] : 0), rest[1] + (p ? p[1] : 0), rest[2] + (p ? p[2] : 0)), new THREE.Quaternion().setFromEuler(_e), V3(1, 1, 1));
+    const par = info.parent[b];
+    M[b] = par ? get(par).clone().multiply(local) : local;
+    return M[b];
+  };
+  return get;
+}
+
+/**
+ * Solves one leg so its ground contact (hoof toe, toe tips or sole) reaches target T.c (model space), and adds
+ * the bone rotations to sample s. T: { c, toe, heel, flex } in degrees — toe: the hoof / toes rotated backward
+ * (flexion; negative = fetlock sinking under load), heel: plantigrade heel lift, flex: extra hock / knee flexion.
+ * Hind legs work as a pantograph (the cannon / rear pastern keeps parallel to the thigh); forelegs swing the
+ * shoulder blade with the forearm and keep the knee (carpus) straight unless flexed.
+ */
+function solveLeg(info, fk, lm, T, s) {
+  const par = lm.front ? 'Chest' : 'Hips', M = fk(par), inv = M.clone().invert(), ph = info.headV[par];
+  const up = V3(0, 1, 0).transformDirection(M), theta = Math.atan2(up.z, up.y);
+  const J = lm.J.map(p => P2(p.clone().sub(ph))), n = J.length, tip = J[n - 1], b = lm.bones;
+  const c = T.c ? P2(T.c.clone().applyMatrix4(inv)) : null;
+  const toeA = (T.toe || 0) * DEG - theta, heelA = (T.heel || 0) * DEG - theta, flexA = (T.flex || 0) * DEG;
+  const put = (name, d) => { if (!name || !info.has[name]) return; const v = s[name], arr = !v ? [0, 0, 0] : Array.isArray(v) ? v : v.r; const r = [arr[0] + d / DEG, arr[1], arr[2]]; s[name] = v && !Array.isArray(v) ? { ...v, r } : r; };
+  const sole = lm.chain === 'sole';
+  if (!lm.front) {
+    const H0 = J[0], K0 = J[1], A0 = J[2], D0 = J[3];
+    const lf = len2(sub2(K0, H0)), lt = len2(sub2(A0, K0)), lm3 = len2(sub2(D0, A0));
+    const pf0 = psi2(sub2(K0, H0)), pt0 = psi2(sub2(A0, K0)), pm0 = psi2(sub2(D0, A0));
+    if (sole) {
+      const At = sub2(sub2(c, rot2(sub2(tip, D0), toeA)), rot2(sub2(D0, A0), heelA));
+      const K = ik2(H0, At, lf, lt, lm.kneeSide), A = add2(K, sc2(unit2(psi2(sub2(At, K))), lt));
+      const dF = wrapA(psi2(sub2(K, H0)) - pf0), dT = wrapA(psi2(sub2(A, K)) - pt0);
+      put(b[0], dF); put(b[1], dT - dF); put(b[2], heelA - dT); put(b[3], toeA - heelA);
+      return Math.max(0, len2(sub2(At, H0)) - (lf + lt) * 0.995);
     }
-    const c = Math.cos(TAU * u * 2);
-    add('Root', [0, 0, 0]); s.Root = { r: [0, 0, 0], p: [0, -G.bob * H * (0.5 + 0.5 * c), 0] };
-    add('Spine1', [Math.sin(TAU * u) * G.spine * (name === 'gallop' ? 1 : 0.3), 0, 0]); add('Chest', [-Math.sin(TAU * u) * G.spine * (name === 'gallop' ? 1 : 0.3), 0, 0]);
-    add('Neck1', [c * G.spine * 0.6, 0, 0]); add('Head', [-c * G.spine * 0.4, 0, 0]);
-    tail(name === 'gallop' ? 6 : 14, 1, name === 'gallop' ? 25 : 0);
-    return s;
+    if (T.A) {
+      // folded (lying): the hock rests where asked, the cannon lies at T.mt, the digit flexed T.toeRel past it
+      const At = P2(T.A.clone().applyMatrix4(inv)), K = ik2(H0, At, lf, lt, lm.kneeSide), A = add2(K, sc2(unit2(psi2(sub2(At, K))), lt));
+      const dF = wrapA(psi2(sub2(K, H0)) - pf0), dT = wrapA(psi2(sub2(A, K)) - pt0), dM = wrapA(T.mt * DEG - theta - pm0);
+      put(b[0], dF); put(b[1], dT - dF); put(b[2], dM - dT); put(b[3], (T.toeRel || 0) * DEG);
+      return 0;
+    }
+    const D = sub2(c, rot2(sub2(tip, D0), toeA));
+    let pf = pf0, pm = pm0, K = K0, A = A0, At = A0;
+    for (let it = 0; it < 8; it++) {
+      pm = T.mt !== undefined ? T.mt * DEG - theta : pm0 + lm.kp * wrapA(pf - pf0) + flexA;
+      At = sub2(D, sc2(unit2(pm), lm3));
+      K = ik2(H0, At, lf, lt, lm.kneeSide);
+      pf = psi2(sub2(K, H0));
+      A = add2(K, sc2(unit2(psi2(sub2(At, K))), lt));
+    }
+    const dF = wrapA(pf - pf0), dT = wrapA(psi2(sub2(A, K)) - pt0), dM = wrapA(pm - pm0);
+    put(b[0], dF); put(b[1], dT - dF); put(b[2], dM - dT); put(b[3], wrapA(toeA - dM));
+    return Math.max(0, len2(sub2(At, H0)) - (lf + lt) * 0.995);
   }
+  // foreleg: shoulder blade (J0 → J1), humerus, radius, metacarpus, digit
+  const S0 = J[0], Sh0 = J[1], E0 = J[2], C0 = J[3], D0 = J[4];
+  const ls = len2(sub2(Sh0, S0)), lh = len2(sub2(E0, Sh0)), lr = len2(sub2(C0, E0)), lmc = len2(sub2(D0, C0));
+  const ps0 = psi2(sub2(Sh0, S0)), ph0 = psi2(sub2(E0, Sh0)), pr0 = psi2(sub2(C0, E0)), pmc0 = psi2(sub2(D0, C0));
+  if (T.C) {
+    // folded (lying): the knee (carpus) rests where asked, the cannon folds back to T.mc, the digit flexed T.toeRel
+    const Ct = P2(T.C.clone().applyMatrix4(inv)), dS = (T.scap || 0) * DEG, Sh = add2(S0, sc2(unit2(ps0 + dS), ls));
+    const E = ik2(Sh, Ct, lh, lr, lm.elbowSide), dH = wrapA(psi2(sub2(E, Sh)) - ph0), dR = wrapA(psi2(sub2(Ct, E)) - pr0), dMC = wrapA(T.mc * DEG - theta - pmc0);
+    put(b[0], dS); put(b[1], dH - dS); put(b[2], dR - dH); put(b[3], dMC - dR); put(b[4], (T.toeRel || 0) * DEG);
+    return 0;
+  }
+  let target, Lv, beta, carp = 0;
+  if (sole) { target = sub2(sub2(c, rot2(sub2(tip, D0), toeA)), rot2(sub2(D0, C0), heelA)); Lv = lr; beta = 0; }
+  else {
+    target = sub2(c, rot2(sub2(tip, D0), toeA));
+    carp = wrapA(pmc0 - pr0) + flexA;
+    const vf = add2(unit2(0), sc2(unit2(carp), lmc / lr));
+    Lv = len2(vf) * lr; beta = psi2(vf);
+  }
+  // the shoulder blade swings with the forearm (kept within ±12°: a short forearm would otherwise wind it round),
+  // turning about a point part way down the blade as it glides over the ribs, so the shoulder does not rise as it reaches
+  const blade = (d) => clamp(lm.ks * d, -0.21, 0.21), pivot = add2(S0, sc2(sub2(Sh0, S0), 0.45));
+  let dR = 0, Sh = Sh0, E = E0, pr = pr0;
+  for (let it = 0; it < 8; it++) {
+    Sh = add2(pivot, rot2(sub2(Sh0, pivot), blade(dR)));
+    E = ik2(Sh, target, lh, Lv, lm.elbowSide);
+    pr = psi2(sub2(target, E)) - beta;
+    dR = wrapA(pr - pr0);
+  }
+  const dS = blade(dR), dH = wrapA(psi2(sub2(E, Sh)) - ph0);
+  put(b[0], dS); put(b[1], dH - dS); put(b[2], dR - dH);
+  if (info.has[b[0]]) { const top = sub2(add2(pivot, rot2(sub2(S0, pivot), dS)), S0), v = s[b[0]]; s[b[0]] = { r: Array.isArray(v) ? v : v.r, p: [0, top.y, top.z] }; }
+  if (sole) { put(b[3], heelA - dR); put(b[4], toeA - heelA); }
+  else { const dMC = wrapA(pr + carp - pmc0); put(b[3], dMC - dR); put(b[4], wrapA(toeA - dMC)); }
+  return Math.max(0, len2(sub2(target, Sh)) - (lh + Lv) * 0.995);
+}
+
+/** Foot path through one cycle: planted and carried back at body speed in stance, lifted and swung forward. */
+function footTrack(G, lm, u, h, fm) {
+  const key = (lm.side > 0 ? 'L' : 'R') + (lm.front ? 'F' : 'H');
+  const duty = typeof G.duty === 'number' ? G.duty : G.duty[lm.front ? 'front' : 'hind'];
+  const ph = fract(u - G.ph[key] + 1);
+  const S = G.lambda * h * duty, roll = G.roll * fm.roll, flex = lm.front ? G.flexF : G.flexH, o = S * (lm.front ? (G.frontO ?? -0.12) : (G.hindO ?? 0.04));
+  if (ph < duty) {
+    const s = ph / duty;
+    return { dz: o + S * (0.5 - s), dy: 0, toe: -G.sink * fm.sink * Math.sin(Math.PI * s) + roll * sstep(0.7, 1, s), heel: G.heel * sstep(0.55, 1, s), flex: 0, load: Math.sin(Math.PI * s) };
+  }
+  const s = (ph - duty) / (1 - duty), e = s * s * s * (10 - 15 * s + 6 * s * s);
+  const toe = (roll + (G.toe * fm.toe - roll) * sstep(0, 0.3, s)) * (1 - sstep(0.55, 0.95, s));
+  return { dz: o + S * (-0.5 + e), dy: G.lift * h * Math.pow(Math.sin(Math.PI * Math.pow(s, 0.8)), 1.3), toe, heel: G.heel * (1 - sstep(0.35, 0.85, s)), flex: flex * Math.sin(Math.PI * s), load: 0 };
+}
+
+/** Adds rotations to a bone in a sample ([rx, ry, rz] degrees). */
+function addRot(info, s, b, r) {
+  if (!info.has[b]) return;
+  const v = s[b], cur = !v ? [0, 0, 0] : Array.isArray(v) ? v : v.r, nr = [cur[0] + r[0], cur[1] + r[1], cur[2] + r[2]];
+  s[b] = v && !Array.isArray(v) ? { ...v, r: nr } : nr;
+}
+const rootAt = (s, p, r = [0, 0, 0]) => { s.Root = { r, p }; };
+/** Turns the whole spine so the chest rises by dy (pivot at the hips). */
+const pitchFor = (info, dy) => -Math.atan2(dy, info.hipToShoulder) / DEG;
+
+/** Plants every foot at its rest place (offset per leg by `move`), then solves the legs. */
+function plantFeet(info, s, move = () => null) {
+  const fk = fkOf(info, s);
+  for (const lm of info.limbs) {
+    if (!lm.chain) continue;
+    const m = move(lm) || {};
+    solveLeg(info, fk, lm, { c: lm.tip.clone().add(V3(0, m.dy || 0, m.dz || 0)), toe: m.toe || 0, heel: m.heel || 0, flex: m.flex || 0, mt: m.mt }, s);
+  }
+}
+/**
+ * Grazing posture: the neck swings down from its root (Neck1, with Neck2 following) until the poll is about a
+ * head's length above the ground, then the head hangs nose-down so the muzzle meets the grass. Short-necked
+ * animals that cannot reach also dip the forehand (the forelegs bend under the lowered chest).
+ */
+function reachGround(info, s, h) {
+  if (!info.snout || !info.has.Head) return;
+  const target = info.headLen * 0.92 + 0.015 * info.H, MAX = 95;
+  const pollY = (t) => new THREE.Vector3().setFromMatrixPosition(fkOf(info, t)('Head')).y;
+  const trial = (a, dip) => { const t = { ...s }; addRot(info, t, 'Hips', [dip, 0, 0]); addRot(info, t, 'Neck1', [a, 0, 0]); addRot(info, t, 'Neck2', [a * 0.4, 0, 0]); return t; };
+  let dip = 0, a = MAX;
+  if (pollY(trial(MAX, 0)) > target) dip = clamp((pollY(trial(MAX, 0)) - target) / Math.max(1e-6, info.hipToShoulder) / DEG, 0, 9);
+  if (pollY(trial(0, dip)) > target) {
+    let lo = 0, hi = MAX;
+    for (let i = 0; i < 16; i++) { const m = (lo + hi) / 2; if (pollY(trial(m, dip)) > target) lo = m; else hi = m; }
+    a = hi;
+  } else a = 0;
+  addRot(info, s, 'Hips', [dip, 0, 0]); addRot(info, s, 'Neck1', [a, 0, 0]); addRot(info, s, 'Neck2', [a * 0.4, 0, 0]);
+  // hang the head about 72° nose-down
+  const fk = fkOf(info, s), q = new THREE.Quaternion().setFromRotationMatrix(fk('Head'));
+  const d = info.snout.clone().sub(info.headV.Head).applyQuaternion(q), now = Math.atan2(-d.y, Math.hypot(d.z, d.x)) / DEG;
+  addRot(info, s, 'Head', [clamp(72 - now, -40, 60), 0, 0]);
+}
+const tailWave = (info, s, yaw, lift = 0, f = 1, u = 0, lag = 0.6) => info.tail.forEach((b, i) => addRot(info, s, b, [lift / info.tail.length, Math.sin(TAU * f * u - i * lag) * yaw / info.tail.length, 0]));
+const earsTo = (info, s, a) => { addRot(info, s, 'EarL', [0, 0, a]); addRot(info, s, 'EarR', [0, 0, -a]); };
+
+function gaitSample(info, name, u) {
+  const G = info.gaits[name], s = {}, h = info.hipH;
+  const fmOf = (lm) => FOOT_MOTION[lm.foot] || FOOT_MOTION.paw;
+  // feet first (their loads drive the body's rise and fall)
+  const tracks = info.limbs.map(lm => ({ lm, tr: lm.chain ? footTrack(G, lm, u, h, fmOf(lm)) : null }));
+  const load = (front) => tracks.reduce((a, t) => a + (t.tr && t.lm.front === front ? t.tr.load : 0), 0);
+  // walking vaults over each straight leg (body high at mid-stance); running legs act as springs (low at mid-stance)
+  const lh = load(false), lf = load(true);
+  const yH0 = G.run ? G.bob * h * (0.45 - Math.min(1, lh)) : G.bob * h * (lh - 0.75), yF0 = G.run ? G.bob * h * (0.45 - Math.min(1, lf)) : G.bob * h * (lf - 0.75);
+  const swayX = G.run ? 0 : 0.008 * h * Math.sin(TAU * u - Math.PI / 2);
+  // spine: flexed when the legs gather under the body, extended as they stretch out (gallops and bounds)
+  let flexS = 0;
+  if (G.spine) {
+    const front = typeof G.duty === 'number' ? G.duty : G.duty.front, gather = fract((Math.max(G.ph.LF, G.ph.RF) + front + 1) / 2 + 0.02);
+    flexS = G.spine * Math.cos(TAU * (u - gather));
+  }
+  const trunkAt = (t, yH, pitch) => {
+    rootAt(t, [swayX, yH, 0]);
+    addRot(info, t, 'Hips', [pitch, 0, G.run ? 0 : 1.5 * Math.sin(TAU * u)]);
+    if (G.spine) { addRot(info, t, 'Spine1', [flexS * 0.55, 0, 0]); addRot(info, t, 'Spine2', [flexS * 0.45, 0, 0]); }
+    else { addRot(info, t, 'Spine1', [0, 1.2 * Math.sin(TAU * u), 0]); addRot(info, t, 'Chest', [0, -1.2 * Math.sin(TAU * u), 0]); }
+  };
+  // the girdles drop where the planted legs could not otherwise reach (double support): the body vaults
+  let dropH = 0, dropF = 0;
+  for (let pass = 0; pass < 4; pass++) {
+    const t = {}, yH = yH0 - dropH, yF = yF0 - dropF;
+    trunkAt(t, yH, pitchFor(info, yF - yH));
+    const fk = fkOf(info, t);
+    let shortH = 0, shortF = 0;
+    for (const { lm, tr } of tracks) if (tr && tr.load > 0) {
+      const sh = solveLeg(info, fk, lm, { c: lm.tip.clone().add(V3(0, tr.dy, tr.dz)), toe: tr.toe, heel: tr.heel * (lm.foot === 'sole' ? 1 : 0), flex: tr.flex }, {});
+      if (lm.front) shortF = Math.max(shortF, sh); else shortH = Math.max(shortH, sh);
+    }
+    if (shortH < 1e-4 * h && shortF < 1e-4 * h) break;
+    dropH = Math.min(0.2 * h, dropH + shortH * 1.15); dropF = Math.min(0.2 * h, dropF + shortF * 1.15);
+  }
+  const yH = yH0 - dropH, yF = yF0 - dropF, pitch = pitchFor(info, yF - yH);
+  s.__drop = Math.max(dropH, dropF) / h;
+  trunkAt(s, yH, pitch);
+  // keep the head steady (counter the body's pitch); walkers nod with each fore footfall
+  const nod = G.run ? 0 : (info.nod ?? 3) * Math.cos(2 * TAU * (u - G.ph.LF - 0.08));
+  const pumpN = G.spine ? -0.5 * flexS : 0;
+  addRot(info, s, 'Neck1', [-(pitch + flexS) * 0.6 + nod + pumpN, 0, 0]); addRot(info, s, 'Head', [-(pitch + flexS) * 0.3 - nod * 0.4, 0, 0]);
+  if (info.trunk.length) info.trunk.forEach((b, i) => addRot(info, s, b, [Math.sin(TAU * u * (G.run ? 2 : 1) - i * 0.7) * 5, 0, Math.sin(TAU * u - i * 0.5) * 4]));
+  tailWave(info, s, G.run ? 8 : 16, G.spine ? 18 : G.run ? 8 : 0, 1, u);
+  if (G.run) earsTo(info, s, -6);
+  const fk = fkOf(info, s);
+  for (const { lm, tr } of tracks) if (tr) solveLeg(info, fk, lm, { c: lm.tip.clone().add(V3(0, tr.dy, tr.dz)), toe: tr.toe, heel: tr.heel * (lm.foot === 'sole' ? 1 : 0), flex: tr.flex }, s);
+  return s;
+}
+
+function sampleFor(info, name, u) {
+  if (info.gaits[name]) { adaptStrides(info); return gaitSample(info, name, u); }
+  const s = {}, h = info.hipH, H = info.H;
   switch (name) {
     case 'idle': {
+      // breathing, a slow weight shift over planted feet, looking about, ear flicks and a swishing tail
       const br = Math.sin(TAU * u);
-      add('Spine2', [br * 0.8, 0, 0]); add('Chest', [-br * 0.6, 0, 0]); add('Neck1', [Math.sin(TAU * u + 1) * 2, Math.sin(TAU * u * 0.5) * 6, 0]); add('Head', [Math.sin(TAU * u * 2) * 1.5, Math.sin(TAU * u * 0.5) * 4, 0]);
-      ears(Math.max(0, Math.sin(TAU * u * 3)) * 10); tail(18, 1); if (info.has.Trunk1) info.trunk.forEach((b, i) => add(b, [Math.sin(TAU * u - i * 0.7) * 6, 0, Math.sin(TAU * u * 0.5 - i) * 4]));
+      rootAt(s, [0.006 * h * Math.sin(TAU * u), -0.004 * h * (1 - Math.cos(TAU * u)) / 2, 0.005 * h * Math.sin(TAU * u + 1.1)]);
+      addRot(info, s, 'Spine2', [br * 0.8, 0, 0]); addRot(info, s, 'Chest', [-br * 0.6, 0, 0]);
+      addRot(info, s, 'Neck1', [Math.sin(TAU * u + 1) * 2, Math.sin(TAU * u) * 9, 0]); addRot(info, s, 'Head', [Math.sin(TAU * u * 2) * 1.5, Math.sin(TAU * u - 0.6) * 6, Math.sin(TAU * u) * 2]);
+      earsTo(info, s, Math.pow(Math.max(0, Math.sin(TAU * u * 3)), 4) * 14);
+      tailWave(info, s, 18, 0, 1, u);
+      if (info.trunk.length) info.trunk.forEach((b, i) => addRot(info, s, b, [Math.sin(TAU * u - i * 0.7) * 6, 0, Math.sin(TAU * u * 0.5 - i) * 4]));
+      plantFeet(info, s);
       break;
     }
     case 'graze': {
-      const nb = Math.sin(TAU * u * 2) * 2;
-      add('Neck1', [info.longNeck ? 38 : 28 + nb, 0, 0]); add('Neck2', [info.longNeck ? 22 : 18, 0, 0]); add('Head', [12 - nb, 0, 0]); add('Jaw', [Math.max(0, Math.sin(TAU * u * 4)) * 8, 0, 0]);
-      add('Chest', [6, 0, 0]); ears(-8); tail(10, 1);
-      for (const lm of info.limbs) if (lm.front) { add(lm.bones[1], [-6, 0, 0]); add(lm.bones[2], [6, 0, 0]); }
+      // head down to the ground, one foreleg forward (hoofed animals), chewing; giraffes browse, elephants pluck with the trunk
+      const nb = Math.sin(TAU * u) * 2;
+      if (info.browse) {
+        addRot(info, s, 'Neck1', [-14, Math.sin(TAU * u) * 6, 0]); addRot(info, s, 'Neck2', [-8, 0, 0]); addRot(info, s, 'Head', [-22 + nb, 0, 0]);
+        addRot(info, s, 'Jaw', [Math.max(0, Math.sin(TAU * u * 4)) * 8, 0, 0]);
+      } else if (info.trunk.length) {
+        const k = 0.5 - 0.5 * Math.cos(TAU * u);
+        addRot(info, s, 'Neck1', [6, 0, 0]); addRot(info, s, 'Head', [4, 0, 0]);
+        info.trunk.forEach((b, i) => addRot(info, s, b, [lerp(10, -38, k) * (i + 1) / info.trunk.length * 1.6, 0, 0]));
+      } else {
+        reachGround(info, s, h);
+        addRot(info, s, 'Neck1', [nb, Math.sin(TAU * u) * 5, 0]); addRot(info, s, 'Head', [-nb * 0.5, 0, 0]);
+        addRot(info, s, 'Jaw', [Math.max(0, Math.sin(TAU * u * 4)) * 8, 0, 0]);
+      }
+      earsTo(info, s, -8); tailWave(info, s, 12, 0, 1, u);
+      plantFeet(info, s, (lm) => lm.front && lm.side > 0 && info.hoofed ? { dz: 0.12 * h } : null);
       break;
     }
-    case 'alert': add('Neck1', [-14, 0, 0]); add('Neck2', [-6, 0, 0]); add('Head', [-8, Math.sin(TAU * u) * 10, 0]); ears(-14); tail(3, 1, 15); if (info.has.Trunk1) info.trunk.forEach((b) => add(b, [-14, 0, 0])); break;
+    case 'alert': {
+      // head high, ears pricked toward the sound, tail raised; deer and antelope lift a forefoot
+      addRot(info, s, 'Neck1', [-14, 0, 0]); addRot(info, s, 'Neck2', [-6, 0, 0]); addRot(info, s, 'Head', [-8, Math.sin(TAU * u) * 10, 0]);
+      earsTo(info, s, -14); tailWave(info, s, 3, 15, 1, u);
+      if (info.trunk.length) info.trunk.forEach((b) => addRot(info, s, b, [-14, 0, 0]));
+      rootAt(s, [0, 0.004 * h, -0.006 * h]);
+      plantFeet(info, s, (lm) => lm.front && lm.side > 0 && info.footLift ? { dy: 0.1 * h, dz: 0.02 * h, toe: 55, flex: 70 } : null);
+      break;
+    }
     case 'roar': {
       const o = sstep(0, 0.3, u) * (1 - sstep(0.75, 1, u));
-      add('Neck1', [-12 * o, 0, 0]); add('Head', [-14 * o, 0, 0]); add('Jaw', [32 * o, 0, 0]); ears(-20 * o); add('Chest', [-4 * o, 0, 0]);
-      if (info.has.Trunk1) info.trunk.forEach((b) => add(b, [-24 * o, 0, 0]));
-      tail(8, 2, 10 * o);
+      rootAt(s, [0, -0.015 * h * o, -0.03 * h * o]);
+      addRot(info, s, 'Neck1', [-12 * o, 0, 0]); addRot(info, s, 'Head', [-14 * o, 0, 0]); addRot(info, s, 'Jaw', [32 * o, 0, 0]); earsTo(info, s, -20 * o); addRot(info, s, 'Chest', [-4 * o, 0, 0]);
+      if (info.trunk.length) info.trunk.forEach((b) => addRot(info, s, b, [-24 * o, 0, 0]));
+      tailWave(info, s, 8, 10 * o, 2, u);
+      plantFeet(info, s);
       break;
     }
     case 'sit': {
-      const t = sstep(0, 0.5, u), pitch = (info.hindHigh ? 22 : 34) * t, dz = info.hipToShoulder;
-      s.Root = { r: [0, 0, 0], p: [0, -dz * Math.sin(pitch * DEG) * 0.95, -dz * (1 - Math.cos(pitch * DEG))] };
-      add('Hips', [-pitch, 0, 0]); add('Neck1', [pitch * 0.5, 0, 0]); add('Head', [pitch * 0.3, 0, 0]);
-      for (const lm of info.limbs) {
-        if (lm.front) { add(lm.bones[0], [pitch, 0, 0]); continue; }
-        add(lm.bones[0], [-62 * t, 0, 0]); add(lm.bones[1], [118 * t, 0, 0]); if (lm.bones[2]) add(lm.bones[2], [-48 * t, 0, 0]);
-      }
-      tail(4, 1, -20 * t);
+      const t = sstep(0, 0.65, u);
+      if (info.lies) lieDown(info, s, t);
+      else sitDown(info, s, t);
       break;
     }
     default: break;
   }
   return s;
 }
-const CLIP_SPEC = { idle: [3.2, 49, true], walk: [1.15, 33, true], trot: [0.72, 25, true], gallop: [0.52, 21, true], graze: [2.4, 37, true], alert: [2.2, 33, true], roar: [1.8, 37, false], sit: [1.6, 25, false] };
 
-/** Builds every clip for an asset made by createAsset (skinned mode). */
+/** Dogs, cats, bears and rodents sit on their haunches: rump down, hocks and feet flat, forelegs straight. */
+function sitDown(info, s, t) {
+  const h = info.hipH, up = info.sitUp;
+  const pitch = (up ? 48 : info.hindHigh ? 26 : 34) * t;
+  const drop = (up ? 0.62 : 0.6) * h * t;
+  rootAt(s, [0, -drop, -0.08 * h * t]);
+  addRot(info, s, 'Hips', [-pitch, 0, 0]);
+  addRot(info, s, 'Neck1', [pitch * 0.45, 0, 0]); addRot(info, s, 'Head', [pitch * 0.3, 0, 0]);
+  tailWave(info, s, 3, -18 * t, 1, 0);
+  const fk = fkOf(info, s);
+  for (const lm of info.limbs) {
+    if (!lm.chain) continue;
+    if (!lm.front) {
+      // the cannon / rear pastern lies flat along the ground under the hock
+      solveLeg(info, fk, lm, { c: lm.tip.clone().add(V3(0, 0, 0.05 * h * t)), toe: 0, heel: 0, mt: lm.chain === 'sole' ? undefined : lerp(lm.mtRest, 90, t) }, s);
+    } else if (up) {
+      // squirrels and rabbits sit up with the forepaws held to the chest
+      addRot(info, s, lm.bones[1], [-40 * t, 0, 0]); addRot(info, s, lm.bones[2], [80 * t, 0, 0]); if (lm.bones[3]) addRot(info, s, lm.bones[3], [30 * t, 0, 0]);
+    } else solveLeg(info, fk, lm, { c: lm.tip.clone(), toe: 0 }, s);
+  }
+}
+
+/** Hoofed animals and elephants lie down instead (sternal recumbency): belly on the ground, the forelegs folded at
+ *  the knee with the cannons tucked back underneath, the hind legs folded with the hock on the ground. */
+function lieDown(info, s, t) {
+  const h = info.hipH, drop = Math.max(0, info.bellyH - 0.03 * h) * t;
+  rootAt(s, [0, -drop, 0]);
+  addRot(info, s, 'Hips', [1.5 * t, 0, 0]);
+  addRot(info, s, 'Neck1', [-6 * t, 0, 0]); addRot(info, s, 'Head', [8 * t, 0, 0]);
+  tailWave(info, s, 2, -10 * t, 1, 0);
+  const fk = fkOf(info, s);
+  for (const lm of info.limbs) {
+    if (!lm.chain) continue;
+    const J = lm.J, rest = { c: lm.tip.clone() };
+    if (lm.front) {
+      if (lm.chain === 'sole') { solveLeg(info, fk, lm, rest, s); continue; }
+      // the knee settles on the ground a forearm's reach ahead of where the elbow stood
+      const lr = J[3].distanceTo(J[2]), C = V3(J[3].x, lerp(J[3].y, 0.05 * h, t), lerp(J[3].z, J[2].z + 0.45 * lr, t));
+      solveLeg(info, fk, lm, { C, mc: lerp(lm.mcRest, -84, t), toeRel: 70 * t, scap: -6 * t }, s);
+    } else if (lm.chain === 'sole') solveLeg(info, fk, lm, rest, s);
+    else {
+      // the hock rests on the ground behind the hip, the cannon lies forward under the belly
+      const A = V3(J[2].x, lerp(J[2].y, 0.06 * h, t), lerp(J[2].z, J[0].z - 0.1 * h, t));
+      solveLeg(info, fk, lm, { A, mt: lerp(lm.mtRest, 96, t), toeRel: 45 * t }, s);
+    }
+  }
+}
+
+const CLIP_SPEC = { idle: [3.2, 49, true], graze: [2.4, 37, true], alert: [2.2, 33, true], roar: [1.8, 37, false], sit: [1.6, 25, false] };
+
+/**
+ * Short-legged animals (hedgehogs, mice, otters) take shorter, quicker steps: each gait's stride is shortened until
+ * the body need not sink more than 12 % of the leg length for the planted feet to reach the ground. Runs once.
+ */
+function adaptStrides(info) {
+  if (info.adapted) return;
+  info.adapted = true;
+  for (const name of Object.keys(info.gaits)) {
+    for (let k = 0; k < 6; k++) {
+      let worst = 0;
+      for (let i = 0; i < 16; i++) worst = Math.max(worst, gaitSample(info, name, i / 16).__drop || 0);
+      if (worst <= 0.12) break;
+      info.gaits[name] = { ...info.gaits[name], lambda: info.gaits[name].lambda * 0.85 };
+    }
+  }
+}
+
+/** Builds every clip for an asset made by createAsset (skinned mode). Gait clips carry { gait, stride, speed, hipH }. */
 export function createClips(asset) {
   const R = RIGS.get(asset); if (!R) return [];
-  const k = Math.sqrt(R.info.H / 1.5);
-  return Object.entries(CLIP_SPEC).map(([n, [d, f, loop]]) => bakeClip(R.info, n, GAITS[n] ? d * clamp(k, 0.45, 1.6) : d, f, (u) => sampleFor(R.info, n, u), loop));
+  const info = R.info, h = info.hipH, out = [];
+  adaptStrides(info);
+  for (const name of ['walk', 'trot', 'gallop']) {
+    const G = info.gaits[name]; if (!G) continue;
+    const v = Math.sqrt(G.fr * 9.81 * h), stride = G.lambda * h, dur = stride / v, frames = clamp(Math.round(dur * 40), 21, 41);
+    const clip = bakeClip(info, name, dur, frames, (u) => sampleFor(info, name, u), true);
+    clip.userData = { loop: true, gait: G.id, stride, speed: v, hipH: h, fr: G.fr };
+    out.push(clip);
+  }
+  for (const [n, [d, f, loop]] of Object.entries(CLIP_SPEC)) out.push(bakeClip(info, n, d, f, (u) => sampleFor(info, n, u), loop));
+  return out;
 }
 /** Poses a skinned asset at a clip phase (no mixer needed). */
 export function setPose(asset, name = 'stand', phase = 0) {
@@ -2510,6 +3081,45 @@ export function setPose(asset, name = 'stand', phase = 0) {
 /* ════════════════════════════════════════════════════════════════════════════
  *  ASSET
  * ════════════════════════════════════════════════════════════════════════════ */
+/** What the clip solver needs to know about the skeleton and the species (Digital Diorama revision 4). */
+function motionInfo(S, p, L, rig) {
+  const P2r = (v) => ({ z: v.z, y: v.y });
+  const limbs = L.limbs.map(lm => {
+    const J = lm.joints.map(j => j.p.clone()), n = J.length, std = ['ungulate', 'digitigrade', 'plantigrade', 'graviportal'].includes(lm.st);
+    const foot = lm.footType || lm.foot, chain = !std || n < 5 ? null : foot === 'sole' ? 'sole' : 'panto';
+    const out = { front: lm.front, side: lm.side, bones: lm.bones, st: lm.st, foot, chain, J, tip: J[n - 1].clone() };
+    if (!chain) return out;
+    const W = J.map(P2r), sub = (a, b) => ({ z: a.z - b.z, y: a.y - b.y }), cr = (a, b) => a.z * b.y - a.y * b.z;
+    if (lm.front) {
+      out.elbowSide = Math.sign(cr(sub(chain === 'sole' ? W[3] : W[4], W[1]), sub(W[2], W[1]))) || -1;
+      out.mcRest = Math.atan2(W[4].z - W[3].z, W[4].y - W[3].y) / DEG;
+      out.ks = lm.st === 'graviportal' || chain === 'sole' ? 0.25 : 0.45;
+    } else {
+      out.kneeSide = Math.sign(cr(sub(W[2], W[0]), sub(W[1], W[0]))) || 1;
+      out.kp = lm.st === 'graviportal' ? 0.4 : 0.9;
+      out.mtRest = Math.atan2(W[3].z - W[2].z, W[3].y - W[2].y) / DEG;
+    }
+    return out;
+  });
+  const hind = limbs.filter(l => !l.front), gaits = {};
+  for (const [clip, id] of Object.entries(gaitSetFor(S, p))) if (id) gaits[clip] = { ...GAIT_LIB[id], ...((GAIT_TUNE[p.species] || {})[clip] || {}), id };
+  let bellyH = Infinity;
+  for (let k = L.torso.main[0]; k <= L.torso.main[1]; k++) if (L.torso.us[k] < L.uOf.neckRoot) for (const q of L.torso.rows[k]) bellyH = Math.min(bellyH, q.y);
+  const hoofed = S.stance === 'ungulate', fore = limbs.filter(l => l.front && l.chain);
+  // legs scale the stride: the hind legs' hip height, unless the forelegs are much shorter (mice, rabbits, squirrels)
+  const hipJ = hind.length ? hind.reduce((a, l) => a + l.J[0].y, 0) / hind.length : S.H * 0.6;
+  const shJ = fore.length ? fore.reduce((a, l) => a + l.J[1].y, 0) / fore.length : hipJ;
+  return {
+    limbs, gaits, hipH: Math.min(hipJ, 1.15 * shJ),
+    parent: Object.fromEntries(rig.list.map(e => [e.name, e.parent ? e.parent.name : null])),
+    headV: Object.fromEntries(rig.list.map(e => [e.name, e.head.clone()])),
+    snout: L.headO ? L.headO.clone().addScaledVector(L.hd, L.Lh) : null, headLen: L.Lh,
+    bellyH: Number.isFinite(bellyH) ? bellyH : S.H * 0.5,
+    hoofed, nod: hoofed ? 4 : 2, browse: p.species === 'giraffe',
+    footLift: ['deer', 'gazelle', 'reindeer', 'moose', 'goat', 'bighorn'].includes(p.species),
+    lies: hoofed || S.stance === 'graviportal', sitUp: S.stance === 'digitigrade' && (S.crouch || 0) >= 0.5,
+  };
+}
 export function createAsset(input = {}) {
   const p = normalize(input);
   const base = SPECIES[p.species] || SPECIES.horse;
@@ -2544,10 +3154,10 @@ export function createAsset(input = {}) {
     H: S.H, bones: rigB.list.map(e => e.name), has: Object.fromEntries(rigB.list.map(e => [e.name, true])),
     rest: Object.fromEntries(rigB.list.map(e => [e.name, (e.parent ? e.head.clone().sub(e.parent.head) : e.head.clone()).toArray()])),
     moving: ['Root'], scaled: [],
-    limbs: L.limbs.map(lm => ({ front: lm.front, side: lm.side, bones: lm.bones, st: lm.st })),
     tail: rigB.list.filter(e => /^Tail\d/.test(e.name)).map(e => e.name), trunk: rigB.list.filter(e => /^Trunk\d/.test(e.name)).map(e => e.name),
     longNeck: S.neckLen > 0.45, hindHigh: S.rump > 1.1,
     hipToShoulder: rigB.head('Chest').distanceTo(rigB.head('Hips')),
+    ...motionInfo(S, p, L, rigB),
   };
   const pose = p.pose !== 'stand' ? sampleFor(info, p.pose, p.posePhase) : null;
   const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, grain: p.coatGrain * (S.grain ?? 1), grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat' };
