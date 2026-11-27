@@ -1465,7 +1465,8 @@ export function createAsset(userParams = {}) {
   g.name = 'whale';
   const P = partsBag();
   const Lw = p.length, SPC = {
-    humpback: { R: 0.115, prof: [[0, 0.16], [0.12, 0.3], [0.3, 0.62], [0.5, 0.92], [0.65, 1], [0.8, 0.88], [0.92, 0.6], [1, 0.12]], hu: 0.85, hd: 0.8, wd: 1, flat: 0.35, span: 0.3, flip: 0.3, dorsal: [0.33, 0.04] },
+    // (Digital Diorama revision 9: a broad, blunt head; it tapered to a point)
+    humpback: { R: 0.115, prof: [[0, 0.16], [0.12, 0.3], [0.3, 0.62], [0.5, 0.92], [0.65, 1], [0.8, 0.92], [0.9, 0.78], [0.96, 0.52], [1, 0.22]], hu: 0.85, hd: 0.8, wd: 1, flat: 0.35, span: 0.3, flip: 0.3, dorsal: [0.33, 0.04] },
     orca: { R: 0.13, prof: [[0, 0.18], [0.15, 0.4], [0.35, 0.8], [0.55, 1], [0.75, 0.95], [0.9, 0.7], [1, 0.25]], hu: 0.95, hd: 0.9, wd: 1, flat: 0, span: 0.24, flip: 0.12, dorsal: [0.55, 0.14] },
     blue: { R: 0.085, prof: [[0, 0.14], [0.15, 0.28], [0.35, 0.6], [0.55, 0.88], [0.7, 0.98], [0.85, 0.9], [0.95, 0.65], [1, 0.2]], hu: 0.8, hd: 0.75, wd: 1.1, flat: 0.45, span: 0.25, flip: 0.1, dorsal: [0.26, 0.015] },
   }[sp];
@@ -1506,19 +1507,40 @@ export function createAsset(userParams = {}) {
   const span = SPC.span * Lw, ch = 0.09 * Lw, fs = new THREE.Shape();
   fs.moveTo(0, 0.02 * Lw);
   fs.quadraticCurveTo(-span * 0.3, -ch * 0.1, -span / 2, -ch * 0.95);
-  const serr = sp === 'humpback' ? 6 : 1;
-  for (let i = 1; i <= serr; i++) { const f = i / serr; fs.lineTo(lerp(-span / 2, -span * 0.06, f), -ch * lerp(0.95, 0.62, f) + (i % 2 ? -0.012 * Lw : 0)); }
+  // (Digital Diorama revision 9: a finely scalloped trailing edge; 0.17 m teeth read as a saw blade)
+  const serr = sp === 'humpback' ? 12 : 1;
+  for (let i = 1; i <= serr; i++) { const f = i / serr; fs.lineTo(lerp(-span / 2, -span * 0.06, f), -ch * lerp(0.95, 0.62, f) + (i % 2 ? -0.004 * Lw : 0)); }
   fs.lineTo(0, -ch * 0.52);
-  for (let i = serr; i >= 1; i--) { const f = i / serr; fs.lineTo(-lerp(-span / 2, -span * 0.06, f) * 1, -ch * lerp(0.95, 0.62, f) + (i % 2 ? -0.012 * Lw : 0)); }
+  for (let i = serr; i >= 1; i--) { const f = i / serr; fs.lineTo(-lerp(-span / 2, -span * 0.06, f) * 1, -ch * lerp(0.95, 0.62, f) + (i % 2 ? -0.004 * Lw : 0)); }
   fs.lineTo(span / 2, -ch * 0.95);
   fs.quadraticCurveTo(span * 0.3, -ch * 0.1, 0, 0.02 * Lw);
-  const th = 0.022 * Lw, flg = new THREE.ExtrudeGeometry(fs, { depth: th, bevelEnabled: false, curveSegments: 6 }).rotateX(Math.PI / 2).translate(0, th / 2, zOf(0) + 0.02 * Lw);
-  fk.solid.push({ g: faceTint(flg, (x, y) => (y > 0.001 ? C.fluke : C.flukeUnder)), c: null, n: 'flukes' });
+  // (Digital Diorama revision 9: 0.012 L thick (it was 0.31 m on a 14 m whale) and its edges in the top colour: by the faces'
+  // centres, the side walls alternated dark and pale triangles)
+  const th = 0.012 * Lw, flg = new THREE.ExtrudeGeometry(fs, { depth: th, bevelEnabled: false, curveSegments: 6 }).rotateX(Math.PI / 2).translate(0, th / 2, zOf(0) + 0.02 * Lw);
+  fk.solid.push({ g: faceTint(flg, (x, y) => (y < -th * 0.4 ? C.flukeUnder : C.fluke)), c: null, n: 'flukes' });
   // Pectoral flippers (subs), dorsal fin, eyes, blowholes, tubercles
   const uF = sp === 'humpback' ? 0.74 : 0.78, fl = SPC.flip * Lw, fr = sp === 'humpback' ? 0.045 * Lw : 0.06 * Lw;
+  // (Digital Diorama revision 9: flat flipper blades held out from the sides, drooping a little and swept back: the
+  // humpback's long and narrow with a scalloped leading edge, the orca's a broad paddle, the blue whale's slender; they were
+  // capsules splayed down like the legs of a lander)
+  const flipShape = (s) => {
+    const sh = new THREE.Shape(), n = 16, chord = (t) => fr * (sp === 'orca' ? 2.1 : 1.7) * (sp === 'orca' ? Math.sqrt(Math.max(0, Math.sin(Math.PI * Math.min(1, 0.12 + t * 0.95)))) : (0.55 + 0.45 * Math.sin(Math.PI * Math.min(1, 0.2 + t * 1.1))) * (1 - 0.75 * t));
+    const lead = [], trail = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, c = chord(t), knob = sp === 'humpback' && i > 1 && i < n ? 0.12 * fr * Math.max(0, Math.sin(t * 40)) : 0;
+      lead.push([s * t * fl, c * 0.45 + knob]); trail.push([s * t * fl, -c * 0.55]);
+    }
+    sh.moveTo(trail[0][0], trail[0][1]);
+    for (const q of trail.slice(1)) sh.lineTo(q[0], q[1]);
+    for (const q of lead.reverse()) sh.lineTo(q[0], q[1]);
+    sh.closePath();
+    return sh;
+  };
+  const fth = 0.012 * Lw;
   for (const [nm, s] of [['flipper-l', 1], ['flipper-r', -1]]) {
     const at = [s * Rf(uF) * 0.85, -Rf(uF) * 0.35, zOf(uF)], f = P.sub(nm, at, 'whale-body');
-    const geo = new THREE.CapsuleGeometry(fr, fl, 3, 8).scale(0.22, 1, 1).translate(0, -fl / 2 - fr, 0).rotateX(0.9).rotateZ(s * 0.75).translate(at[0], at[1], at[2]);
+    const geo = new THREE.ExtrudeGeometry(flipShape(s), { depth: fth, bevelEnabled: false, curveSegments: 4 }).rotateX(Math.PI / 2).translate(0, fth / 2, 0)
+      .rotateZ(-s * 0.42).rotateY(s * (sp === 'humpback' ? 0.55 : 0.75)).translate(at[0], at[1], at[2]);
     f.solid.push({ g: geo, c: sp === 'humpback' ? C.fin : C.back, n: 'flipper' });
   }
   const [uD, hD] = SPC.dorsal, dH = hD * Lw, dS = new THREE.Shape();

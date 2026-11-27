@@ -135,6 +135,28 @@
  *     feet no longer dip between keys (giraffe and llama gallops sank 1.5 cm); dropCurve's smoothing width per gait (dropK).
  *   - Speed: smoothNormals hashes quantised positions instead of string keys, the coat painter skips the grain where it
  *     is off; an elephant builds in about 140 ms instead of 230.
+ *
+ * REVISION 9 (Digital Diorama: faces, heads and bodies checked against the species photos)
+ *   - The lower jaw was a narrow oval hung below the skull's rounded underside, so a shelf ran along the lips and the jaw
+ *     read as a separate strap (a duck's bill on cats, a crocodile's on wolves). Its widest part now lies at the edge of the
+ *     upper lips (`lipDepth`), as wide as the muzzle there less the lips' thickness (`lipInset`), fitted inside the cheek
+ *     behind the mouth corner, with a rounded chin (`chinN`); the upper lips hang down the sides of the muzzle (`lipN`)
+ *     and can carry a dark lip line (`lipZone`). Canines are rooted inside the lips.
+ *   - Heads were tapered tubes: each station now shapes its upper and lower halves apart (`crownW` between the ears,
+ *     `browW` over the eyes, `bridgeW` along the nose, `cheekLow` below the eyes, `lipW` across the lips), so a cat's face
+ *     is round and broad-cheeked, a horse's forehead broad over a narrow face, a dog's nose narrower than its lips.
+ *   - Eyes stay at the stop (`eyeReach`; a short face slid them onto the muzzle) and can look forward (`eyeFwd`); pale
+ *     cheeks rise from the throat to the whisker pads (`cheekFrom`) instead of a level band along the jaw.
+ *   - A narrow throatlatch behind the jowls (`throat`); the neck's end no wider than the back of the skull (`neckCapW`,
+ *     it stood round short necks as a collar) and a fuller occiput; normals blended across the head / neck seam.
+ *   - Family faces: cats (round, short-faced, eyes forward), dogs (domed forehead over a real stop, narrow nose bridge,
+ *     broad lips, eyes high and forward), hoofed animals (throatlatch, broad forehead, fuller lips), bears (dark lips).
+ *     Species: the horse, cow, pig, Labrador, wolf, fox, hyena, brown bear, badger, panda, big cats, bison (a massive head
+ *     and short beard), boar (deep body, sturdy legs), hippo (a head a third longer), camel and giraffe (lean quarters
+ *     under a falling croup), rabbit, mouse, capybara and hedgehog.
+ *   - Horns: the rhino's sweeps back with a concave taper over an oval base; the ram's curl wraps the ear instead of
+ *     hanging below the jaw (`curlR`); ossicones stand upright in world axes; new `pronghorn` (a forward prong, the tip
+ *     hooked back) and `dagger` (a mountain goat's) styles. A beard is built without a mane (`beardW`, its width).
  */
 
 import * as THREE from 'three';
@@ -1055,7 +1077,8 @@ function finish(build, opt) {
   if (smooth && opt.seamRadius) {
     const body = live.find(p => p.name === 'body' && !p.glass);
     if (body) for (const p of live) if (/^leg-/.test(p.name) && !p.glass) blendSeamNormals(geoOf.get(body), geoOf.get(p), opt.seamRadius);
-    // (Digital Diorama revision 8: other parts that meet along a shared row, such as the elephant's face and trunk)
+    // (Digital Diorama revision 8: other parts that meet along a shared row, such as the elephant's face and trunk;
+    // revision 9: the skull where it meets the neck, so the join behind the ears shades as one surface)
     for (const [a, b] of opt.seams || []) { const A = live.find(p => p.name === a && !p.glass), Bp = live.find(p => p.name === b && !p.glass); if (A && Bp) blendSeamNormals(geoOf.get(A), geoOf.get(Bp), opt.seamRadius * 0.5); }
   }
   for (const glass of [false, true]) {
@@ -1228,10 +1251,17 @@ function tetraLayout(S) {
   const headO = poll.clone().addScaledVector(hd, -0.02 * Lh).addScaledVector(hu, -0.08 * ch);
   // REVISED NECK→SKULL: the throat-latch stations may not exceed the skull section, otherwise short,
   // thick necks (pig, bear, hippo, boar) end in a visible disc / collar around the back of the head.
-  const capH = ch * 1.02, capW = cw * 1.08;
+  // (Digital Diorama revision 9: the neck's end no wider than the back of the skull (it was 1.08 × the skull's half-width,
+  // so on short necks it stood round the occiput as a collar); `neckCapW` overrides)
+  const capH = ch * 1.02, capW = cw * (S.neckCapW ?? 0.86);
   neck[3].ht = Math.min(neck[3].ht, capH); neck[3].hb = Math.min(neck[3].hb, capH * 1.05); neck[3].w = Math.min(neck[3].w, capW);
   neck[2].ht = Math.min(neck[2].ht, Math.max(capH * 1.3, lerp(neck[3].ht, neck[1].ht, 0.5))); neck[2].hb = Math.min(neck[2].hb, Math.max(capH * 1.35, lerp(neck[3].hb, neck[1].hb, 0.5)));
   neck[2].w = Math.min(neck[2].w, Math.max(capW * 1.3, lerp(neck[3].w, neck[1].w, 0.5)));
+  // Digital Diorama revision 9: the throatlatch. The neck's end was as deep as the back of the skull, and on a long head
+  // carried low (horses, cattle, deer, camels) it swallowed the jowls, so the head's lower line ran straight on into the
+  // neck. `throat` narrows the neck's underside toward the head (its lower half-height × (1 - throat) at the end, the taper
+  // below then follows) and slims its sides a little, so the round jowls stand out in front of a narrow throat.
+  if (S.throat) { neck[3].hb *= 1 - S.throat; neck[3].w *= 1 - 0.25 * S.throat; neck[2].hb *= 1 - 0.3 * S.throat; }
   // near-linear taper root → skull: no station may sit far above the straight cone between them
   for (const [i, t] of [[1, 0.34], [2, 0.68]]) for (const k of ['ht', 'hb', 'w']) neck[i][k] = Math.min(neck[i][k], lerp(neck[0][k], neck[3][k], t) * 1.12);
   return { H, D, Lt, hw, zF, zB, yR, Dr, keys: all, nd, nUp, Ln, nT, hd, hu, Lh, ch, cw, poll, headO, elbowY: H - D, limbs: [] };
@@ -1372,7 +1402,8 @@ function tetraHead(B, S, L) {
   // back cap), with a supraorbital brow shelf over the eyes and a zygomatic flare below them, so the
   // skull no longer reads as a straight tapered tube.
   const brow = S.brow ?? 0.05;
-  const W0 = prof([[0, 0.66 * cw], [0.1, 0.92 * cw], [0.22, cw], [sEye, cheek * cw], [s0, lerp(cheek * cw, sw * cw, 0.42)], [s0 + 0.55 * sn, lerp(cw, sw * cw, 0.86)], [1, sw * cw]]);
+  // (Digital Diorama revision 9: a fuller occiput, 0.76 × the half-width (0.66 left the neck's end standing round it))
+  const W0 = prof([[0, 0.76 * cw], [0.1, 0.94 * cw], [0.22, cw], [sEye, cheek * cw], [s0, lerp(cheek * cw, sw * cw, 0.42)], [s0 + 0.55 * sn, lerp(cw, sw * cw, 0.86)], [1, sw * cw]]);
   const W = (s) => W0(s) + brow * 1.2 * cw * bell(s, sEye - 0.01, 0.13);
   // Digital Diorama revision 6: the stop was a 1-2 cm slope (a Labrador's is 3-4 cm): the forehead now rises over the
   // eyes and the nasal bridge drops in front of them, both by `stop`
@@ -1398,9 +1429,23 @@ function tetraHead(B, S, L) {
   const HB = (s) => HBl(s) + lipOver(s) + cover(s) * (jDrop(s) + 0.04 * ch);
   const cleftBump = S.cleft ? (s, a) => -S.cleft * sstep(0.86, 1, s) * Math.exp(-((Math.cos(a) / 0.16) ** 2)) * sstep(0.2, 0.7, -Math.sin(a)) : null;
   const nMuz = S.muzzleN || 2.2;
-  const NT = prof([[0, 2], [s0, 2.05], [1, nMuz]]), NB = prof([[0, 2], [s0, 2.1], [1, nMuz + 0.2]]);
+  // Digital Diorama revision 9: the upper lips hang straight down the sides of the muzzle in front of the mouth corner
+  // (`lipN`, the exponent of the muzzle's lower half), so the lower jaw fits up inside them instead of hanging below a
+  // rounded shelf
+  const lipN = S.lipN ?? nMuz + 0.2;
+  const NT = prof([[0, 2], [s0, 2.05], [1, nMuz]]), NB = prof([[0, 2], [Math.min(s0, sC), 2.1], [Math.min(0.97, Math.max(s0, sC) + 0.08), lipN], [1, lipN]]);
+  // Digital Diorama revision 9: one superellipse per station made every head a tapered tube. The section's upper half
+  // (braincase, forehead, bridge of the nose) and lower half (cheeks and jowls, upper lips) now have their own widths, as
+  // factors on the profile W: `crownW` the top of the braincase between the ears, `browW` the forehead over the eyes,
+  // `bridgeW` the bridge of the nose, `cheekLow` the cheeks and jowls below the eyes, `lipW` the upper lips. A cat's
+  // round face is narrow over the crown and broad across the cheeks; a horse's forehead is broad and flat over a narrow
+  // face; a dog's nose bridge is narrower than its lips.
+  const kTop = prof([[0, S.crownW ?? 1], [0.2, S.crownW ?? 1], [sEye, S.browW ?? 1], [Math.min(0.97, s0 + 0.4 * sn), S.bridgeW ?? 1], [1, S.bridgeW ?? 1]]);
+  const kBot = prof([[0.08, 1], [sEye, S.cheekLow ?? 1], [Math.max(sEye + 0.01, sC), S.cheekLow ?? 1], [Math.min(0.98, Math.max(sEye, sC) + 0.16), S.lipW ?? 1], [1, S.lipW ?? 1]]);
+  const kOf = (s, up, yn) => lerp(1, up ? kTop(s) : kBot(s), sstep(0, 1, yn));
+  const headSect = (s, a, x, y, h1, h2) => { const up = y >= 0; return [x * kOf(s, up, Math.min(1, Math.abs(y) / Math.max(1e-9, up ? h1 : h2))), y]; };
   const tip = O.clone().addScaledVector(hd, Lh);
-  const g = loft({ pts: [O, tip], seg: Math.round(18 * det), rad: 2 * Math.round(8 * det + 3), w: W, ht: HT, hb: HB, oy: OY, nt: NT, nb: NB, up: hu, bump: cleftBump,
+  const g = loft({ pts: [O, tip], seg: Math.round(18 * det), rad: 2 * Math.round(8 * det + 3), w: W, ht: HT, hb: HB, oy: OY, nt: NT, nb: NB, up: hu, bump: cleftBump, sect: headSect,
     cap0: { type: 'round', len: S.occiput ?? 0.72, n: 3 }, cap1: S.nose === 'disc' ? { type: 'flat' } : { type: 'round', len: S.noseCap ?? 0.5, n: 3 }, bend: 0, antifold: false });
   L.head = g; L.headS = { s0, sEye, sn, W, HT, HB: HBl, OY, sC };
   const headW = rig.W('Head');
@@ -1409,29 +1454,52 @@ function tetraHead(B, S, L) {
   // eyes: ray-cast a yaw/elevation direction from the skull centre onto the lofted surface
   const eyeR = S.eye * Lh, yaw = (S.eyeYaw ?? 55) * DEG, el = (S.eyeEl ?? 18) * DEG;
   const eFr = g.frame(sEye), eC = eFr.c.clone().addScaledVector(hu, OY(sEye) + (HT(sEye) - HBl(sEye)) * 0.5);
+  // (Digital Diorama revision 9: `eyeReach` limits how far in front of the eye station the eye may land, so the eyes of a
+  // short-faced cat stay at the stop instead of sliding onto the muzzle; `eyeFwd` how far the gaze turns from the surface
+  // toward the eye's own direction, more for animals that look forward)
   L.eyes = [1, -1].map((side) => {
     const dir = hd.clone().multiplyScalar(Math.cos(yaw) * Math.cos(el)).add(V3(side * Math.sin(yaw) * Math.cos(el), 0, 0)).addScaledVector(hu, Math.sin(el)).normalize();
-    const hit = surfaceToward(g, eC, dir, Math.max(0.05, sEye - 0.3), Math.min(0.97, sEye + 0.25));
-    return { c: hit.p.clone().addScaledVector(hit.n, -eyeR * (S.eyeInset ?? 0.58)), dir: hit.n.clone().lerp(dir, 0.5).normalize(), side };
+    const hit = surfaceToward(g, eC, dir, Math.max(0.05, sEye - 0.3), Math.min(0.97, sEye + (S.eyeReach ?? 0.25)));
+    return { c: hit.p.clone().addScaledVector(hit.n, -eyeR * (S.eyeInset ?? 0.58)), dir: hit.n.clone().lerp(dir, S.eyeFwd ?? 0.5).normalize(), side };
   });
   emit(B.part('head', { group: 'head' }), g, (s, a, P) => palate(s, a) ? 'mouth' : (S.nose === 'disc' && s >= 0.999) ? 'nose' : paint({ part: 'head', u: s, a, P, s0 }), headW);
   // ── jaw: hinged at the temporomandibular joint, its top hidden inside the skull until it opens
-  const jTop = (s) => OY(s) - HBl(s) * 0.3;
-  const jBot = (s) => OY(s) - HBl(s) - jDrop(s);
-  // inside the cheek behind the mouth corner; in front, the lower lip sits just inside the upper lip
-  const jw = (s) => W(s) * lerp(0.7, 0.8, sstep(sC - 0.06, sC + 0.04, s)) * lerp(1, 0.9, sstep(sC, 1, s)) * (S.jawW || 1);
+  // Digital Diorama revision 9: the jaw was a narrow oval hung below the skull's rounded underside, so a shelf ran along
+  // the lips and the lower jaw read as a separate strap (a duck's bill on cats, a crocodile's on dogs). Its widest part now
+  // lies at the edge of the upper lips (`lipDepth` above the skull's underside, × its lower half-height), as wide as the
+  // muzzle there less the lip's thickness (`lipInset`), so the sides of the face run on down the lower jaw to the chin;
+  // behind the mouth corner it is fitted inside the cheek. `chinN` rounds the lower jaw's underside (2: a narrow U).
+  const eps = S.lipDepth ?? 0.25, lipIn = S.lipInset ?? 0.06, jnB = S.chinN ?? 2.2;
+  // the skull's half-width at height y below its section centre (as lofted: superellipse, then the section factors)
+  const skullX = (s, y) => {
+    const h = HB(s), n = NB(s), t = clamp(Math.abs(y) / Math.max(1e-9, h), 0, 1);
+    return W(s) * Math.pow(Math.max(0, 1 - Math.pow(t, n)), 1 / n) * kOf(s, false, t);
+  };
+  const jc = (s) => -(1 - eps) * HBl(s);
+  const jhT = (s) => 0.55 * (1 - eps) * HBl(s), jhB = (s) => eps * HBl(s) + jDrop(s);
+  const jawSh = (t) => Math.pow(Math.max(0, 1 - Math.pow(t, jnB)), 1 / jnB);
+  // behind the corner: the widest jaw that stays inside the cheek at every height of its lower half (with a margin)
+  const jwIn = (s) => { let m = Infinity; for (let i = 0; i < 10; i++) { const t = i / 10; m = Math.min(m, skullX(s, jc(s) - t * jhB(s)) / Math.max(1e-6, jawSh(t))); } return 0.9 * m; };
+  const jwOut = (s) => skullX(s, jc(s)) * (1 - lipIn);
+  const jw = (s) => Math.max(1e-4, lerp(Math.min(jwIn(s), jwOut(s)), jwOut(s), sstep(sC - 0.06, sC + 0.02, s))) * (S.jawW || 1);
+  const jBot = (s) => OY(s) + jc(s) - jhB(s);
   const jpts = [];
-  for (let i = 0; i <= 8; i++) { const s = lerp(sJ0, sJ1, i / 8); jpts.push(O.clone().addScaledVector(hd, s * Lh).addScaledVector(hu, (jTop(s) + jBot(s)) / 2)); }
+  for (let i = 0; i <= 8; i++) { const s = lerp(sJ0, sJ1, i / 8); jpts.push(O.clone().addScaledVector(hd, s * Lh).addScaledVector(hu, OY(s) + jc(s))); }
   const jcurve = makePath(jpts);
-  const sOf = (u) => lerp(sJ0, sJ1, u), jh = (u) => (jTop(sOf(u)) - jBot(sOf(u))) / 2;
-  const jg = loft({ curve: jcurve, seg: Math.round(12 * det), rad: 2 * Math.round(6 * det + 2), w: (u) => jw(sOf(u)), ht: jh, hb: jh,
-    nt: 1.9, nb: 2.2, up: hu, cap0: { type: 'round', len: 0.7, n: 2 }, cap1: { type: 'round', len: 0.5, n: 2 }, bend: 0.5 });
+  const sOf = (u) => lerp(sJ0, sJ1, u);
+  const jg = loft({ curve: jcurve, seg: Math.round(12 * det), rad: 2 * Math.round(6 * det + 2), w: (u) => jw(sOf(u)), ht: (u) => jhT(sOf(u)), hb: (u) => jhB(sOf(u)),
+    nt: 2, nb: jnB, up: hu, cap0: { type: 'round', len: 0.7, n: 2 }, cap1: { type: 'round', len: 0.5, n: 2 }, bend: 0.5 });
   const tmj = O.clone().addScaledVector(hd, 0.2 * Lh).addScaledVector(hu, OY(0.2) - HBl(0.2) * 0.4);
   rig.add('Jaw', 'Head', tmj, tip.clone().addScaledVector(hu, jBot(1)));
   L.jaw = jg;
   // (the lining only inside the mouth: the front of the jaw is the lower lip, coat-coloured)
   // (Digital Diorama revision 7: the lining starts just in front of the mouth corner; at the corner it peeked out as a pink line)
-  emit(B.part('jaw', { group: 'head' }), jg, (u, a, P) => Math.abs(a - Math.PI / 2) < 0.5 && sOf(u) > sC + 0.02 && u < 0.88 ? 'mouth' : paint({ part: 'jaw', u: sOf(u), a, P, s0 }), rig.W('Jaw'));
+  // (Digital Diorama revision 9: `lipZone` paints the lips' edge, a thin dark line where the lower lip meets the upper)
+  emit(B.part('jaw', { group: 'head' }), jg, (u, a, P) => {
+    if (Math.abs(a - Math.PI / 2) < 0.5 && sOf(u) > sC + 0.02 && u < 0.88) return 'mouth';
+    if (S.lipZone && Math.abs(Math.sin(a)) < 0.16 && sOf(u) > sC - 0.03) return S.lipZone;
+    return paint({ part: 'jaw', u: sOf(u), a, P, s0 });
+  }, rig.W('Jaw'));
   // ── whisker pads (mystacial pads for felids / carnivores)
   if (S.whiskerPads) {
     const sWp = s0 + 0.55 * sn, wpL = sn * Lh * 0.28;
@@ -1522,6 +1590,9 @@ function tetraHead(B, S, L) {
   if (S.fang > 0) {
     for (const side of [1, -1]) {
       const up = g.at(s0 + 0.66 * sn, 1.5 * Math.PI + side * 0.42);
+      // (Digital Diorama revision 9: rooted inside the upper lip, so with the mouth closed the canines are covered by the lips
+      // and the lower jaw instead of jutting out at the corners of the mouth)
+      up.p.x *= (1 - lipIn) * 0.8;
       const dn = hu.clone().multiplyScalar(-1).addScaledVector(hd, 0.12).normalize(), Lf = S.fang * Lh;
       const tg = tube([up.p.clone().addScaledVector(dn, -Lf * 0.25), up.p.clone().addScaledVector(dn, Lf * 0.5), up.p.clone().addScaledVector(dn, Lf).addScaledVector(hd, -Lf * 0.12)], (u) => Lf * 0.16 * (1 - u * 0.92), 5, 5, { cap1: 'point', cap0: 'flat' });
       emit(B.part('teeth', { group: 'head' }), tg, 'teeth', headW);
@@ -2452,9 +2523,17 @@ function tetraHorns(B, S, L) {
     for (const [s, k, kr] of list) {
       const { p, n } = g.at(s, Math.PI / 2), base = p.addScaledVector(n, -r0 * kr * 0.4), L1 = len * k;
       const up = st === 'unicorn' ? n.clone().lerp(hd, 0.3).normalize() : n.clone().multiplyScalar(0.35).add(V3(0, 0.65, 0)).normalize(), back = V3(0, 0, -1);
+      // (Digital Diorama revision 9: a rhino's horn sweeps back toward the forehead and tapers concavely, broad over the nose and
+      // slender at the tip (it was a straight cone, read from a distance as a blade); its base is longer than it is wide)
       const pts = st === 'unicorn' ? [base, base.clone().addScaledVector(up, L1 * 0.5).addScaledVector(hd, L1 * 0.25), base.clone().addScaledVector(up, L1 * 0.8).addScaledVector(hd, L1 * 0.55)]
-        : [base, base.clone().addScaledVector(up, L1 * 0.55).addScaledVector(back, L1 * 0.05), base.clone().addScaledVector(up, L1).addScaledVector(back, L1 * (Hn.curl ?? 0.3))];
-      horn(pts, (u) => r0 * kr * (1.2 - u) * (st === 'rhino' ? 1.6 : 1), 'horn', st === 'unicorn' ? (u, a) => 0.12 * Math.sin(a * 2 - u * 30) : null);
+        : [base, base.clone().addScaledVector(up, L1 * 0.4).addScaledVector(back, L1 * 0.02), base.clone().addScaledVector(up, L1 * 0.75).addScaledVector(back, L1 * (Hn.curl ?? 0.3) * 0.45), base.clone().addScaledVector(up, L1).addScaledVector(back, L1 * (Hn.curl ?? 0.3))];
+      if (st === 'unicorn') horn(pts, (u) => r0 * kr * (1.2 - u), 'horn', (u, a) => 0.12 * Math.sin(a * 2 - u * 30));
+      else {
+        const rr = (u) => r0 * kr * 1.5 * Math.max(0.06, Math.pow(1 - u, 1.25));
+        const hg = loft({ pts, seg: Math.round(12 * det), rad: 2 * Math.round(5 * det + 2), w: (u) => rr(u) * 0.82, ht: (u) => rr(u) * (1.1 - 0.1 * u), hb: (u) => rr(u) * (1.1 - 0.1 * u), up: hd,
+          cap0: { type: 'round', len: 0.3, n: 2 }, cap1: { type: 'round', len: 0.8, n: 2 }, bend: 0.4 });
+        emit(part, hg, 'horn', HW);
+      }
     }
     return;
   }
@@ -2469,7 +2548,9 @@ function tetraHorns(B, S, L) {
     else if (st === 'buffalo') {
       horn([P(-0.12, 0.05, 0.05), P(0.3, 0.02, 0.06), P(0.66, -0.14, 0.1), P(0.86, 0.14, 0.04), P(0.8, 0.42, -0.05)], (u) => r0 * (1.7 * (1 - sstep(0, 0.35, u)) + 1) * Math.max(0.05, 1 - u));
     } else if (st === 'ram') {
-      const turns = Hn.curl ?? 1.7, R0 = len * 0.36, pts = [];
+      // (Digital Diorama revision 9: the curl about as deep as the head (0.36 × the length hung its lowest turn below the jaw
+      // and swung the tip forward past the muzzle like a tusk); `curlR` sets its radius)
+      const turns = Hn.curl ?? 1.7, R0 = len * (Hn.curlR ?? 0.28), pts = [];
       // Digital Diorama revision: curl in world axes (back over the crown, down behind the ear, forward past the
       // cheek); in head axes a down-pitched head turned the spiral into loops on top of the skull
       const upT = V3(0, 1, 0).applyAxisAngle(V3(0, 0, 1), -side * 0.32), bk = V3(0, 0, -1);
@@ -2487,7 +2568,23 @@ function tetraHorns(B, S, L) {
       for (let i = 0; i <= 20; i++) { const t = i / 20, a2 = t * TAU * (Hn.curl ?? 2.2) * side; pts.push(base.clone().addScaledVector(ax, t * len).addScaledVector(e1, (Math.cos(a2) - 1) * len * 0.09 * (1 - 0.4 * t)).addScaledVector(e2, Math.sin(a2) * len * 0.09 * (1 - 0.4 * t))); }
       horn(pts, taper(0.9));
     } else if (st === 'ossicones') {
-      const og = horn([P(0, 0, 0), P(0.04, 0.6, 0.12), P(0.05, 0.95, 0.15)], (u) => r0 * (1 - 0.25 * u) + r0 * 0.35 * bell(u, 1, 0.3), (u, a2, Pp) => u > 0.8 ? 'mane' : B.paint({ part: 'head', u: 0.2, a: Math.PI / 2, P: Pp }), null, 'round');
+      // (Digital Diorama revision 9: upright and leaning a little back in world axes; in head axes a head held face-down
+      // turned them forward over the eyes)
+      const Wd = V3(0, 1, 0), Bk = V3(0, 0, -1), O3 = (o, y, z) => base.clone().addScaledVector(out, o * len).addScaledVector(Wd, y * len).addScaledVector(Bk, z * len);
+      horn([O3(0, 0, 0), O3(0.05, 0.55, 0.1), O3(0.07, 0.95, 0.16)], (u) => r0 * (1 - 0.25 * u) + r0 * 0.35 * bell(u, 1, 0.3), (u, a2, Pp) => u > 0.8 ? 'mane' : B.paint({ part: 'head', u: 0.2, a: Math.PI / 2, P: Pp }), null, 'round');
+    } else if (st === 'pronghorn') {
+      // (Digital Diorama revision 9) a pronghorn buck's horn: black, rising straight up over the eye, flattened side to side,
+      // with a forward-pointing prong half way up and the tip hooked back and in. Built in world axes.
+      const Wd = V3(0, 1, 0), Fw = V3(0, 0, 1), O3 = (o, y, z) => base.clone().addScaledVector(out, o * len).addScaledVector(Wd, y * len).addScaledVector(Fw, z * len);
+      const main = [O3(0, 0, 0), O3(0.04, 0.4, 0.04), O3(0.06, 0.72, 0.02), O3(0.03, 0.92, -0.1), O3(-0.04, 0.98, -0.2)];
+      const mg = loft({ pts: main, seg: Math.round(12 * det), rad: 2 * Math.round(3 * det + 2), w: (u) => r0 * 0.72 * Math.max(0.08, 1 - 0.85 * u), ht: (u) => r0 * (1.35 - 0.9 * sstep(0.3, 0.6, u)) * Math.max(0.1, 1 - 0.7 * u), hb: (u) => r0 * (1.35 - 0.9 * sstep(0.3, 0.6, u)) * Math.max(0.1, 1 - 0.7 * u),
+        up: Fw, cap0: { type: 'round', len: 0.3, n: 2 }, cap1: { type: 'point', len: 0.8 }, bend: 0.4 });
+      emit(part, mg, 'horn', HW);
+      const pb = O3(0.04, 0.44, 0.08);
+      horn([pb, O3(0.05, 0.5, 0.2), O3(0.05, 0.56, 0.3)], (q) => r0 * 0.5 * (1 - 0.85 * q));
+    } else if (st === 'dagger') {
+      // (Digital Diorama revision 9) slender, smooth horns rising from the forehead and curving gently back (a mountain goat's)
+      horn([P(0.01, 0, 0), P(0.03, 0.5, 0.12), P(0.05, 0.82, 0.32), P(0.06, 0.98, 0.56)], taper(0.95));
     } else if (st === 'whitetail') {
       // Digital Diorama revision: a white-tailed deer's main beam curves out and back, then sweeps forward
       // over the brow, with a short brow tine and tall tines rising straight up from the beam
@@ -2580,7 +2677,8 @@ function tetraTrunk(B, S, L) {
 /** Manes: horse/zebra crests as hair sheets along the neck crest; lion ruff as a shaggy collar loft; beards. */
 function tetraMane(B, S, L) {
   const M = S.mane;
-  if (!M || M.style === 'none') return;
+  // (Digital Diorama revision 9: a beard without a mane is still built; the goat's and bison's never were)
+  if (!M || (M.style === 'none' && !M.beard)) return;
   const rig = B.rig, det = B.det, U = L.uOf, part = B.part('mane', { group: 'mane' });
   if (M.style === 'horse' || M.style === 'crest') {
     // (Digital Diorama revision 7: `back` carries a crest on along the spine toward the loin, like a boar's bristles)
@@ -2621,7 +2719,8 @@ function tetraMane(B, S, L) {
   }
   if (M.beard) {
     // chin beard (goat, bison): a tapered lock hanging from under the jaw
-    const j = L.jaw.at(0.72, -Math.PI / 2), bl = M.beard * L.Lh, bw = bl * 0.22;
+    // (Digital Diorama revision 9: `beardW`, its width × its length; a bison's is short and broad)
+    const j = L.jaw.at(0.72, -Math.PI / 2), bl = M.beard * L.Lh, bw = bl * (M.beardW ?? 0.22);
     const pts = [j.p.clone().addScaledVector(j.n, -bw * 0.6), j.p.clone().add(V3(0, -bl * 0.45, -bl * 0.08)), j.p.clone().add(V3(0, -bl, -bl * 0.18))];
     emit(part, tube(pts, (u) => bw * (1 - 0.75 * u), 6, 8, { cap1: 'point', bump: (u, a) => 0.15 * Math.sin(a * 5 + u * 9) }), 'mane', rig.W('Jaw'));
   }
@@ -3085,7 +3184,10 @@ function makePainter(S, L) {
     let zone = 'body';
     if (torso && sa < bellyLine) zone = 'belly';
     if (part === 'jaw' && cs >= 0.3 && sa < 0.25) zone = 'belly';
-    if (head && S.cheeks && part === 'head' && sa < -0.05 && Math.abs(ca) > 0.35 && u > 0.18 && u < s0 + 0.2) zone = 'belly';
+    // (Digital Diorama revision 9: pale lower cheeks bounded by a line that rises from the throat at the back of the head
+    // to the whisker pads (`cheekFrom`: where it starts to rise); a level band from below the ear to the muzzle read as a
+    // strap along the jaw)
+    if (head && S.cheeks && part === 'head' && Math.abs(ca) > 0.2 && u < s0 + 0.2 && sa < lerp(-0.8, 0.02, sstep(S.cheekFrom ?? 0.18, s0 + 0.12, u))) zone = 'belly';
     if (head && S.muzzle && u > s0 + 0.45 * (1 - s0) * 0 + (S.muzzleS ?? 0.62) * (1 - s0) && (!S.muzzleLow || sa < 0.05)) zone = S.muzzle === 'dark' ? 'marking' : 'belly';
     if (head && S.faceZone) zone = S.faceZone;
     if (part === 'ear') {
@@ -3337,18 +3439,27 @@ const DEF = {
   stance: 'digitigrade', legThk: 1, tail: { style: 'thin', len: 0.5, thk: 0.03, set: -30 },
   pattern: 'none', countershade: 0.4, palette: pal({}),
 };
-const UNGULATE = { stance: 'ungulate', foreBulk: 1.15, hindBulk: 1.05, marks: { hooks: 0.045, fossa: 0.04, ribs: 0.025, girth: 0.035, breast: 0.06, withers: 0.04 }, keel: 0.42, waist: 0.04, croupFlat: 0.97, backFlat: 0.98, chestNarrow: 0.74, neckRootW: 0.62, withersTop: 0.55, quarters: 1.0, quartersBox: 2.2, nose: 'muzzle', pupil: 'bar', eyeYaw: 64, eyeEl: 14, foot: 'cloven', ear: { style: 'pointed', s: 0.08, a: 0.62, spread: 40, tilt: 4, turn: 30 } };
-const CANID = { stance: 'digitigrade', hindShape: { thighF: 0.14, breech: 0.075, hams: 0.015, kneeW: 0.055, patella: 0.04 }, foreBulk: 1.15, hindBulk: 1.05, marks: { hooks: 0.012, fossa: 0.025, ribs: 0.035, girth: 0.04, breast: 0.08, withers: 0.025, scapula: 0.025 }, keel: 0.46, waist: 0.17, croupFlat: 0.86, backFlat: 0.9, chestNarrow: 0.8, neckRootW: 0.66, withersTop: 0.72, quarters: 0.96, quartersBox: 2.1, nose: 'pad', whiskerPads: false, claws: 0.9, toes: 4, fang: 0.07, stop: 0.55, noseCap: 0.4, eyeYaw: 38, eyeEl: 14,
+const UNGULATE = { stance: 'ungulate', foreBulk: 1.15, hindBulk: 1.05, marks: { hooks: 0.045, fossa: 0.04, ribs: 0.025, girth: 0.035, breast: 0.06, withers: 0.04 }, keel: 0.42, waist: 0.04, croupFlat: 0.97, backFlat: 0.98, chestNarrow: 0.74, neckRootW: 0.62, withersTop: 0.55, quarters: 1.0, quartersBox: 2.2, nose: 'muzzle', pupil: 'bar', eyeYaw: 64, eyeEl: 14, foot: 'cloven', ear: { style: 'pointed', s: 0.08, a: 0.62, spread: 40, tilt: 4, turn: 30 },
+  // (Digital Diorama revision 9: a narrow throatlatch behind round jowls, a broad flat forehead over a narrower face, fuller lips)
+  throat: 0.35, browW: 1.06, bridgeW: 0.85, cheekLow: 1.04, lipW: 1.08, lipDepth: 0.3 };
+const CANID = { stance: 'digitigrade', hindShape: { thighF: 0.14, breech: 0.075, hams: 0.015, kneeW: 0.055, patella: 0.04 }, foreBulk: 1.15, hindBulk: 1.05, marks: { hooks: 0.012, fossa: 0.025, ribs: 0.035, girth: 0.04, breast: 0.08, withers: 0.025, scapula: 0.025 }, keel: 0.46, waist: 0.17, croupFlat: 0.86, backFlat: 0.9, chestNarrow: 0.8, neckRootW: 0.66, withersTop: 0.72, quarters: 0.96, quartersBox: 2.1, nose: 'pad', whiskerPads: false, claws: 0.9, toes: 4, fang: 0.07, stop: 0.75, noseCap: 0.4, eyeYaw: 34, eyeEl: 22, dome: 1.15,
+  // (Digital Diorama revision 9: a domed forehead over a real stop, a narrow nose bridge between broad lips and cheeks, eyes set
+  // high and forward, dark lips)
+  bridgeW: 0.8, cheekLow: 1.1, lipW: 1.05, lipZone: 'lid', lipInset: 0.1, eyeReach: 0.12,
   ear: { style: 'pointed', len: 0.36, w: 0.62, s: 0.2, a: 0.6, spread: 18, tilt: 10, turn: 18, cup: 0.5 }, tail: { style: 'bushy', len: 0.55, thk: 0.045, set: -55, curl: 15, bush: 0.7 } };
-const FELID = { stance: 'digitigrade', arch: 0.06, noseCap: 0.3, muzzleN: 2.5, occiput: 0.85, foreBulk: 1.45, hindBulk: 1.12, marks: { hooks: 0.01, fossa: 0.02, ribs: 0.02, girth: 0.035, breast: 0.05, scapula: 0.07 }, keel: 0.38, waist: 0.13, croupFlat: 0.88, backFlat: 0.9, chestNarrow: 0.76, neckRootW: 0.64, withersTop: 0.6, quarters: 0.98, quartersBox: 2.1, nose: 'feline', whiskerPads: true, pupil: 'slit', claws: 0.6, toes: 4, fang: 0.06, stop: 0.55, dome: 1.16, eyeYaw: 30, eyeEl: 12, snout: 0.3, snoutW: 0.72, snoutD: 0.76, cheek: 1.18,
+const FELID = { stance: 'digitigrade', arch: 0.06, noseCap: 0.3, muzzleN: 2.5, occiput: 0.85, foreBulk: 1.45, hindBulk: 1.12, marks: { hooks: 0.01, fossa: 0.02, ribs: 0.02, girth: 0.035, breast: 0.05, scapula: 0.07 }, keel: 0.38, waist: 0.13, croupFlat: 0.88, backFlat: 0.9, chestNarrow: 0.76, neckRootW: 0.64, withersTop: 0.6, quarters: 0.98, quartersBox: 2.1, nose: 'feline', whiskerPads: true, pupil: 'slit', claws: 0.6, toes: 4, fang: 0.06, stop: 0.55, dome: 1.16, eyeYaw: 30, eyeEl: 16, snout: 0.3, snoutW: 0.56, snoutD: 0.62, cheek: 1.18,
+  // (Digital Diorama revision 9: a round face, narrow over the crown and broad across the cheeks, eyes kept at the stop,
+  // whisker pads overhanging a small recessed chin, dark lips)
+  crownW: 0.86, browW: 0.9, bridgeW: 0.8, cheekLow: 1.1, eyeReach: 0.06, lipZone: 'lid', lipInset: 0.22, chinN: 2, jaw: 0.35, jawEnd: 0.92, cheekFrom: 0.3,
   ear: { style: 'feline', len: 0.26, w: 0.85, s: 0.26, a: 0.66, spread: 26, tilt: 6, turn: 12, cup: 0.55 }, tail: { style: 'thin', len: 0.85, thk: 0.035, set: -40, curl: 30, tipCurl: 12 } };
-const URSID = { stance: 'plantigrade', foreBulk: 1.35, hindBulk: 1.2, marks: { girth: 0.025, breast: 0.04, scapula: 0.03 }, keel: 0.2, waist: 0.03, croupFlat: 0.92, backFlat: 0.94, chestNarrow: 0.92, neckRootW: 0.76, withersTop: 0.88, quarters: 0.98, quartersBox: 2.1, nose: 'pad', claws: 1.1, toes: 5, footLen: 1.1, dome: 1.1, stop: 0.35, eyeYaw: 32, eye: 0.04, neckThk: 0.85,
+const URSID = { stance: 'plantigrade', foreBulk: 1.35, hindBulk: 1.2, marks: { girth: 0.025, breast: 0.04, scapula: 0.03 }, keel: 0.2, waist: 0.03, croupFlat: 0.92, backFlat: 0.94, chestNarrow: 0.92, neckRootW: 0.76, withersTop: 0.88, quarters: 0.98, quartersBox: 2.1, nose: 'pad', claws: 1.1, toes: 5, footLen: 1.1, dome: 1.1, stop: 0.35, eyeYaw: 32, eye: 0.04, neckThk: 0.85, lipZone: 'lid', lipInset: 0.1,
   ear: { style: 'round', len: 0.2, w: 0.95, s: 0.24, a: 0.78, spread: 28, tilt: 4, turn: 12, cup: 0.5 }, tail: { style: 'thin', len: 0.1, thk: 0.06, set: -40 } };
 const RODENT = { stance: 'digitigrade', keel: 0.14, waist: 0.02, nose: 'pad', incisors: 0.09, whiskerPads: true, claws: 0.6, toes: 4, eye: 0.11, eyeYaw: 70, stop: 0.2, crouch: 0.8, hockH: 0.13, footLen: 1.6, thighW: 0.5, thighD: 0.52 };
 
 const SPECIES_DEFS = {
   horse: { label: 'Horse', fam: UNGULATE, foreBulk: 1.22, hindBulk: 1.1, H: 1.6, len: 1.02, depth: 0.44, width: 0.8, rump: 0.99, hipW: 1.06, tuck: 0.18, belly: 0.25, withers: 0.14,
-    neckAng: 48, neckLen: 0.5, neckThk: 0.6, neckW: 0.62, neckArch: 0.1, headAng: 60, headLen: 0.37, headD: 0.24, headW: 0.17, snout: 0.6, snoutW: 0.62, snoutD: 0.55, stop: 0.08, cheek: 1.3, jowl: 1.4, eye: 0.04, eyeS: 0.3,
+    neckAng: 48, neckLen: 0.5, neckThk: 0.7, neckW: 0.64, neckArch: 0.1, headAng: 60, headLen: 0.37, headD: 0.24, headW: 0.17, snout: 0.6, snoutW: 0.62, snoutD: 0.55, stop: 0.08, cheek: 1.3, jowl: 1.4, eye: 0.046, eyeS: 0.3, eyeEl: 24,
+    throat: 0.45, browW: 1.1, bridgeW: 0.82, cheekLow: 1.05, lipW: 1.12, muzzleN: 2.5, noseCap: 0.42, nostril: 0.34, nostrilA: 0.45, lipDepth: 0.32,
     foot: 'hoof', legThk: 0.95, ear: { style: 'pointed', len: 0.26, w: 0.42, s: 0.07, a: 0.42, spread: 12, tilt: 6, turn: 30, cup: 0.6 },
     tail: { style: 'hair', len: 0.26, thk: 0.035, set: -50, hair: 2.7, hairW: 3.2 }, mane: { style: 'horse', h: 0.1 }, points: 0.45, countershade: 0.1,
     palette: pal({ body: '#7b4a2a', belly: '#9a6a46', marking: '#24170f', mane: '#1e1410', hoof: '#2e2724', nose: '#3a2d29', skin: '#3d302b' }) },
@@ -3363,7 +3474,9 @@ const SPECIES_DEFS = {
     tail: { style: 'tuft', len: 0.42, thk: 0.02, set: -72, tuft: 2 }, mane: { style: 'crest', h: 0.07 }, muzzle: 'light', muzzleS: 0.55, dorsal: true, countershade: 0.45,
     palette: pal({ body: '#8b847c', belly: '#d9d3c8', marking: '#2a2622', mane: '#2a2622', hoof: '#33302d', nose: '#2b2826' }) },
   cow: { label: 'Dairy Cow', fam: UNGULATE, marks: { hooks: 0.11, fossa: 0.06, ribs: 0.02, girth: 0.03, breast: 0.05, withers: 0.025, spine: 0.03 }, keel: 0.3, hind: { kY: 0.72, kZ: 0.14, aY: 0.45, aZ: -0.05, fY: 0.15, fZ: -0.04, cY: 0.058 }, H: 1.42, len: 1.16, depth: 0.58, width: 0.86, rump: 1.0, hipW: 1.1, rumpDepth: 0.95, tuck: 0.05, belly: 0.4,
-    neckAng: 22, neckLen: 0.3, neckThk: 0.75, neckW: 0.72, headAng: 62, headLen: 0.39, headD: 0.27, headW: 0.25, snout: 0.5, snoutW: 0.8, snoutD: 0.66, stop: 0.05, cheek: 1.12, jowl: 1.2, muzzleN: 2.0, eye: 0.045, eyeS: 0.3,
+    neckAng: 22, neckLen: 0.3, neckThk: 0.75, neckW: 0.72, headAng: 62, headLen: 0.39, headD: 0.27, headW: 0.27, snout: 0.5, snoutW: 0.8, snoutD: 0.72, stop: 0.05, cheek: 1.12, jowl: 1.2, muzzleN: 2.7, eye: 0.05, eyeS: 0.3, eyeEl: 20,
+    // (Digital Diorama revision 9: a broad flat poll and forehead between the horns, a broad square muzzle)
+    crownW: 1.2, browW: 1.2, lipW: 1.2, bridgeW: 0.92, dome: 0.88, throat: 0.25,
     ear: { style: 'pointed', len: 0.3, w: 0.55, s: 0.12, a: 1.15, spread: 75, tilt: -10, turn: 40, cup: 0.4 }, horns: { style: 'cattle', len: 0.32, thk: 0.06, s: 0.04, a: 0.95 },
     tail: { style: 'tuft', len: 0.62, thk: 0.022, set: -84, tuft: 2.4 }, pattern: 'patches', countershade: 0.1, muzzle: 'light', muzzleS: 0.8, udder: 0.13,
     palette: pal({ body: '#f1ede4', belly: '#f4f0e8', pattern: '#1c1a19', marking: '#1c1a19', nose: '#d99a96', skin: '#d99a96', horn: '#e2d6b6', hoof: '#3b3330' }) },
@@ -3375,21 +3488,21 @@ const SPECIES_DEFS = {
   // Digital Diorama revision: a deeper chest, thick ruff and fuller tail (it looked shaved), grizzled agouti coat
   // with a dark saddle, tawny legs, pale lips and cheeks under a dark nose (not a white nose tip), dark tail tip
   wolf: { label: 'Gray Wolf', fam: CANID, arch: 0.03, H: 0.8, len: 1.15, depth: 0.46, width: 0.8, rump: 0.97, tuck: 0.36, neckAng: 30, neckLen: 0.32, neckThk: 1.0,
-    headAng: 22, headLen: 0.32, headD: 0.27, headW: 0.34, snout: 0.5, snoutW: 0.46, snoutD: 0.5, eye: 0.045, legThk: 1.02, saddle: 0.26, countershade: 0.6, muzzle: 'light', muzzleS: 0.45, muzzleLow: true, cheeks: true,
+    headAng: 22, headLen: 0.32, headD: 0.27, headW: 0.34, snout: 0.5, snoutW: 0.46, snoutD: 0.5, eye: 0.05, legThk: 1.02, saddle: 0.26, countershade: 0.6, muzzle: 'light', muzzleS: 0.45, muzzleLow: true, cheeks: true,
     tail: { style: 'bushy', len: 0.55, thk: 0.07, set: -62, curl: 12, bush: 0.85 }, tailTip: 0.12, tailTipZone: 'marking', legZone: 'mane', grain: 2.4,
     palette: pal({ body: '#8b8276', belly: '#e6dfd1', marking: '#57504a', mane: '#b09673', eye: '#b9892c', nose: '#1a1817' }) },
   cat: { label: 'Domestic Cat', fam: FELID, arch: 0.09, belly: 0.18, H: 0.25, len: 1.45, depth: 0.46, width: 0.7, rump: 1.04, tuck: 0.25, neckAng: 34, neckLen: 0.3, neckThk: 0.75,
     // Digital Diorama revision: a brown mackerel tabby, eyes set into the face (they bulged from the sides)
-    headAng: 12, headLen: 0.34, headD: 0.44, headW: 0.42, snout: 0.25, eye: 0.092, eyeInset: 0.74, eyeYaw: 26, legThk: 1.05, footLen: 1.1, hockH: 0.26, neckThk: 0.85,
+    headAng: 12, headLen: 0.34, headD: 0.38, headW: 0.42, snout: 0.25, snoutW: 0.5, snoutD: 0.55, stop: 0.8, eye: 0.105, eyeInset: 0.74, legThk: 1.05, footLen: 1.1, hockH: 0.26, neckThk: 0.85,
     ear: { len: 0.36, w: 0.78 }, tail: { len: 1.1, thk: 0.034, set: 20, curl: 45, tipCurl: 20 }, pattern: 'tabby', countershade: 0.55, cheeks: true, grain: 1.6,
     palette: pal({ body: '#8f7b5e', belly: '#dccfb6', pattern: '#2e2419', marking: '#2e2419', eye: '#a9a83c', nose: '#c27c72', skin: '#d99a92' }) },
   // Digital Diorama revision (big cats): heavier forelimbs, a broader, deeper body and a broader head
   lion: { label: 'Lion', fam: FELID, foreBulk: 1.55, hindBulk: 1.15, belly: 0.25, H: 1.15, len: 1.35, depth: 0.52, width: 0.86, rump: 0.98, tuck: 0.15, neckAng: 22, neckLen: 0.3, neckThk: 0.95,
-    headAng: 18, headLen: 0.32, headD: 0.43, headW: 0.35, snout: 0.4, snoutW: 0.7, snoutD: 0.64, stop: 0.4, eye: 0.042, legThk: 1.28,
+    headAng: 18, headLen: 0.32, headD: 0.37, headW: 0.35, snout: 0.38, snoutW: 0.62, snoutD: 0.6, stop: 0.3, eye: 0.052, legThk: 1.28,
     ear: { style: 'round', len: 0.17, w: 0.95, s: 0.24, a: 0.8 }, tail: { style: 'tuft', len: 0.8, thk: 0.028, set: -60, curl: 20, tuft: 2.6 }, mane: { style: 'lion', size: 0.72 }, countershade: 0.45, cheeks: true, earTip: 0.4,
     palette: pal({ body: '#c09356', belly: '#e9d4ae', marking: '#3a2a1c', mane: '#6b4425', eye: '#b8862a', nose: '#6a3d35' }) },
   tiger: { label: 'Bengal Tiger', fam: FELID, foreBulk: 1.55, hindBulk: 1.15, belly: 0.28, H: 1.0, len: 1.55, depth: 0.55, width: 0.88, rump: 1.0, tuck: 0.12, neckAng: 22, neckLen: 0.28, neckThk: 0.98,
-    headAng: 15, headLen: 0.33, headD: 0.43, headW: 0.37, snout: 0.36, eye: 0.042, legThk: 1.32, cheek: 1.32, ear: { style: 'round', len: 0.17, w: 0.95, s: 0.24, a: 0.82 },
+    headAng: 15, headLen: 0.33, headD: 0.37, headW: 0.37, snout: 0.33, snoutD: 0.6, stop: 0.45, eye: 0.052, legThk: 1.32, cheek: 1.2, cheekLow: 1.2, ear: { style: 'round', len: 0.17, w: 0.95, s: 0.24, a: 0.82 },
     tail: { style: 'thin', len: 0.95, thk: 0.045, set: -45, curl: 25, tipCurl: 15 }, pattern: 'tiger', countershade: 0.55, cheeks: true, earZone: 'pattern',
     palette: pal({ body: '#d27a2c', belly: '#f3ead8', pattern: '#1b1310', marking: '#1b1310', eye: '#c8a034', nose: '#c07a72' }) },
   // Digital Diorama revision 8: built by its own builder (see ELEPHANT); these numbers are its scales: len, the torso from
@@ -3400,47 +3513,55 @@ const SPECIES_DEFS = {
     ear: { style: 'fan', len: 1 }, trunk: { len: 1 }, tusks: { style: 'elephant', len: 0.45, thk: 0.07 },
     tail: { style: 'tuft', len: 0.37, thk: 0.017 }, gaits: { walk: 'walk', trot: 'amble', gallop: null }, pantograph: 1,
     palette: pal({ body: '#867f77', belly: '#776f68', marking: '#6c665f', pattern: '#57524c', mane: '#22201e', skin: '#8f7d77', hoof: '#d4cbba', teeth: '#efe6cf', nose: '#4b4542', lid: '#59524c', eye: '#3c2a1e', mouth: '#a27270' }) },
-  giraffe: { label: 'Giraffe', fam: UNGULATE, hind: { kY: 0.78, kZ: 0.12, aY: 0.53, aZ: -0.07, fY: 0.12, fZ: -0.06, cY: 0.045 }, hindShape: { breech: 0.08, hams: 0, inset: 0.06 }, H: 3.0, len: 0.62, depth: 0.34, width: 0.82, rump: 0.82, rumpDepth: 0.9, tuck: 0.2, withers: 0.25,
+  giraffe: { label: 'Giraffe', fam: UNGULATE, hind: { kY: 0.78, kZ: 0.12, aY: 0.53, aZ: -0.07, fY: 0.12, fZ: -0.06, cY: 0.045 }, hindShape: { breech: 0, hams: 0, inset: 0.06, thighF: 0.12 }, thighW: 0.3, thighD: 0.3, H: 3.0, len: 0.62, depth: 0.36, width: 0.82, rump: 0.82, rumpDepth: 0.72, tuck: 0.2, withers: 0.25,
+    // (Digital Diorama revision 9: the croup slopes steeply from the high withers to slender quarters; they hung as a ball)
+    hipW: 0.88, rumpCap: 0.55, croupSlope: 0.28,
     neckAng: 62, neckLen: 0.66, neckThk: 0.5, neckW: 0.62, headAng: 60, headLen: 0.19, headD: 0.24, headW: 0.2, snout: 0.55, snoutW: 0.6, snoutD: 0.5, stop: 0.1, eye: 0.06, eyeS: 0.3, legThk: 0.55, tibiaSlope: 0.7,
     ear: { style: 'pointed', len: 0.4, w: 0.42, s: 0.12, a: 1.05, spread: 70, tilt: -5, turn: 35 }, horns: { style: 'ossicones', len: 0.45, thk: 0.07, s: 0.1, a: 0.42 },
     tail: { style: 'tuft', len: 0.3, thk: 0.012, set: -80, tuft: 2.5 }, mane: { style: 'crest', h: 0.025 }, pattern: 'giraffe', countershade: 0,
     palette: pal({ body: '#e5cf9e', belly: '#efe0bd', pattern: '#9b5a2a', mane: '#6a3b1c', hoof: '#2e2724', horn: '#5a3a1f', nose: '#4a3a32' }) },
   bear: { label: 'Brown Bear', fam: URSID, H: 1.1, len: 1.3, depth: 0.56, width: 0.95, rump: 0.97, tuck: 0.05, belly: 0.3, withers: 0.18, neckAng: 14, neckLen: 0.26,
-    headAng: 22, headLen: 0.33, headD: 0.32, headW: 0.34, snout: 0.42, snoutW: 0.5, snoutD: 0.55, legThk: 1.25, countershade: 0.1, muzzle: 'light', muzzleS: 0.7,
+    headAng: 22, headLen: 0.37, headD: 0.32, headW: 0.42, snout: 0.42, snoutW: 0.5, snoutD: 0.5, legThk: 1.25, countershade: 0.1, muzzle: 'light', muzzleS: 0.7,
+    // (Digital Diorama revision 9: a big, broad head with a high forehead over a dished face; it was small and narrow)
+    stop: 0.7, dome: 1.25, crownW: 1.05, cheekLow: 1.18, bridgeW: 0.82, eye: 0.045,
     palette: pal({ body: '#6b4a2e', belly: '#5d3f27', marking: '#3a2818', hoof: '#2a2420', nose: '#161210' }) },
   pig: { label: 'Domestic Pig', fam: UNGULATE, marks: { breast: 0.03 }, keel: 0.1, waist: 0, hind: { kY: 0.66, kZ: 0.17, aY: 0.38, aZ: -0.06, fY: 0.13, fZ: -0.035, cY: 0.05 }, H: 0.8, len: 1.4, depth: 0.62, width: 0.92, rump: 1.02, hipW: 1.08, tuck: 0, belly: 0.4, neckAng: 8, neckLen: 0.06, neckThk: 0.92, neckW: 0.95,
-    headAng: 28, headLen: 0.42, headD: 0.27, headW: 0.3, snout: 0.55, snoutW: 0.48, snoutD: 0.48, stop: 0.12, dome: 0.9, jowl: 1.5, eye: 0.03, nose: 'disc', muzzleN: 2.6, eyeYaw: 50,
-    ear: { style: 'semiPrick', len: 0.4, w: 0.7, s: 0.2, a: 0.75, spread: 30, tilt: 18, turn: 10, breakU: 0.5 }, tail: { style: 'curly', len: 0.3, thk: 0.018, turns: 1.6 },
+    headAng: 28, headLen: 0.38, headD: 0.31, headW: 0.38, snout: 0.48, snoutW: 0.4, snoutD: 0.5, stop: 0.12, dome: 0.9, jowl: 1.7, eye: 0.035, nose: 'disc', muzzleN: 2.6, eyeYaw: 50,
+    // (Digital Diorama revision 9: fat jowls running into the neck, a straight cylindrical snout; the head was a narrow cone)
+    cheekLow: 1.3, crownW: 1.05, throat: 0,
+    legThk: 1.25, ear: { style: 'semiPrick', len: 0.42, w: 0.58, s: 0.2, a: 0.75, spread: 30, tilt: 8, turn: 10, cup: 0.18, breakU: 0.62 }, tail: { style: 'curly', len: 0.3, thk: 0.018, turns: 1.6 },
     countershade: 0, palette: pal({ body: '#eab3a4', belly: '#ebb8aa', skin: '#e39a8c', nose: '#d98b80', mouth: '#9c4c4a', hoof: '#a08070' }) },
   // Digital Diorama revision: a compact body under a larger head (the body dwarfed it)
   rabbit: { label: 'Rabbit', fam: RODENT, H: 0.2, len: 1.22, depth: 0.7, width: 0.78, rump: 1.2, rumpDepth: 1.15, hipW: 1.1, tuck: 0.05, neckAng: 35, neckLen: 0.18, neckThk: 0.9,
-    headAng: 18, headLen: 0.53, headD: 0.36, headW: 0.38, snout: 0.32, snoutW: 0.6, snoutD: 0.6, eye: 0.1, eyeYaw: 75, legThk: 1.1, crouch: 0.9, hockH: 0.08, footLen: 2.6, incisors: 0.07,
+    headAng: 18, headLen: 0.53, headD: 0.36, headW: 0.38, snout: 0.32, snoutW: 0.62, snoutD: 0.7, noseCap: 0.35, muzzleN: 2.4, cheekLow: 1.15, padW: 0.8, eye: 0.1, eyeYaw: 75, legThk: 1.1, crouch: 0.9, hockH: 0.08, footLen: 2.6, incisors: 0.07,
     ear: { style: 'long', len: 0.95, w: 0.32, s: 0.18, a: 0.5, spread: 14, tilt: 22, turn: 18, cup: 0.6 }, tail: { style: 'fluffy', len: 0.22, thk: 0.07, set: 40 },
     countershade: 0.5, tailTip: 1, tailTipZone: 'belly', palette: pal({ body: '#9a8068', belly: '#eee4d6', skin: '#dba59a', nose: '#c98b84', eye: '#2a1b12' }) },
   // Digital Diorama revision: a stocky retriever (it read as a whippet): deep, broad chest, thick legs and neck,
   // broad skull and muzzle, thick "otter" tail; pale yellow coat
   dog: { label: 'Labrador Dog', fam: CANID, H: 0.58, len: 1.18, depth: 0.54, width: 0.92, rump: 0.98, tuck: 0.18, neckAng: 36, neckLen: 0.3, neckThk: 0.98,
-    headAng: 15, headLen: 0.4, headD: 0.36, headW: 0.4, snout: 0.42, snoutW: 0.74, snoutD: 0.8, muzzleN: 2.7, noseCap: 0.32, stop: 0.95, brow: 0.1, dome: 1.06, eye: 0.045, jowl: 1.3, legThk: 1.18, padW: 0.78, padH: 0.85,
-    ear: { style: 'floppy', len: 0.44, w: 0.56, s: 0.2, a: 1.0, spread: 40, droop: 0.97, hang: 58, cup: 0.08, innerW: 0 }, tail: { style: 'thin', len: 0.6, thk: 0.07, set: -10, curl: -10 },
+    headAng: 15, headLen: 0.4, headD: 0.32, headW: 0.4, snout: 0.46, snoutW: 0.6, snoutD: 0.72, muzzleN: 2.4, noseCap: 0.32, stop: 0.95, brow: 0.06, dome: 0.92, eye: 0.045, jowl: 1.15, legThk: 1.18, padW: 0.7, padH: 0.7,
+    // (Digital Diorama revision 9: a broad, flat-topped skull and a long, deep muzzle with hanging flews; it was a ball)
+    crownW: 1.05, browW: 1.04, bridgeW: 0.9, lipW: 1.08, lipDepth: 0.38, lipInset: 0.04,
+    ear: { style: 'floppy', len: 0.44, w: 0.56, s: 0.22, a: 1.05, spread: 10, droop: 0.97, hang: 70, cup: 0.08, innerW: 0 }, tail: { style: 'thin', len: 0.6, thk: 0.07, set: -10, curl: -10 },
     countershade: 0.15, palette: pal({ body: '#e2c38c', belly: '#ecd4a8', nose: '#2a1d18', eye: '#5a3a1c' }) },
-  fox: { label: 'Red Fox', fam: CANID, hindBulk: 0.92, hindShape: { thighF: 0.12, breech: 0.06, hams: 0.01, kneeW: 0.05, patella: 0.035 }, arch: 0.04, H: 0.4, len: 1.4, depth: 0.42, width: 0.7, rump: 1.0, tuck: 0.4, neckAng: 32, neckLen: 0.3, neckThk: 0.72,
-    headAng: 18, headLen: 0.36, headD: 0.24, headW: 0.3, snout: 0.55, snoutW: 0.36, snoutD: 0.42, eye: 0.05, legThk: 0.8, pupil: 'slit', slitW: 0.3,
+  fox: { label: 'Red Fox', fam: CANID, hindBulk: 0.92, hindShape: { thighF: 0.12, breech: 0.06, hams: 0.01, kneeW: 0.05, patella: 0.035 }, arch: 0.04, H: 0.4, len: 1.4, depth: 0.46, width: 0.72, rump: 1.0, tuck: 0.4, neckAng: 32, neckLen: 0.3, neckThk: 0.72,
+    headAng: 18, headLen: 0.36, headD: 0.26, headW: 0.31, snout: 0.53, snoutW: 0.38, snoutD: 0.44, eye: 0.055, dome: 1.2, legThk: 0.8, pupil: 'slit', slitW: 0.3,
     ear: { len: 0.45, w: 0.58 }, tail: { style: 'bushy', len: 0.95, thk: 0.1, set: -35, curl: 10, bush: 1.0 }, points: 0.55, tailTip: 0.14, tailTipZone: 'belly', earTip: 0.0, earZone: 'marking', countershade: 0.6, cheeks: true, grain: 1.5, neckThk: 0.85,
     palette: pal({ body: '#c4561e', belly: '#efe6da', marking: '#231a16', eye: '#c08c2a', nose: '#181412' }) },
   hyena: { label: 'Spotted Hyena', fam: CANID, foreBulk: 1.3, hindBulk: 1.05, waist: 0.1, hind: { aY: 0.33 }, H: 0.85, len: 1.1, depth: 0.5, width: 0.72, rump: 0.8, rumpDepth: 0.85, withers: 0.15, neckAng: 25, neckLen: 0.34, neckThk: 0.9,
-    headAng: 20, headLen: 0.36, headD: 0.32, headW: 0.34, snout: 0.4, snoutW: 0.55, snoutD: 0.6, eye: 0.04,
-    ear: { style: 'round', len: 0.27, w: 0.85 }, tail: { style: 'bushy', len: 0.38, thk: 0.035, set: -70, bush: 0.6 }, mane: { style: 'crest', h: 0.05 }, pattern: 'hyena', countershade: 0.2, muzzle: 'dark', muzzleS: 0.6,
+    headAng: 20, headLen: 0.36, headD: 0.32, headW: 0.38, snout: 0.42, snoutW: 0.52, snoutD: 0.66, eye: 0.04, dome: 1.25, stop: 0.45, cheekLow: 1.18, noseCap: 0.3, padW: 0.8, padH: 0.8,
+    ear: { style: 'round', len: 0.27, w: 0.85 }, tail: { style: 'bushy', len: 0.38, thk: 0.035, set: -70, bush: 0.6 }, mane: { style: 'crest', h: 0.05 }, pattern: 'hyena', countershade: 0.2, muzzle: 'dark', muzzleS: 0.4,
     palette: pal({ body: '#b49a6c', belly: '#c8b38a', pattern: '#3a2b1e', marking: '#2d241b', mane: '#3a2b1e', nose: '#151110' }) },
   cheetah: { label: 'Cheetah', fam: FELID, arch: 0.12, marks: { hooks: 0.04, fossa: 0.03, ribs: 0.04, girth: 0.05, breast: 0.05, scapula: 0.06, spine: 0.015 }, foreBulk: 1.15, hindBulk: 1.0, waist: 0.22, keel: 0.5, hind: { kY: 0.68, kZ: 0.18, aY: 0.34, aZ: -0.11, fY: 0.07, fZ: -0.09, toe: 0.12 }, H: 0.8, len: 1.25, depth: 0.44, width: 0.62, rump: 0.98, tuck: 0.65, chestW: 0.95, neckAng: 25, neckLen: 0.3, neckThk: 0.72,
-    headAng: 12, headLen: 0.24, headD: 0.42, headW: 0.37, snout: 0.3, eye: 0.06, legThk: 0.84, claws: 0.4, ear: { style: 'round', len: 0.2, w: 0.95, s: 0.26, a: 0.85 },
+    headAng: 12, headLen: 0.24, headD: 0.38, headW: 0.37, snout: 0.27, snoutW: 0.52, snoutD: 0.58, stop: 0.7, eye: 0.072, legThk: 0.84, claws: 0.4, ear: { style: 'round', len: 0.2, w: 0.95, s: 0.26, a: 0.85 },
     tail: { style: 'thin', len: 0.85, thk: 0.032, set: -55, curl: 30, tipCurl: 25 }, pattern: 'spots', tearMark: true, countershade: 0.55, cheeks: true,
     palette: pal({ body: '#d9a856', belly: '#f2e6cc', pattern: '#1d1712', marking: '#1d1712', eye: '#b8862a', nose: '#2a1f1a' }) },
   leopard: { label: 'Leopard', fam: FELID, foreBulk: 1.5, hindBulk: 1.12, belly: 0.2, H: 0.65, len: 1.5, depth: 0.5, width: 0.8, rump: 1.0, tuck: 0.18, neckAng: 24, neckLen: 0.3, neckThk: 0.92,
-    headAng: 14, headLen: 0.32, headD: 0.43, headW: 0.37, snout: 0.33, eye: 0.045, legThk: 1.18, ear: { style: 'round', len: 0.2, w: 0.95, s: 0.24, a: 0.8 },
+    headAng: 14, headLen: 0.32, headD: 0.37, headW: 0.37, snout: 0.3, snoutW: 0.55, snoutD: 0.6, stop: 0.6, eye: 0.058, legThk: 1.18, ear: { style: 'round', len: 0.2, w: 0.95, s: 0.24, a: 0.8 },
     tail: { style: 'thin', len: 1.2, thk: 0.035, set: -40, curl: 30, tipCurl: 20 }, pattern: 'rosettes', countershade: 0.55, cheeks: true,
     palette: pal({ body: '#d6a54e', belly: '#f2e5c8', pattern: '#1f1611', marking: '#a86a26', eye: '#b8a03a', nose: '#b07a6a' }) },
   lynx: { label: 'Eurasian Lynx', fam: FELID, H: 0.62, len: 1.12, depth: 0.48, width: 0.72, rump: 1.06, tuck: 0.3, neckAng: 28, neckLen: 0.28, neckThk: 0.82,
-    headAng: 14, headLen: 0.3, headD: 0.43, headW: 0.38, snout: 0.28, cheek: 1.45, eye: 0.055, legThk: 1.05, footLen: 1.15, pawW: 1.25,
+    headAng: 14, headLen: 0.3, headD: 0.38, headW: 0.38, snout: 0.26, snoutW: 0.52, snoutD: 0.58, stop: 0.65, cheek: 1.45, eye: 0.068, legThk: 1.05, footLen: 1.15, pawW: 1.25,
     ear: { style: 'tufted', len: 0.34, w: 0.7, s: 0.26, a: 0.66, spread: 20 }, tail: { style: 'thin', len: 0.18, thk: 0.04, set: -30 }, tailTip: 0.35, earTip: 0.25,
     pattern: 'spots', patternScale: 0.95, spotSize: 0.24, countershade: 0.6, cheeks: true, grain: 1.5,
     palette: pal({ body: '#b8936a', belly: '#efe4d2', pattern: '#6e5038', marking: '#1d1714', eye: '#b8a03a', nose: '#b07a6a' }) },
@@ -3450,7 +3571,7 @@ const SPECIES_DEFS = {
     headAng: 14, headLen: 0.32, headD: 0.32, headW: 0.3, snout: 0.48, snoutW: 0.58, snoutD: 0.52, stop: 0.15, roman: 0.3, jaw: 0.35, dome: 0.95, legThk: 1.55, pawW: 1.25, countershade: 0,
     ear: { len: 0.15 }, palette: pal({ body: '#ece6d6', belly: '#e6dfcd', marking: '#d6ceb8', nose: '#121010', hoof: '#2a2420', skin: '#2a2420' }) },
   panda: { label: 'Giant Panda', fam: URSID, H: 0.75, len: 1.3, depth: 0.6, width: 1.0, rump: 1.0, tuck: 0.05, belly: 0.3, neckAng: 18, neckLen: 0.22, neckThk: 0.9,
-    headAng: 16, headLen: 0.38, headD: 0.36, headW: 0.46, snout: 0.32, snoutW: 0.5, snoutD: 0.5, stop: 0.5, dome: 1.15, cheek: 1.35, legThk: 1.3,
+    headAng: 16, headLen: 0.38, headD: 0.36, headW: 0.46, snout: 0.27, snoutW: 0.5, snoutD: 0.55, stop: 0.5, dome: 1.15, cheek: 1.35, cheekLow: 1.15, lipInset: 0.12, legThk: 1.3,
     ear: { style: 'round', len: 0.22, w: 1.0, s: 0.2, a: 0.82 }, pattern: 'panda', countershade: 0,
     palette: pal({ body: '#f1ede4', belly: '#f1ede4', pattern: '#1b1a1a', marking: '#1b1a1a', nose: '#121010', skin: '#1b1a1a' }) },
   // Digital Diorama revision: a hunched, stocky body (it was long and stretched) and a grizzled coat
@@ -3459,7 +3580,7 @@ const SPECIES_DEFS = {
     ear: { style: 'round', len: 0.26, w: 0.85, s: 0.22, a: 0.68, spread: 20 }, tail: { style: 'bushy', len: 0.85, thk: 0.085, set: -30, bush: 0.5 }, pattern: 'raccoon', countershade: 0.3, earTip: 0.0, earZone: 'belly',
     palette: pal({ body: '#8a847b', belly: '#cfc8bb', pattern: '#1e1c1a', marking: '#2b2825', nose: '#121010' }) },
   badger: { label: 'European Badger', fam: URSID, hind: { kY: 0.44, kZ: 0.12, foot: 0.42 }, H: 0.28, len: 2.1, depth: 0.7, width: 1.25, grain: 1.8, rump: 1.0, tuck: 0, belly: 0.2, neckAng: 10, neckLen: 0.3, neckThk: 0.85,
-    headAng: 18, headLen: 0.55, headD: 0.24, headW: 0.32, snout: 0.5, snoutW: 0.4, snoutD: 0.45, stop: 0.05, dome: 0.9, eye: 0.03, legThk: 1.4, claws: 1.4,
+    headAng: 18, headLen: 0.5, headD: 0.28, headW: 0.32, snout: 0.45, snoutW: 0.46, snoutD: 0.5, stop: 0.05, dome: 1.05, cheekLow: 1.1, eye: 0.03, legThk: 1.4, claws: 1.4,
     ear: { style: 'round', len: 0.14, w: 1.0, s: 0.22, a: 0.95 }, tail: { style: 'bushy', len: 0.45, thk: 0.06, set: -20, bush: 0.4 }, pattern: 'badger', countershade: 0,
     palette: pal({ body: '#8f8a84', belly: '#ece8df', pattern: '#1a1918', marking: '#1a1918', nose: '#121010' }) },
   otter: { label: 'River Otter', fam: { stance: 'plantigrade', nose: 'pad', whiskerPads: true, claws: 0.3 }, hind: { kY: 0.46, foot: 0.46 }, H: 0.3, len: 2.4, depth: 0.58, width: 0.92, rump: 1.02, tuck: 0.05, neckAng: 18, neckLen: 0.42, neckThk: 0.92,
@@ -3471,7 +3592,7 @@ const SPECIES_DEFS = {
   // Digital Diorama revision: a round body under a dense coat of short spines laid back (painted between the
   // modelled quills), rather than sparse long spikes on a long body
   hedgehog: { label: 'Hedgehog', fam: { stance: 'plantigrade', nose: 'pad', claws: 0.5 }, hind: { kY: 0.42, kZ: 0.1, foot: 0.46 }, H: 0.115, len: 1.35, depth: 0.86, width: 1.2, rump: 1.0, tuck: 0, neckAng: 15, neckLen: 0.12, neckThk: 0.95,
-    headAng: 25, headLen: 0.5, headD: 0.3, headW: 0.36, snout: 0.5, snoutW: 0.3, snoutD: 0.32, stop: 0.1, eye: 0.06, legThk: 1.4, quills: { len: 0.2, count: 560, lay: 1.35 }, spinyBack: true,
+    headAng: 25, headLen: 0.45, headD: 0.32, headW: 0.38, snout: 0.42, snoutW: 0.32, snoutD: 0.36, stop: 0.15, eye: 0.065, legThk: 1.4, quills: { len: 0.2, count: 560, lay: 1.35 }, spinyBack: true,
     ear: { style: 'round', len: 0.2, w: 1.0, s: 0.25, a: 0.95 }, tail: { style: 'thin', len: 0.12, thk: 0.06, set: -30 }, countershade: 0.6,
     palette: pal({ body: '#7d6a55', belly: '#cbb59a', marking: '#c9b996', pattern: '#4f3e2d', nose: '#121010', skin: '#d4a090' }) },
   // Digital Diorama revision: a compact, crouched body low on short legs (it stood on stilts like a cat) and a
@@ -3486,7 +3607,7 @@ const SPECIES_DEFS = {
     ear: { style: 'round', len: 0.12, w: 1.0, s: 0.22, a: 0.95 }, tail: { style: 'flat', len: 0.95, thk: 0.15, set: -12, flat: 3.4 }, countershade: 0.2,
     palette: pal({ body: '#6a4426', belly: '#7a5232', marking: '#2c2420', web: '#2c2420', nose: '#151110', teeth: '#d8862a' }) },
   capybara: { label: 'Capybara', fam: { ...RODENT, crouch: 0.2, hockH: 0.2, footLen: 1.4, eye: 0.04 }, hind: { kY: 0.62, kZ: 0.2, aY: 0.24, aZ: -0.14, fY: 0.05, toe: 0.22 }, H: 0.52, len: 1.6, depth: 0.6, width: 0.85, rump: 1.06, tuck: 0.05, neckAng: 20, neckLen: 0.2, neckThk: 0.9,
-    headAng: 30, headLen: 0.48, headD: 0.36, headW: 0.33, snout: 0.5, snoutW: 0.82, snoutD: 0.82, stop: 0.0, dome: 0.92, eyeEl: 30, nose: 'muzzle', nostril: 0.18,
+    headAng: 30, headLen: 0.48, headD: 0.36, headW: 0.33, snout: 0.5, snoutW: 0.82, snoutD: 0.82, stop: 0.0, dome: 0.92, eyeEl: 30, nose: 'muzzle', nostril: 0.18, legThk: 1.3,
     ear: { style: 'round', len: 0.12, w: 1.0, s: 0.12, a: 0.75 }, tail: { style: 'none', len: 0 }, countershade: 0.1,
     palette: pal({ body: '#8a6440', belly: '#9a744e', nose: '#2a1d16', skin: '#5a4030' }) },
   sheep: { label: 'Sheep', fam: UNGULATE, hind: { kY: 0.72, aY: 0.46, aZ: -0.08, fY: 0.15, fZ: -0.065, cY: 0.055 }, H: 0.8, len: 1.15, depth: 0.62, width: 1.0, rump: 1.0, tuck: 0, belly: 0.2, neckAng: 32, neckLen: 0.26, neckThk: 0.85,
@@ -3509,9 +3630,11 @@ const SPECIES_DEFS = {
     // Digital Diorama revision 7: a broad, rounded hump over the shoulders, falling steeply to the low-carried head and
     // sloping gradually back to the loin (it rose as a tall narrow tent)
     withersFront: 0.15, withersBack: 0.36, humpTop: 1.0, humpN: 2.5, chestNarrow: 0.82, legThk: 1.3, shag: 0.07, maneSlant: 0.9, maneRag: 0.08, maneLegs: 0.4,
-    neckAng: -5, neckLen: 0.2, neckThk: 0.95, neckW: 0.95, neckLow: 0.15, headAng: 78, headLen: 0.3, headD: 0.36, headW: 0.33, snout: 0.38, snoutW: 0.75, snoutD: 0.7, stop: 0.1, dome: 1.2, eye: 0.035,
+    neckAng: -5, neckLen: 0.2, neckThk: 0.95, neckW: 0.95, neckLow: 0.15, headAng: 78, headLen: 0.36, headD: 0.36, headW: 0.38, snout: 0.38, snoutW: 0.75, snoutD: 0.7, stop: 0.1, dome: 1.3, eye: 0.035,
+    // (Digital Diorama revision 9: a massive head, its broad forehead matted with hair, and a short shaggy beard)
+    crownW: 1.15, browW: 1.15, throat: 0.1,
     ear: { style: 'pointed', len: 0.2, w: 0.5, s: 0.16, a: 1.25, spread: 85, tilt: -10, turn: 40 }, horns: { style: 'cattle', len: 0.22, thk: 0.07, s: 0.1, a: 1.15 },
-    tail: { style: 'tuft', len: 0.3, thk: 0.02, set: -70, tuft: 2.5 }, mane: { style: 'none', beard: 0.6 }, frontMane: 0.35, countershade: 0,
+    tail: { style: 'tuft', len: 0.3, thk: 0.02, set: -70, tuft: 2.5 }, mane: { style: 'none', beard: 0.42, beardW: 0.4 }, frontMane: 0.35, countershade: 0,
     palette: pal({ body: '#5a3d26', belly: '#4f3420', mane: '#2e1f14', horn: '#1e1a17', nose: '#151210' }) },
   gazelle: { label: "Thomson's Gazelle", fam: UNGULATE, marks: { hooks: 0.06, fossa: 0.06, ribs: 0.03, girth: 0.04, breast: 0.05, withers: 0.03 }, hind: { kY: 0.73, kZ: 0.15, aY: 0.5, aZ: -0.12, fY: 0.13, fZ: -0.1, cY: 0.05, wall: 48 }, H: 0.65, len: 1.0, depth: 0.42, width: 0.74, rump: 1.03, tuck: 0.4, neckAng: 52, neckLen: 0.42, neckThk: 0.52,
     headAng: 50, headLen: 0.32, headD: 0.26, headW: 0.24, snout: 0.5, snoutW: 0.5, snoutD: 0.48, stop: 0.15, eye: 0.07, legThk: 0.6,
@@ -3528,7 +3651,9 @@ const SPECIES_DEFS = {
     ear: { style: 'pointed', len: 0.3, w: 0.5, s: 0.12, a: 0.95, spread: 55 }, horns: { style: 'antlers', len: 1.3, thk: 0.05, s: 0.1, a: 0.42, tines: 5 },
     tail: { style: 'flat', len: 0.12, thk: 0.035, set: -40 }, frontMane: 0.7, maneTop: 0.25, maneHead: false, rumpPatch: true, countershade: 0.3, muzzle: 'dark', muzzleS: 0.6, grain: 1.6,
     palette: pal({ body: '#7a6a58', belly: '#e4dccb', mane: '#ece4d4', marking: '#3d3127', horn: '#d0bc96', nose: '#2b2320' }) },
-  camel: { label: 'Dromedary Camel', fam: { ...UNGULATE, foot: 'pad', nose: 'muzzle', pupil: 'round' }, marks: { hooks: 0.06, fossa: 0.04, girth: 0.03, breast: 0.08 }, hind: { kY: 0.62, kZ: 0.2, aY: 0.5, aZ: -0.07, fY: 0.13, fZ: -0.065, cY: 0.05 }, hindShape: { thighF: 0.08, breech: 0.13, hams: 0, kneeW: 0.05, gaskW: 0.045 }, thighW: 0.3, thighD: 0.3, H: 1.85, len: 0.82, depth: 0.42, width: 0.78, rump: 0.92, tuck: 0.22, humps: [{ u: 0.55, h: 0.2, w: 0.42 }],
+  camel: { label: 'Dromedary Camel', fam: { ...UNGULATE, foot: 'pad', nose: 'muzzle', pupil: 'round' }, marks: { hooks: 0.06, fossa: 0.04, girth: 0.03, breast: 0.08 }, hind: { kY: 0.62, kZ: 0.2, aY: 0.5, aZ: -0.07, fY: 0.13, fZ: -0.065, cY: 0.05 }, hindShape: { thighF: 0.07, breech: 0.03, hams: 0, kneeW: 0.05, gaskW: 0.045 }, thighW: 0.24, thighD: 0.24, H: 1.85, len: 0.82, depth: 0.42, width: 0.78, rump: 0.92, tuck: 0.35,
+    // (Digital Diorama revision 9: lean, narrow quarters under a croup that falls away behind the hump; they were a deep round mass)
+    rumpDepth: 0.7, hipW: 0.85, rumpCap: 0.55, croupSlope: 0.3, humps: [{ u: 0.55, h: 0.2, w: 0.42 }],
     // Digital Diorama revision 7: a long, slender head (it read as a donkey's): domed forehead, heavy brows over large eyes,
     // slit nostrils, and a thick split upper lip hanging over the lower one
     neckAng: 15, neckLen: 0.55, neckThk: 0.48, neckW: 0.6, neckArch: -0.12, headAng: 22, headLen: 0.33, headD: 0.24, headW: 0.2, snout: 0.56, snoutW: 0.52, snoutD: 0.66, muzzleN: 2.3, noseCap: 0.5, stop: 0.18, dome: 1.14, brow: 0.15, eye: 0.055, jaw: 0.6, chin: 0.2, jawEnd: 0.86, lipOver: 0.32, cleft: 0.12, nostrilSlit: 28, nostril: 0.26, nostrilA: 0.5, legThk: 0.72, tibiaSlope: 0.7,
@@ -3544,14 +3669,14 @@ const SPECIES_DEFS = {
     tail: { style: 'tuft', len: 0.3, thk: 0.03, set: -80, tuft: 1.6 }, countershade: 0,
     palette: pal({ body: '#8a847c', belly: '#827c74', horn: '#6a6058', hoof: '#57514b', skin: '#7a6e68', nose: '#4a4440' }) },
   hippo: { label: 'Hippopotamus', fam: { stance: 'graviportal', nose: 'muzzle', pupil: 'round', nails: 4 }, marks: { breast: 0.03 }, keel: 0.05, waist: 0, hind: { kY: 0.5, kZ: 0.12, aY: 0.22, aZ: -0.04 }, H: 1.5, len: 1.55, depth: 0.72, width: 1.05, rump: 1.0, tuck: 0, belly: 0.3,
-    neckAng: 5, neckLen: 0.12, neckThk: 0.95, neckW: 0.95, headAng: 22, headLen: 0.5, headD: 0.42, headW: 0.36, snout: 0.52, snoutW: 1.25, snoutD: 1.0, muzzleN: 3.2, noseCap: 0.3, stop: 0.45, dome: 0.85, jaw: 0.85, jawW: 0.92, mouthS: 0.5, eye: 0.045, eyeYaw: 40, eyeEl: 58, turret: true, legThk: 1.4, nostrilA: 1.1,
+    neckAng: 5, neckLen: 0.12, neckThk: 1.0, neckW: 0.95, headAng: 22, headLen: 0.6, headD: 0.42, headW: 0.4, snout: 0.52, snoutW: 1.25, snoutD: 1.0, muzzleN: 3.2, noseCap: 0.3, stop: 0.45, dome: 0.85, jaw: 0.85, jawW: 0.92, mouthS: 0.5, eye: 0.045, eyeYaw: 40, eyeEl: 58, turret: true, legThk: 1.4, nostrilA: 1.1,
     ear: { style: 'round', len: 0.1, w: 1.0, s: 0.1, a: 0.6 }, tail: { style: 'flat', len: 0.18, thk: 0.04, set: -70, flat: 2 }, countershade: 0.3,
     palette: pal({ body: '#6e605e', belly: '#c49088', skin: '#c49088', nose: '#4a3e3c', mouth: '#c47a78' }) },
-  boar: { label: 'Wild Boar', fam: UNGULATE, marks: { breast: 0.04 }, keel: 0.15, waist: 0, hind: { kY: 0.66, kZ: 0.17, aY: 0.4, aZ: -0.06, fY: 0.13, fZ: -0.035, cY: 0.05 }, H: 0.85, len: 1.25, depth: 0.58, width: 0.75, rump: 0.86, rumpDepth: 0.9, tuck: 0.1, withers: 0.24, chestW: 1.08,
+  boar: { label: 'Wild Boar', fam: UNGULATE, marks: { breast: 0.04 }, keel: 0.15, waist: 0, hind: { kY: 0.66, kZ: 0.17, aY: 0.4, aZ: -0.06, fY: 0.13, fZ: -0.035, cY: 0.05 }, H: 0.85, len: 1.25, depth: 0.64, width: 0.75, rump: 0.86, rumpDepth: 0.9, tuck: 0.1, withers: 0.24, chestW: 1.08,
     // Digital Diorama revision 7: high, rounded shoulders under the bristle crest (the withers rose to a sharp peak)
     withersFront: 0.32, withersBack: 0.4, humpTop: 0.92, humpN: 2.4, neckAng: 5, neckLen: 0.08, neckThk: 0.95, neckW: 0.95,
     // a deep wedge of a head (it was a thin tube), slender legs a little stouter
-    headAng: 35, headLen: 0.48, headD: 0.32, headW: 0.3, snout: 0.6, snoutW: 0.4, snoutD: 0.4, stop: 0.0, dome: 0.85, jowl: 1.3, eye: 0.025, nose: 'disc', muzzleN: 2.6, legThk: 1.12,
+    headAng: 35, headLen: 0.52, headD: 0.32, headW: 0.3, snout: 0.6, snoutW: 0.4, snoutD: 0.4, stop: 0.0, dome: 0.85, jowl: 1.3, eye: 0.025, nose: 'disc', muzzleN: 2.6, legThk: 1.3,
     ear: { style: 'pointed', len: 0.28, w: 0.55, s: 0.14, a: 0.75, spread: 35, tilt: 10 }, tusks: { style: 'boar', len: 0.08, thk: 0.15, s: 0.85, a: 0.95 },
     tail: { style: 'tuft', len: 0.3, thk: 0.012, set: -70, tuft: 2.2 }, mane: { style: 'crest', h: 0.06, back: 0.55 }, countershade: 0,
     palette: pal({ body: '#4a3a2e', belly: '#3e3026', mane: '#241c16', nose: '#3a2e28', hoof: '#1d1814' }) },
@@ -3560,7 +3685,7 @@ const SPECIES_DEFS = {
     ear: { style: 'round', len: 0.1, w: 1.0, s: 0.12, a: 0.9 }, tail: { style: 'hair', len: 0.75, thk: 0.07, set: -10, hair: 1.15, hairW: 5, hairBack: 0.9 }, pattern: 'anteater', countershade: 0, grain: 2,
     palette: pal({ body: '#5e4e3e', belly: '#d9cfbd', pattern: '#121010', mane: '#4a3c30', nose: '#121010' }) },
   // Digital Diorama revision: a low, rounded body on short legs (it stood on stilts)
-  mouse: { label: 'House Mouse', fam: RODENT, hind: { kZ: 0.3, aZ: -0.15, foot: 0.66 }, H: 0.03, len: 2.4, depth: 0.82, width: 0.85, rump: 1.25, rumpDepth: 1.1, tuck: 0.1, neckAng: 30, neckLen: 0.16, neckThk: 0.9, legThk: 1.15,
+  mouse: { label: 'House Mouse', fam: RODENT, hind: { kZ: 0.3, aZ: -0.15, foot: 0.66 }, H: 0.03, len: 2.1, depth: 0.86, width: 0.85, rump: 1.25, rumpDepth: 1.1, tuck: 0.1, neckAng: 30, neckLen: 0.16, neckThk: 0.9, legThk: 1.15,
     headAng: 20, headLen: 0.55, headD: 0.32, headW: 0.38, snout: 0.45, snoutW: 0.35, snoutD: 0.38, stop: 0.15, eye: 0.09,
     ear: { style: 'round', len: 0.48, w: 0.95, s: 0.22, a: 0.6, spread: 30, tilt: 8, cup: 0.35 }, tail: { style: 'thin', len: 2.0, thk: 0.012, set: -10, curl: 18 },
     countershade: 0.4, palette: pal({ body: '#8d8478', belly: '#c9c0b2', skin: '#e2a8a0', nose: '#e2a8a0', eye: '#0c0a09' }) },
@@ -4478,7 +4603,7 @@ export function createAsset(input = {}) {
   if (info.elephant) eleMotionSetup(info);
   const pose = p.pose !== 'stand' ? sampleFor(info, p.pose, p.posePhase) : null;
   const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, grain: p.coatGrain * (S.grain ?? 1), grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat', crease: S.crease || null };
-  const { root, skeleton } = finish(build, { name: `mammal-${p.species}`, merge: p.mergeForProduction, skinned: p.rigMode === 'skinned', zones, pose, coat: coatOn || coat.smooth ? coat : null, seamRadius: 0.05 * S.H, seams: L.elephant ? [['head', 'trunk']] : [] });
+  const { root, skeleton } = finish(build, { name: `mammal-${p.species}`, merge: p.mergeForProduction, skinned: p.rigMode === 'skinned', zones, pose, coat: coatOn || coat.smooth ? coat : null, seamRadius: 0.05 * S.H, seams: L.elephant ? [['head', 'trunk']] : [['head', 'body']] });
   let tris = 0; root.traverse(m => { if (m.isMesh) tris += m.geometry.attributes.position.count / 3; });
   root.userData = {
     species: p.species, label: S.label, params: p, dimensions: measure(root), triangles: tris, zones: Object.fromEntries(Object.entries(zones).map(([k, v]) => [k, hexStr(v)])),

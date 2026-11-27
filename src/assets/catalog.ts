@@ -16,7 +16,7 @@ const add = (d: AssetDef) => { defs.push({ living: d.category === 'animals' || d
 /** per-species tweaks to the rig presets (from the asset review) */
 const MAMMAL_EXTRA: Record<string, Record<string, unknown>> = {
   // the rig's goat is a domestic goat; the Rocky Mountain goat has short black dagger horns, a beard and a shaggy white coat
-  goat: { size: 1.25, specOverride: { wool: 0.035, horns: { style: 'antelope', len: 0.42, thk: 0.065, s: 0.1, a: 0.3 }, palette: { body: '#f1eee6', belly: '#f4f1ea', mane: '#ece7dc', horn: '#161514', hoof: '#1d1b19', nose: '#1f1c1a', eye: '#2a2118' } } },
+  goat: { size: 1.25, specOverride: { wool: 0.045, mane: { style: 'none', beard: 0.6 }, withers: 0.16, throat: 0.2, headD: 0.27, snoutW: 0.5, legThk: 1.0, horns: { style: 'dagger', len: 0.6, thk: 0.06, s: 0.12, a: 0.32 }, palette: { body: '#f1eee6', belly: '#f4f1ea', mane: '#ece7dc', horn: '#161514', hoof: '#1d1b19', nose: '#1f1c1a', eye: '#2a2118' } } },
 };
 const MAMMAL_SPEED: Record<string, number> = { cheetah: 2.4, horse: 2, zebra: 1.8, gazelle: 2.2, deer: 1.6, wolf: 1.8, lion: 1.4, mouse: 0.6, hedgehog: 0.4, rabbit: 1.0, squirrel: 0.9, elephant: 1.2, giraffe: 1.4, hippo: 0.9, polarBear: 1.2 };
 for (const m of MAMMALS) {
