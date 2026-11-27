@@ -170,24 +170,49 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         const fam = at && /\bfam:\s*(\w+)/.exec(text.slice(at[0], at[1]))?.[1];
         return fam && FAMILY_CONSTS.includes(fam) ? declaration(fam)(text) : null;
       };
-      add(def.path, 'mammal-rig.mjs', [
-        region(`Species preset · ${species}`, preset),
-        region('Family defaults', family),
-        region('Defaults (DEF)', declaration('DEF')),
+      // (Digital Diorama revision 8: the elephant has its own builder and clips; every mammal shares the limb-root blend,
+      // the feet's line keeping, the girdle-drop smoothing and the gait tables)
+      const body = species === 'elephant' ? [
+        region('Elephant builder', declaration('elephantBuild')),
+        region('Elephant layout', declaration('eleLayout')),
+        region('Elephant torso', declaration('eleTorso')),
+        region('Elephant legs', declaration('eleLeg')),
+        region('Elephant leg joints', declaration('eleLimbLayout')),
+        region('Elephant head & trunk', declaration('eleHead')),
+        region('Elephant ears', declaration('eleEars')),
+        region('Elephant tusks', declaration('eleTusks')),
+        region('Elephant tail', declaration('eleTail')),
+        region('Elephant skin painter', declaration('elePainter')),
+        region('Skin creases (tile)', declaration('creaseTile')),
+        region('Elephant clips', declaration('eleSample')),
+        region('Lying down', declaration('eleLieDown')),
+        region('Elephant clip set-up', declaration('eleMotionSetup')),
+      ] : [
         region('Coat painter', declaration('makePainter')),
         region('Head', declaration('tetraHead')),
         region('Ears', declaration('tetraEars')),
-        region('Elephant ear', declaration('tetraFanEar')),
         region('Torso', declaration('tetraTorso')),
         region('Limbs', declaration('tetraLimbJoints')),
         region('Hind leg layout', declaration('HIND_LAYOUT')),
         region('Hind leg surface', declaration('tetraHindLeg')),
         region('Foreleg surface', declaration('tetraForeLeg')),
-        region('Gaits', declaration('GAIT_LIB')),
-        region('Leg solver (IK)', declaration('solveLeg')),
         region('Tail', declaration('tetraTail')),
         region('Horns & antlers', declaration('tetraHorns')),
         region('Mane', declaration('tetraMane')),
+      ];
+      add(def.path, 'mammal-rig.mjs', [
+        region(`Species preset · ${species}`, preset),
+        region('Family defaults', family),
+        region('Defaults (DEF)', declaration('DEF')),
+        ...body,
+        region('Limb roots (blendLimbRoots)', declaration('blendLimbRoots')),
+        region('Gaits', declaration('GAIT_LIB')),
+        region('Gait tuning', declaration('GAIT_TUNE')),
+        region('Foot paths', declaration('footTrack')),
+        region('Leg solver (IK)', declaration('solveLeg')),
+        region('Feet on their line (keepOnLine)', declaration('keepOnLine')),
+        region('Girdle drop (dropCurve)', declaration('dropCurve')),
+        region('Clip baking', declaration('bakeClip')),
         region('Proportion sliders (specFor)', declaration('specFor')),
         region('Mesh output (finish)', declaration('finish')),
       ]);
@@ -204,6 +229,10 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         region('Skull profiles', declaration('SKULL_FORMS')),
         region('Builder', declaration('birdBuild')),
         region('Clips', declaration('BIRD_CLIPS')),
+        region('Walk styles', declaration('WALK_STYLE')),
+        region('Walk (planted feet)', declaration('birdWalk')),
+        region('Walk set-up', declaration('birdGaitSetup')),
+        region('Leg reach (IK)', declaration('legReach')),
         region('Proportion sliders (resolveSpec)', declaration('resolveSpec')),
       ]);
       if (!wildId) add('src/assets/data-birds.ts', 'data-birds.ts', [region(`Row · ${species}`, row(species))]);

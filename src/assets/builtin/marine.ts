@@ -41,17 +41,19 @@ export function createSeal(params: Record<string, unknown> = {}) {
     // black face from the eyes forward
     if (t > 0.8 + (n - 0.5) * 0.04) c = mixc(c, dark, sstep(0.8, 0.86, t) * (top > -0.4 ? 1 : 0.6));
     // the "harp": a dark horseshoe joined over the shoulders, arms running back along the upper flanks
+    // (Digital Diorama revision 8: soft edges, so it reads as a horseshoe rather than a blocky belt across the back)
     const ang = Math.abs(Math.atan2(Math.cos(a), Math.sin(a))); // 0 at the dorsal line
-    const arm = t > 0.24 && t < 0.62 && ang > 0.55 + (t - 0.4) * 0.4 && ang < 1.25 + (n - 0.5) * 0.3;
-    const yoke = t > 0.56 && t < 0.64 && ang < 1.2;
-    if ((arm || yoke) && P.harp > 0) c = mixc(c, dark, 0.9 * Number(P.harp));
+    const lo = 0.55 + (t - 0.4) * 0.4, hi = 1.25 + (n - 0.5) * 0.3;
+    const arm = sstep(0.2, 0.28, t) * (1 - sstep(0.58, 0.64, t)) * sstep(lo - 0.12, lo + 0.06, ang) * (1 - sstep(hi - 0.06, hi + 0.12, ang));
+    const yoke = sstep(0.54, 0.58, t) * (1 - sstep(0.62, 0.66, t)) * (1 - sstep(1.05, 1.25, ang));
+    if (P.harp > 0) c = mixc(c, dark, 0.9 * Number(P.harp) * Math.max(arm, yoke));
     return c;
   };
   loftZ(body, [
     S(0, 0.17, 0.035, 0.03), S(0.08, 0.18, 0.1, 0.09), S(0.28, 0.21, 0.2, 0.18), S(0.45, 0.24, 0.255, 0.225),
     S(0.6, 0.255, 0.24, 0.225), S(0.72, 0.27, 0.17, 0.17), S(0.79, 0.3, 0.12, 0.125), S(0.86, 0.32, 0.115, 0.11),
     S(0.93, 0.315, 0.075, 0.07, 0.2), S(1, 0.305, 0.03, 0.035, 0),
-  ], -L * 0.5, L * 0.5, 34, 18, paint);
+  ], -L * 0.5, L * 0.5, 46, 24, paint);
   // eyes and nose
   for (const sx of [-1, 1]) blob(body, V(sx * 0.072 * L, 0.355 * L, 0.36 * L), 0.022 * L, 0.024 * L, 0.02 * L, () => rgb('#0b0b0c'), { w: 8, h: 6 });
   blob(body, V(0, 0.315 * L, 0.497 * L), 0.022 * L, 0.016 * L, 0.012 * L, () => rgb('#151414'));
@@ -61,11 +63,12 @@ export function createSeal(params: Record<string, unknown> = {}) {
     sweep(body, [a, a.clone().add(V(sx * 0.11 * L, (0.01 - k * 0.012) * L, -0.02 * L))], (t) => 0.0018 * L * (1 - t * 0.7), { sides: 3, color: () => rgb('#e8e2d2') });
   }
   root.add(meshOf(body, mat, 'body'));
-  // fore flippers
+  // fore flippers (Digital Diorama revision 8: held back along the flanks, as a resting seal holds them; they reached
+  // straight down to the ground and read as a pair of stilts)
   for (const sx of [-1, 1]) {
     const at = V(sx * 0.2 * L, 0.13 * L, 0.2 * L);
     const fg = new Geo();
-    sheet(fg, 6, 3, (u, v) => V(at.x + sx * (0.02 + u * 0.05) * L, at.y - u * 0.13 * L, at.z - u * 0.09 * L + (v - 0.5) * (0.07 - u * 0.02) * L), (u) => mixc(coat, dark, u * 0.7), 0.012 * L);
+    sheet(fg, 6, 3, (u, v) => V(at.x + sx * (0.02 + u * 0.035) * L, at.y - u * 0.07 * L, at.z - u * 0.13 * L + (v - 0.5) * (0.07 - u * 0.02) * L), (u) => mixc(coat, dark, u * 0.7), 0.012 * L);
     rebase(fg, at);
     const piv = pivot(sx < 0 ? 'flipperR' : 'flipperL', at);
     piv.add(meshOf(fg, mat, 'fore-flipper'));

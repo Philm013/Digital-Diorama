@@ -38,6 +38,11 @@ export interface BuiltModel {
   halfWidth: number;
   length: number;
   exhibitScale: number;
+  /**
+   * pivot-legged walkers: the mean distance a foot sweeps along the ground between its leg's two extreme angles (model
+   * units), so the gait can step at the cadence that keeps pace with the ground (Digital Diorama revision 8)
+   */
+  legStroke?: number;
   skinned: boolean;
   triangles: number;
   schema: Record<string, import('./modules').ParamSpec>;
@@ -234,12 +239,40 @@ export async function buildModel(def: AssetDef, userParams: Record<string, unkno
   }
   const ud = raw.userData as { update?: (t: number) => void; setNight?: (v: number) => void };
   return {
-    object, raw, clips: proto.clips, rig,
+    object, raw, clips: proto.clips, rig, legStroke: legStrokeOf(object, rig, ex),
     update: typeof ud.update === 'function' ? ud.update.bind(ud) : undefined,
     setNight: typeof ud.setNight === 'function' ? ud.setNight.bind(ud) : undefined,
     height: Math.max(0.05, box.max.y * ex), radius: Math.max(0.05, (length / 2) * ex), halfWidth: Math.max(0.03, (size.x / 2) * ex), length: length * ex,
     exhibitScale: ex, skinned, triangles: Math.round(tris), schema: proto.schema,
   };
+}
+
+/**
+ * Digital Diorama revision 8: how far a pivot leg's foot (the lowest vertex under the pivot) travels along the ground
+ * between the leg's min and max angles, averaged over the legs, in model units (undefined without leg pivots).
+ */
+function legStrokeOf(object: THREE.Object3D, rig: RigNode[], ex: number) {
+  const legs = rig.filter((r) => r.role === 'leg' && !r.scale);
+  if (!legs.length) return undefined;
+  object.updateMatrixWorld(true);
+  const v = new THREE.Vector3(), strokes: number[] = [];
+  for (const r of legs) {
+    let low: THREE.Vector3 | null = null, ly = Infinity;
+    r.node.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || (m as THREE.SkinnedMesh).isSkinnedMesh) return;
+      const p = m.geometry.attributes.position;
+      for (let i = 0; i < p.count; i += 3) { v.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld); if (v.y < ly) { ly = v.y; low = v.clone(); } }
+    });
+    if (!low) continue;
+    const local = r.node.worldToLocal(low), keep = r.node.rotation[r.axis];
+    const at = (deg: number) => { r.node.rotation[r.axis] = r.base + deg * THREE.MathUtils.DEG2RAD; r.node.updateMatrixWorld(true); return r.node.localToWorld(local.clone()); };
+    const a = at(r.min), b = at(r.max);
+    r.node.rotation[r.axis] = keep; r.node.updateMatrixWorld(true);
+    strokes.push(Math.hypot(a.x - b.x, a.z - b.z) / ex);
+  }
+  const s = strokes.length ? strokes.reduce((t, x) => t + x, 0) / strokes.length : 0;
+  return s > 1e-4 ? s : undefined;
 }
 
 function stripUndefined(o: Record<string, unknown>) {
