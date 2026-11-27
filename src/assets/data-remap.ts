@@ -34,6 +34,8 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
     specOverride: {
       // larger, open rosettes than a leopard's
       tail: { style: 'bushy', thk: 0.1, bush: 0.6, curl: 40 }, ear: { len: 0.17 }, pawW: 1.25, cheek: 1.25, spotFreq: 7.5,
+      // a short face under a high, domed forehead (Digital Diorama revision 9)
+      snout: 0.27, snoutW: 0.56, snoutD: 0.62, stop: 0.75, dome: 1.22, eye: 0.06,
       palette: { body: '#cdc9be', belly: '#efece5', pattern: '#4b4c50', marking: '#77777a', eye: '#a3b4a2', nose: '#a08c88' },
     },
   }),
@@ -42,7 +44,8 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
     size: 1.3,
     specOverride: {
       flankStripe: false, rumpPatch: true, countershade: 0.55,
-      horns: { style: 'antelope', len: 0.55, thk: 0.075, s: 0.12, a: 0.3 },
+      // a buck's horns: upright over the eyes, a forward prong half way up, tips hooked back (Digital Diorama revision 9)
+      horns: { style: 'pronghorn', len: 0.75, thk: 0.09, s: 0.2, a: 0.35 },
       palette: { body: '#c08547', belly: '#f6f1e7', marking: '#2a1f17', horn: '#1c1916', nose: '#1c1714' },
     },
   }),
@@ -65,14 +68,15 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   }),
   // winter-white coat, small rounded ears, short muzzle and legs, thick tail
   'arctic-fox': mammal('fox', {
-    size: 0.95, earSize: 0.62, muzzleLen: 0.82, legLen: 0.84, tailLen: 0.95,
-    specOverride: { points: 0, tailTip: 0, palette: { body: '#f3f1ec', belly: '#fbfaf7', marking: '#e7e4dd', eye: '#ae8a3c', nose: '#1c1a19' } },
+    // (Digital Diorama revision 9: compact and short-legged under a deep winter coat, with a short muzzle and a round face)
+    size: 0.95, earSize: 0.5, muzzleLen: 0.68, legLen: 0.78, bodyLen: 0.85, tailLen: 0.95,
+    specOverride: { snoutW: 0.44, headD: 0.28, dome: 1.22, cheekLow: 1.2, depth: 0.5, neckThk: 1.0, points: 0, tailTip: 0, palette: { body: '#f3f1ec', belly: '#fbfaf7', marking: '#e7e4dd', eye: '#ae8a3c', nose: '#1c1a19' } },
   }),
   // tiny sand-coloured desert fox with enormous ears and a black tail tip
   'fennec-fox': mammal('fox', {
-    size: 0.52, earSize: 1.8,
+    size: 0.52, earSize: 1.8, muzzleLen: 0.78, legLen: 0.86, bodyLen: 0.88,
     // (the huge ears spread outward in a V: Digital Diorama revision 7)
-    specOverride: { points: 0, earZone: 'body', earTip: 0, tailTip: 0.12, tailTipZone: 'marking', ear: { spread: 34 }, palette: { body: '#e2c79c', belly: '#f7efe2', marking: '#3a2c20', eye: '#2a1d14', nose: '#1d1715' } },
+    specOverride: { dome: 1.25, headD: 0.27, cheekLow: 1.15, snoutW: 0.42, points: 0, earZone: 'body', earTip: 0, tailTip: 0.12, tailTipZone: 'marking', ear: { spread: 34, cup: 0.6 }, palette: { body: '#e2c79c', belly: '#f7efe2', marking: '#3a2c20', eye: '#2a1d14', nose: '#1d1715' } },
   }),
   'eastern-gray-squirrel': mammal('squirrel', {
     size: 1.25, earStyle: 'pointed',

@@ -8,7 +8,8 @@ import { buildModel } from '../assets/builder';
  * in memory and in IndexedDB so they appear instantly next time.
  */
 // (v9, Digital Diorama revision 8: the elephant, birds' feet, the harp seal and the frilled lizard changed shape)
-const VERSION = 'v9';
+// (v10, Digital Diorama revision 9: every mammal's head, several bodies and horns, the seal, dolphin and whales changed shape)
+const VERSION = 'v10';
 const SIZE = 168;
 const mem = new Map<string, string>();
 const waiting = new Map<string, Set<(url: string) => void>>();
