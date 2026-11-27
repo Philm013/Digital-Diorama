@@ -47,6 +47,17 @@
  *   - The walk clip carries { gait, stride, speed, hipH } like the mammals' gaits, so the app plays it at the
  *     rate that keeps the feet still (they slid about 1.8 hip heights a step).
  *   - Toes rest on the ground instead of 2-30 mm in it (ostrich, turkey, penguin worst).
+ *
+ * REVISION 10 (Digital Diorama: postures, faces and proportions checked against the species photos)
+ *   - Perching birds stood like vultures, the body near level and the head hung forward of the chest on a forward neck.
+ *     Raptors, parrots, the cockatoo, hornbill and toucan now stand upright (pitch 44-60°), the eagle and falcon with the
+ *     head carried over the chest on an upright neck, and long tails raised to clear the ground.
+ *   - Bills: the eagle's, falcon's, macaw's and cockatoo's were a third too big (the eagle's drooped like a toucan's).
+ *   - Owls: the eyes were placed on the skull's middle ring, which a short, flat face does not reach forward, so they
+ *     looked out sideways like a frog's from behind a parrot's bill; they now sit forward in the facial disc (`eyeU`), bigger,
+ *     over a small bill.
+ *   - The albatross has a short thick neck (it was a goose's), the pelican's neck is drawn into an S over a bigger body, and
+ *     the ostrich's body is a big plumed mass instead of a small bag on long legs.
  */
 
 import * as THREE from 'three';
@@ -1562,21 +1573,39 @@ const SPECIES = {
     pattern: { headAll: true, face: 'belly', breast: 'accent' }, palette: BP('#147da0', '#e8a14d', '#1687ad', '#205c79', '#146e91', '#f0e5d0', '#d97f32', '#25292c', '#c56d52', '#2a1b12') },
   macaw: { label: 'Scarlet Macaw', sci: 'Ara macao', bodyForm: 'parrot', L: 0.26, pitch: 50, bodyH: 0.55, headR: 0.28, headAng: 20, neckLen: 0.14, neckThin: 0.8, maskW: 0.5, maskWBill: 0.8, beak: { len: 0.85, w: 0.55, h: 1.0, style: 'hook', hook: 0.42, lower: 0.62, lowerStyle: 'scoop', keel: 0.15, y: 0.05 }, feet: 'zygo', legLen: 0.18,
     wing: { span: 1.9, chord: 0.62, tip: 'pointed', fold: 0.55 }, tail: { len: 2.8, fan: 16, n: 8, style: 'long', lift: 45 }, eye: 0.16, pattern: { face: 'face', faceU: 0.5, faceTop: 0.8, faceSlope: 0.25, mask: 'face', maskShape: 'stripe', wingBands: true, tail: 'body' },
-    palette: BP('#d8241e', '#d8241e', '#f2c21a', '#2a5ad8', '#d8241e', '#f2ede6', '#2a8a3a', '#efe6d0', '#5a5a60', '#e8e0b0', { flight: '#2a5ad8', jaw: '#1d1a1a' }) },
+    palette: BP('#d8241e', '#d8241e', '#f2c21a', '#2a5ad8', '#d8241e', '#f2ede6', '#2a8a3a', '#efe6d0', '#5a5a60', '#e8e0b0', { flight: '#2a5ad8', jaw: '#1d1a1a' }),
+    // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
+    pitch: 56, beak: { len: 0.74, w: 0.5, h: 0.88, style: 'hook', hook: 0.42, lower: 0.62, lowerStyle: 'scoop', keel: 0.15, y: 0.05 },
+    // (revision 10) the tail raised to clear the ground under the more upright body
+    tail: { len: 2.8, fan: 16, n: 8, style: 'long', lift: 51 },
+    // (revision 10)
+    tail: { len: 2.8, fan: 16, n: 8, style: 'long', lift: 53 }, },
   // Digital Diorama revision: eyes set into the facial disc (huge bulging black eyes), barred underparts, mottled back
   owl: { label: 'Great Horned Owl', sci: 'Bubo virginianus', bodyForm: 'owl', L: 0.32, pitch: 72, bodyH: 0.85, bodyW: 0.8, neckLen: 0.08, headR: 0.44, headW: 1.0, headAng: -4, eye: 0.22, eyeYaw: 16, eyeInset: 0.55, eyeRing: 0.4,
     marks: { belly: 'bars', back: 'streaks', wing: 'bars', tail: 'bars', freq: 1.6, zone: 'accent', light: 'face' },
     beak: { len: 0.32, w: 0.22, h: 0.3, style: 'hook', hook: 0.5, y: 0.25 }, crest: { h: 0.75, n: 2, style: 'tuft', thk: 0.16, curl: -0.3, pair: true }, feet: 'zygo', talons: 1.4, feathered: true, legLen: 0.12, fluff: 0.05,
     wing: { span: 1.9, chord: 0.75, tip: 'round', fold: 0.25 }, tail: { len: 0.6, fan: 40, n: 10, lift: 35 }, pattern: { mask: 'face', throat: 'belly', barred: true },
-    palette: BP('#7a5e40', '#c9b08a', '#6a5034', '#4a3a28', '#7a5e40', '#d8b88a', '#3a2c1e', '#3a3632', '#c9b08a', '#f2a81a') },
+    palette: BP('#7a5e40', '#c9b08a', '#6a5034', '#4a3a28', '#7a5e40', '#d8b88a', '#3a2c1e', '#3a3632', '#c9b08a', '#f2a81a'),
+    // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
+    eye: 0.3, eyeYaw: 10, beak: { len: 0.2, w: 0.15, h: 0.2, style: 'hook', hook: 0.5, y: 0.2 },
+    // (revision 10) the eyes looked out sideways from the middle of the skull: they sit forward in the flat facial disc
+    eyeU: 0.84, eyeInset: 0.5, },
   eagle: { label: 'Bald Eagle', sci: 'Haliaeetus leucocephalus', bodyForm: 'raptor', L: 0.45, pitch: 35, headR: 0.24, beak: { len: 1.05, w: 0.42, h: 0.62, style: 'hook', hook: 0.42 }, eye: 0.15, eyeYaw: 50, talons: 1.6, feathered: true, legLen: 0.22,
     wing: { span: 2.4, chord: 0.75, tip: 'slotted', fold: 0.45 }, tail: { len: 0.75, fan: 36, n: 12 }, pattern: { headAll: true, neck: 'head', tail: 'head' },
-    palette: BP('#3a2a1c', '#3e2e20', '#3a2a1c', '#2a1e14', '#f4f2ec', '#f4f2ec', '#f4f2ec', '#f2c21a', '#f2c21a', '#f2d24a') },
+    palette: BP('#3a2a1c', '#3e2e20', '#3a2a1c', '#2a1e14', '#f4f2ec', '#f4f2ec', '#f4f2ec', '#f2c21a', '#f2c21a', '#f2d24a'),
+    // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
+    pitch: 56, neckLen: 0.16, beak: { len: 0.84, w: 0.4, h: 0.56, style: 'hook', hook: 0.36 },
+    // (revision 10) the head carried over the chest on an upright neck, as perched raptors hold it
+    neckAng: 84, headAng: 0, },
   falcon: { label: 'Peregrine Falcon', sci: 'Falco peregrinus', bodyForm: 'raptor', L: 0.38, pitch: 34, bodyH: 0.55, bodyW: 0.54, headR: 0.22, neckLen: 0.14, neckThin: 0.68,
     beak: { len: 0.72, w: 0.34, h: 0.5, style: 'hook', hook: 0.55 }, eye: 0.16, eyeYaw: 48, talons: 1.55, feathered: true, legLen: 0.24, wing: { span: 2.85, chord: 0.52, tip: 'pointed', fold: 0.62, sweep: 0.25 }, tail: { len: 0.78, fan: 28, n: 10 },
     // Digital Diorama revision: a black hood and moustache over a white throat and cheek, finely barred underparts
     pattern: { mask: 'face', throat: 'belly', cheek: 'belly', barred: true }, maskR: 0.5, marks: { belly: 'bars', back: 'bars', tail: 'bars', freq: 3.2, barW: 0.13, zone: 'accent', throatPlain: true },
-    palette: BP('#5a6672', '#f0ebe0', '#4f5a66', '#2a3036', '#262b31', '#171b20', '#4a5058', '#60636a', '#e3b52b', '#33251a') },
+    palette: BP('#5a6672', '#f0ebe0', '#4f5a66', '#2a3036', '#262b31', '#171b20', '#4a5058', '#60636a', '#e3b52b', '#33251a'),
+    // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
+    pitch: 56, headR: 0.2, beak: { len: 0.56, w: 0.32, h: 0.46, style: 'hook', hook: 0.5 },
+    // (revision 10) the head carried over the chest on an upright neck, as perched raptors hold it
+    neckAng: 84, headAng: 0, },
   flamingo: { label: 'Greater Flamingo', sci: 'Phoenicopterus roseus', bodyForm: 'flamingo', L: 0.36, pitch: 8, legLen: 1.1, thigh: 2.1, legThk: 0.036, bareTibia: 0.78, heelAng: 5, footFwd: 0.02, neckLen: 1.6, neckAng: 70, neckThin: 0.42, neckBase: 1.4, neckNape: 1.2,
     neckShape: [[0, 30], [0.22, 78], [0.5, 116], [0.74, 98], [0.9, 58], [1, 32]], headR: 0.16, headAng: 8, headW: 0.84,
     beak: { len: 1.95, w: 0.56, h: 0.78, style: 'cone', droop: 0.8, tip: 'face', y: 0.18 }, eye: 0.18, feet: 'webbed', wing: { span: 2.0, chord: 0.62, tip: 'round', fold: 0.35 }, tail: { len: 0.4, fan: 30, n: 8 },
@@ -1613,7 +1642,9 @@ const SPECIES = {
   ostrich: { label: 'Ostrich', sci: 'Struthio camelus', bodyForm: 'ratite', L: 0.72, pitch: 12, bodyH: 0.72, bodyW: 0.68, legLen: 1.0, thigh: 0.9, legThk: 0.075, thighK: 1.25, heelAng: 10, neckLen: 1.25, neckAng: 78, neckThin: 0.5, neckRootR: 0.26,
     neckShape: [[0, 64], [0.4, 84], [0.8, 92], [1, 86]], headR: 0.13, headAng: 6, beak: { len: 1.6, w: 0.55, h: 0.32, style: 'flat' }, eye: 0.3,
     feet: 'ratite', toeLen: 0.28, wing: { span: 0.75, chord: 0.45, tip: 'round', fold: 0.15 }, tail: { len: 0.4, fan: 60, n: 10, droop: 0.3 }, fluff: 0.06, pattern: { neck: 'face', thigh: 'leg', headAll: true },
-    palette: BP('#1d1b1a', '#1d1b1a', '#1d1b1a', '#f2f0ea', '#c8a49a', '#d8b0a4', '#f2f0ea', '#c89a7a', '#d8a098') },
+    palette: BP('#1d1b1a', '#1d1b1a', '#1d1b1a', '#f2f0ea', '#c8a49a', '#d8b0a4', '#f2f0ea', '#c89a7a', '#d8a098'),
+    // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
+    L: 0.95, legLen: 0.78, thigh: 0.72, neckLen: 1.0, bodyH: 0.74, bodyW: 0.72, },
   kiwi: { label: 'North Island Brown Kiwi', sci: 'Apteryx mantelli', bodyForm: 'ratite', skullForm: 'wader', L: 0.35, pitch: 22, bodyH: 0.78, bodyW: 0.72, legLen: 0.32, thigh: 0.65, legThk: 0.065, neckLen: 0.2, neckAng: 55, headR: 0.16, headW: 0.78,
     beak: { len: 3.1, w: 0.18, h: 0.2, style: 'cone', curve: 0.12 }, eye: 0.13, feet: 'ratite', toeLen: 0.42, wing: { span: 0.12, chord: 0.12, tip: 'round', fold: 0, foldLength: 0.14, foldH: 0.2 }, tail: { len: 0, fan: 20, n: 1 }, fluff: 0.08,
     pattern: { headAll: true, neck: 'head' }, marks: { back: 'streaks', belly: 'streaks', zone: 'flight', freq: 1.5 },
@@ -1633,22 +1664,36 @@ const SPECIES = {
   pelican: { label: 'Brown Pelican', sci: 'Pelecanus occidentalis', bodyForm: 'pelican', L: 0.55, pitch: 15, neckLen: 0.95, neckAng: 60, neckBase: 1.5, footFwd: -0.02,
     neckShape: [[0, 46], [0.35, 96], [0.7, 104], [1, 62]], headR: 0.16, headAng: 30, beak: { len: 4.2, w: 0.42, h: 0.3, style: 'flat', hook: 0.06, hookPow: 9, tipTaper: 0.55, tipLen: 0.1, pouch: 1.2 }, eye: 0.15,
     feet: 'webbed', legLen: 0.18, wing: { span: 2.4, chord: 0.62, tip: 'slotted', fold: 0.3 }, tail: { len: 0.4, fan: 30, n: 10 }, pattern: { headAll: true, neck: 'face' },
-    palette: BP('#6a6a6a', '#5a5a5c', '#7a766e', '#2a2826', '#f2eed8', '#5a3a2a', '#e8d870', '#a89a8a', '#3a3a3a') },
+    palette: BP('#6a6a6a', '#5a5a5c', '#7a766e', '#2a2826', '#f2eed8', '#5a3a2a', '#e8d870', '#a89a8a', '#3a3a3a'),
+    // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
+    neckLen: 0.62, bodyH: 0.62, bodyW: 0.64, neckShape: [[0, 72], [0.4, 100], [0.78, 70], [1, 30]], headAng: 40, },
   toucan: { label: 'Toco Toucan', sci: 'Ramphastos toco', bodyForm: 'toucan', L: 0.3, pitch: 40, headR: 0.22, beak: { len: 3.8, w: 0.5, h: 1.25, style: 'big', curve: 0.1, decurve: 0.22, keel: 0.6, lowerDepth: 0.75, tip: 'face', tipFrom: 0.88, tipLower: false }, eye: 0.17, eyeRing: 0.5, feet: 'zygo', legLen: 0.2,
     wing: { span: 1.4, chord: 0.6, tip: 'round', fold: 0.2 }, tail: { len: 0.95, fan: 20, n: 8, lift: 25 }, pattern: { throat: 'belly', mask: 'accent', bellyFront: true },
-    palette: BP('#141416', '#f4f2ea', '#141416', '#141416', '#141416', '#1d1d1d', '#3ab8e8', '#f28a1a', '#4a6ab8') },
+    palette: BP('#141416', '#f4f2ea', '#141416', '#141416', '#141416', '#1d1d1d', '#3ab8e8', '#f28a1a', '#4a6ab8'),
+    // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
+    pitch: 50,
+    // (revision 10) the tail raised to clear the ground under the more upright body
+    tail: { len: 0.95, fan: 20, n: 8, lift: 42 }, },
   cockatoo: { label: 'Sulphur-crested Cockatoo', sci: 'Cacatua galerita', bodyForm: 'parrot', L: 0.24, pitch: 46, bodyH: 0.58, headR: 0.27, headAng: 18, neckLen: 0.12, neckThin: 0.82, eye: 0.15, eyeRing: 0.4,
     beak: { len: 0.72, w: 0.54, h: 0.92, style: 'hook', hook: 0.44, lower: 0.62, lowerStyle: 'scoop', keel: 0.15, y: 0.06 }, crest: { h: 2.3, n: 8, style: 'recurve', vane: 0.16, thk: 0.035, curl: 0.9 },
     feet: 'zygo', legLen: 0.18, wing: { span: 2.1, chord: 0.66, tip: 'round', fold: 0.45 }, tail: { len: 1.15, fan: 24, n: 10, style: 'wedge', lift: 30 }, pattern: { headAll: true },
-    palette: BP('#f3f2ec', '#f1f0ea', '#efeee8', '#f2ead0', '#f6f5f0', '#dfe8f0', '#f4cd2b', '#2b2c30', '#4f5054', '#1a1410') },
+    palette: BP('#f3f2ec', '#f1f0ea', '#efeee8', '#f2ead0', '#f6f5f0', '#dfe8f0', '#f4cd2b', '#2b2c30', '#4f5054', '#1a1410'),
+    // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
+    pitch: 60, beak: { len: 0.58, w: 0.48, h: 0.76, style: 'hook', hook: 0.44, lower: 0.62, lowerStyle: 'scoop', keel: 0.15, y: 0.06 },
+    // (revision 10) the tail raised to clear the ground under the more upright body
+    tail: { len: 1.15, fan: 24, n: 10, style: 'wedge', lift: 48 }, },
   hornbill: { label: 'Great Hornbill', sci: 'Buceros bicornis', bodyForm: 'corvid', skullForm: 'hornbill', L: 0.42, pitch: 28, headR: 0.17, neckLen: 0.4, neckAng: 60, neckThin: 0.62, eye: 0.17, maskW: 0.45, maskWBill: 0.9,
     beak: { len: 4.1, w: 0.4, h: 0.8, style: 'big', decurve: 0.42, keel: 0.35, casque: { len: 0.6, h: 0.85, w: 0.92, zone: 'beak', tipZone: 'face' } },
     feet: 'perch', legLen: 0.2, legThk: 0.045, wing: { span: 2.5, chord: 0.78, tip: 'slotted', fold: 0.4 }, tail: { len: 1.5, fan: 24, n: 10 }, pattern: { neck: 'accent', headAll: true, mask: 'face', maskShape: 'stripe' },
-    palette: BP('#17181b', '#ece8dc', '#1b1c1f', '#efe9d6', '#1b1c1f', '#101012', '#ede0a2', '#f0c033', '#55524c', '#c8352a', { jaw: '#efd57c' }) },
+    palette: BP('#17181b', '#ece8dc', '#1b1c1f', '#efe9d6', '#1b1c1f', '#101012', '#ede0a2', '#f0c033', '#55524c', '#c8352a', { jaw: '#efd57c' }),
+    // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
+    pitch: 44, },
   albatross: { label: 'Wandering Albatross', sci: 'Diomedea exulans', bodyForm: 'gull', skullForm: 'pelican', L: 0.62, pitch: 12, bodyH: 0.52, bodyW: 0.58, headR: 0.18, neckLen: 0.38, neckAng: 58,
     beak: { len: 1.9, w: 0.34, h: 0.42, style: 'flat', hook: 0.2, hookPow: 8, tip: 'face', tipFrom: 0.88 }, eye: 0.14, feet: 'webbed', legLen: 0.16, wing: { span: 3.8, chord: 0.44, tip: 'pointed', fold: 0.72, sweep: 0.3 }, tail: { len: 0.48, fan: 28, n: 10 },
     pattern: { headAll: true, neck: 'head', wingTips: true }, marks: { wing: 'edged', light: 'belly', freq: 1 },
-    palette: BP('#f4f2e9', '#f7f5ed', '#4a4b4e', '#24262a', '#f7f5ed', '#f5f1e6', '#d6c7ab', '#e1c7a8', '#c8b59c', '#3c2c20') },
+    palette: BP('#f4f2e9', '#f7f5ed', '#4a4b4e', '#24262a', '#f7f5ed', '#f5f1e6', '#d6c7ab', '#e1c7a8', '#c8b59c', '#3c2c20'),
+    // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
+    neckLen: 0.2, neckAng: 52, headR: 0.2, bodyH: 0.6, bodyW: 0.62, },
   seagull: { label: 'Herring Gull', sci: 'Larus argentatus', bodyForm: 'gull', L: 0.32, pitch: 15, headR: 0.22, beak: { len: 1.2, w: 0.3, h: 0.38, style: 'cone', hook: 0.12, tip: 'accent', tipUpper: false }, eye: 0.14, feet: 'webbed', legLen: 0.32,
     wing: { span: 2.6, chord: 0.55, tip: 'pointed', fold: 0.6 }, tail: { len: 0.6, fan: 36, n: 10 }, pattern: { headAll: true, neck: 'head', wingTips: true },
     palette: BP('#a8b0b8', '#f6f6f4', '#a8b0b8', '#1d1d20', '#f6f6f4', '#f6f6f4', '#d8241e', '#f2c21a', '#e8a8a0', '#f2e6a0') },
