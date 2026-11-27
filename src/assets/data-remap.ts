@@ -53,7 +53,8 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   'bactrian-camel': mammal('camel', {
     size: 1.0, legLen: 0.9,
     specOverride: {
-      humps: [{ u: 0.38, h: 0.21, w: 0.22 }, { u: 0.72, h: 0.19, w: 0.22 }], wool: 0.035,
+      // (Digital Diorama revision 10: broad, rounded humps; narrow ones stood up as tents)
+      humps: [{ u: 0.36, h: 0.18, w: 0.3 }, { u: 0.74, h: 0.17, w: 0.3 }], wool: 0.035,
       palette: { body: '#99714c', belly: '#ae8862', mane: '#5e4128', hoof: '#4a3a2c', nose: '#3a2d24' },
     },
   }),
@@ -70,7 +71,9 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   'arctic-fox': mammal('fox', {
     // (Digital Diorama revision 9: compact and short-legged under a deep winter coat, with a short muzzle and a round face)
     size: 0.95, earSize: 0.5, muzzleLen: 0.68, legLen: 0.78, bodyLen: 0.85, tailLen: 0.95,
-    specOverride: { snoutW: 0.44, headD: 0.28, dome: 1.22, cheekLow: 1.2, depth: 0.5, neckThk: 1.0, points: 0, tailTip: 0, palette: { body: '#f3f1ec', belly: '#fbfaf7', marking: '#e7e4dd', eye: '#ae8a3c', nose: '#1c1a19' } },
+    specOverride: { snoutW: 0.44, headD: 0.28, dome: 1.22, cheekLow: 1.2, depth: 0.5, neckThk: 1.0, points: 0, tailTip: 0,
+      // (Digital Diorama revision 10: on the measured canid body, a deeper, broader body and thicker legs under the winter coat)
+      refDepth: 1.18, refW: 1.25, foreBulkR: 1.15, hindBulkR: 1.1, palette: { body: '#f3f1ec', belly: '#fbfaf7', marking: '#e7e4dd', eye: '#ae8a3c', nose: '#1c1a19' } },
   }),
   // tiny sand-coloured desert fox with enormous ears and a black tail tip
   'fennec-fox': mammal('fox', {

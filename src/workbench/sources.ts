@@ -170,8 +170,23 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         const fam = at && /\bfam:\s*(\w+)/.exec(text.slice(at[0], at[1]))?.[1];
         return fam && FAMILY_CONSTS.includes(fam) ? declaration(fam)(text) : null;
       };
+      // the measured reference table the preset is laid out from (`ref: REF.equid` → equid: {...} in const REF)
+      const refTable: Region['find'] = (text) => {
+        const at = preset(text);
+        const ref = at && [...text.slice(at[0], at[1]).matchAll(/\bref:\s*REF\.(\w+)/g)].pop()?.[1];
+        return ref ? objectEntry('const REF = {', ref)(text) : null;
+      };
       // (Digital Diorama revision 8: the elephant has its own builder and clips; every mammal shares the limb-root blend,
-      // the feet's line keeping, the girdle-drop smoothing and the gait tables)
+      // the feet's line keeping, the girdle-drop smoothing and the gait tables. Revision 10: the others are laid out from
+      // measured reference tables)
+      const measured = species === 'elephant' ? [] : [
+        region('Reference table (measured layout)', refTable),
+        region('Measured layout (refLayout)', declaration('refLayout')),
+        region('Measured legs (refLeg)', declaration('refLeg')),
+        region('Leg profiles (LEG)', declaration('LEG')),
+        region('Ground clearance (sit, lie)', declaration('clearGround')),
+        region('Tail on the ground', declaration('tailOnGround')),
+      ];
       const body = species === 'elephant' ? [
         region('Elephant builder', declaration('elephantBuild')),
         region('Elephant layout', declaration('eleLayout')),
@@ -203,6 +218,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
       add(def.path, 'mammal-rig.mjs', [
         region(`Species preset · ${species}`, preset),
         region('Family defaults', family),
+        ...measured,
         region('Defaults (DEF)', declaration('DEF')),
         ...body,
         region('Limb roots (blendLimbRoots)', declaration('blendLimbRoots')),
