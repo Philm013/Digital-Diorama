@@ -1296,8 +1296,18 @@ function buildHead(B, S, L, o) {
     const e = o.eye, r = e.r * H, ctr = at(e.u ?? 0.55, e.rise ?? 0.05);
     for (const sd of [1, -1]) {
       const dir = hd.clone().multiplyScalar(Math.cos((e.yaw ?? 75) * DEG)).addScaledVector(side, sd * Math.sin((e.yaw ?? 75) * DEG)).addScaledVector(hu, e.up ?? 0.25).normalize();
-      const hit = surfaceToward(g, ctr, dir, clamp((e.u ?? 0.55) - 0.25, 0.02, 0.95), clamp((e.u ?? 0.55) + 0.25, 0.05, 0.98));
-      const c = hit.p.clone().addScaledVector(hit.n, -r * (e.inset ?? 0.45) + (e.bulge ?? 0) * r), look = hit.n.clone().lerp(dir, 0.5).normalize();
+      let c, look;
+      if (e.at) {
+        // placed on the skull directly: `at` = [across, up] as fractions of the half-width and the crown's height at u,
+        // looking out at `elev` degrees above the side (frogs: the two eyes stand apart on top of the flat head)
+        const eu = e.u ?? 0.55, wU = prof(sk.map(k => [k[0], k[1]]))(eu), tU = prof(sk.map(k => [k[0], k[2]]))(eu), rU = prof(sk.map(k => [k[0], k[4] || 0]))(eu);
+        c = at(eu, rU + e.at[1] * tU, sd * e.at[0] * wU);
+        const el = (e.elev ?? 35) * DEG;
+        look = side.clone().multiplyScalar(sd * Math.cos(el)).addScaledVector(hu, Math.sin(el)).addScaledVector(hd, Math.cos((e.yaw ?? 75) * DEG)).normalize();
+      } else {
+        const hit = surfaceToward(g, ctr, dir, clamp((e.u ?? 0.55) - 0.25, 0.02, 0.95), clamp((e.u ?? 0.55) + 0.25, 0.05, 0.98));
+        c = hit.p.clone().addScaledVector(hit.n, -r * (e.inset ?? 0.45) + (e.bulge ?? 0) * r); look = hit.n.clone().lerp(dir, 0.5).normalize();
+      }
       const pupil = e.pupil ?? 'round';
       // (independently turning eyes, chameleons: each eye, and its turret, on its own bone)
       const EW = e.bones ? rig.W(rig.add(sd > 0 ? 'EyeL' : 'EyeR', headBone, c, c.clone().addScaledVector(look, r)).name) : HW;
@@ -2729,7 +2739,8 @@ const frogHead = (o) => ({
 const T_BULLFROG = {
   axis: [[0.0, 0.27], [0.15, 0.29], [0.33, 0.3], [0.5, 0.28], [0.7, 0.24], [0.88, 0.17], [1.0, 0.12]],
   body: [[0.2, 0.17, 0.1, 0.1], [0.33, 0.2, 0.11, 0.12], [0.5, 0.22, 0.12, 0.13], [0.7, 0.2, 0.13, 0.12], [0.85, 0.15, 0.1, 0.09], [0.95, 0.1, 0.07, 0.06], [1.0, 0.06, 0.04, 0.04]],
-  head: frogHead({ eye: { r: 0.15, u: 0.62, rise: 0.2, yaw: 65, up: 0.65, inset: 0.25, bulge: 0.55, pupil: 'bar', pupilR: 0.38, lidH: 0.7 } }),
+  // (eyes on the top-sides of the flat head, an eye's width apart: 1.2 cm across on a 16 cm frog)
+  head: frogHead({ eye: { r: 0.1, u: 0.6, at: [0.56, 0.72], elev: 38, yaw: 80, pupil: 'bar', pupilR: 0.4, lidH: 0.75 } }),
   fore: { J0: [0.14, 0.22, -0.4], J2: [0.2, 0.03, -0.22], upper: 0.19, lower: 0.18, pole: [1, 0.2, -1], yaw: -15, R: [0.05, 0.04, 0.03, 0.03, 0.022], palm: { w: 0.03, h: 0.014, l: 0.04 }, digits: FROG_HAND },
   hind: { hip: [0.08, 0.13, 0], knee: [0.3, 0.14, 0.32], heel: [0.2, 0.05, -0.06], tm: [0.3, 0.025, 0.18], yaw: 15, R: [0.09, 0.085, 0.045, 0.05, 0.03, 0.028, 0.022], palm: { w: 0.04, h: 0.015, l: 0.12 }, digits: FROG_TOES, web: 0.85 },
 };
@@ -2739,7 +2750,7 @@ const T_CANETOAD = {
   body: [[0.2, 0.18, 0.1, 0.1], [0.35, 0.23, 0.12, 0.13], [0.55, 0.26, 0.13, 0.14], [0.72, 0.24, 0.12, 0.13], [0.88, 0.17, 0.1, 0.09], [0.97, 0.1, 0.06, 0.06], [1.0, 0.06, 0.04, 0.04]],
   head: frogHead({ len: 0.33,
     skull: [[0, 0.55, 0.22, 0.06, 0], [0.3, 0.55, 0.25, 0.06, 0.02], [0.55, 0.48, 0.23, 0.055, 0.01], [0.75, 0.38, 0.18, 0.05, -0.01], [0.9, 0.25, 0.13, 0.045, -0.02], [1, 0.12, 0.08, 0.04, -0.025]],
-    eye: { r: 0.12, u: 0.6, rise: 0.22, yaw: 62, up: 0.6, inset: 0.25, bulge: 0.45, pupil: 'bar', pupilR: 0.4, lidH: 0.7 } }),
+    eye: { r: 0.095, u: 0.6, at: [0.56, 0.8], elev: 40, yaw: 80, pupil: 'bar', pupilR: 0.4, lidH: 0.75 } }),
   parotoid: { u: 0.06, rise: 0.14, x: 0.36, w: 0.17, h: 0.13, l: 0.3 },
   warts: { f: 15, r: 0.3, h: 0.07, below: -0.25 }, bodySeg: 56, bodyRad: 18,
   fore: { J0: [0.15, 0.21, -0.38], J2: [0.21, 0.03, -0.2], upper: 0.18, lower: 0.17, pole: [1, 0.2, -1], yaw: -20, R: [0.055, 0.045, 0.034, 0.034, 0.025], palm: { w: 0.034, h: 0.016, l: 0.04 }, digits: scaleD(FROG_HAND, 0.8) },
@@ -2752,7 +2763,7 @@ const T_DARTFROG = {
   body: [[0.2, 0.15, 0.09, 0.09], [0.33, 0.17, 0.1, 0.1], [0.5, 0.18, 0.12, 0.11], [0.7, 0.17, 0.13, 0.1], [0.85, 0.13, 0.1, 0.08], [0.95, 0.09, 0.07, 0.05], [1.0, 0.05, 0.04, 0.03]],
   head: frogHead({ len: 0.34,
     skull: [[0, 0.44, 0.22, 0.07, 0], [0.3, 0.46, 0.25, 0.07, 0.02], [0.55, 0.4, 0.23, 0.06, 0.01], [0.75, 0.31, 0.18, 0.055, -0.01], [0.9, 0.2, 0.13, 0.05, -0.02], [1, 0.1, 0.08, 0.04, -0.025]],
-    eye: { r: 0.15, u: 0.6, rise: 0.16, yaw: 75, up: 0.4, inset: 0.3, bulge: 0.4, pupil: 'round', pupilR: 0.7, lidH: 0.8 } }),
+    eye: { r: 0.12, u: 0.6, at: [0.66, 0.6], elev: 25, yaw: 78, pupil: 'round', pupilR: 0.7, lidH: 0.8 } }),
   fore: { J0: [0.13, 0.24, -0.4], J2: [0.22, 0.03, -0.2], upper: 0.21, lower: 0.21, pole: [1, 0.2, -1], yaw: -10, R: [0.04, 0.032, 0.024, 0.022, 0.016], palm: { w: 0.024, h: 0.012, l: 0.03 }, digits: scaleD(FROG_HAND, 1.15), pad: 1.9 },
   hind: { hip: [0.08, 0.15, 0], knee: [0.3, 0.16, 0.3], heel: [0.2, 0.06, -0.08], tm: [0.3, 0.025, 0.16], yaw: 15, R: [0.07, 0.065, 0.035, 0.038, 0.024, 0.022, 0.018], palm: { w: 0.03, h: 0.012, l: 0.1 }, digits: scaleD(FROG_TOES, 0.85), pad: 1.8 },
 };
@@ -2763,7 +2774,7 @@ const T_TREEFROG = {
   body: [[0.2, 0.15, 0.09, 0.09], [0.33, 0.16, 0.1, 0.1], [0.5, 0.16, 0.11, 0.1], [0.7, 0.14, 0.12, 0.09], [0.85, 0.11, 0.09, 0.07], [0.95, 0.08, 0.06, 0.05], [1.0, 0.05, 0.04, 0.03]],
   head: frogHead({ len: 0.34,
     skull: [[0, 0.46, 0.2, 0.06, 0], [0.3, 0.5, 0.24, 0.06, 0.02], [0.55, 0.44, 0.22, 0.05, 0.01], [0.75, 0.33, 0.17, 0.05, -0.01], [0.9, 0.21, 0.12, 0.045, -0.02], [1, 0.1, 0.07, 0.04, -0.025]],
-    eye: { r: 0.22, u: 0.58, rise: 0.14, yaw: 68, up: 0.45, inset: 0.35, bulge: 0.55, pupil: 'slit', pupilR: 0.4, lidH: 0.75 } }),
+    eye: { r: 0.15, u: 0.58, at: [0.6, 0.66], elev: 30, yaw: 78, pupil: 'slit', pupilR: 0.4, lidH: 0.75 } }),
   fore: { J0: [0.12, 0.21, -0.4], J2: [0.18, 0.03, -0.22], upper: 0.21, lower: 0.21, pole: [1, 0.25, -1], yaw: -15, R: [0.035, 0.028, 0.02, 0.019, 0.014], palm: { w: 0.022, h: 0.011, l: 0.03 }, digits: scaleD(FROG_HAND, 1.2), pad: 2.0, web: 0.3 },
   hind: { hip: [0.07, 0.13, 0], knee: [0.26, 0.15, 0.32], heel: [0.16, 0.05, -0.06], tm: [0.24, 0.022, 0.18], yaw: 12, R: [0.06, 0.055, 0.03, 0.032, 0.02, 0.019, 0.016], palm: { w: 0.026, h: 0.011, l: 0.1 }, digits: scaleD(FROG_TOES, 0.85), pad: 1.9, web: 0.4 },
 };
@@ -2773,7 +2784,7 @@ const T_GLASSFROG = {
   ...T_TREEFROG,
   head: frogHead({ len: 0.36,
     skull: [[0, 0.5, 0.18, 0.06, 0], [0.3, 0.54, 0.22, 0.06, 0.02], [0.55, 0.48, 0.2, 0.05, 0.01], [0.75, 0.38, 0.15, 0.05, -0.01], [0.9, 0.25, 0.11, 0.045, -0.02], [1, 0.12, 0.07, 0.04, -0.025]],
-    eye: { r: 0.16, u: 0.66, rise: 0.15, yaw: 42, up: 0.5, inset: 0.3, bulge: 0.5, pupil: 'bar', pupilR: 0.35, lidH: 0.75 } }),
+    eye: { r: 0.13, u: 0.64, at: [0.54, 0.7], elev: 32, yaw: 55, pupil: 'bar', pupilR: 0.35, lidH: 0.75 } }),
   body: [[0.2, 0.16, 0.08, 0.08], [0.33, 0.18, 0.08, 0.09], [0.5, 0.18, 0.09, 0.09], [0.7, 0.16, 0.1, 0.08], [0.85, 0.12, 0.08, 0.06], [0.95, 0.08, 0.05, 0.04], [1.0, 0.05, 0.035, 0.03]],
 };
 
