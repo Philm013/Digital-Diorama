@@ -115,6 +115,8 @@ export class Actor {
   get radius() { return (this.model?.radius ?? 0.5) * this.root.scale.x; }
   get isFlyer() { return this.def.loco === 'fly'; }
   get isSwimmer() { return this.def.loco === 'swim' || this.def.water === 'column'; }
+  /** in water deep enough to swim (swimmers only; set as the actor follows the ground) */
+  wet = false;
   get moves() { return this.def.loco !== 'sessile' && this.def.loco !== 'scenery'; }
 
   applyDocTransform() {
@@ -406,6 +408,14 @@ export class Actor {
       }
       return;
     }
+    // Digital Diorama revision 11: a swimmer in the water swims (the herp rig's swim clip: tail sculling, legs folded
+    // or flippers beating), at the rate its stroke carries it; on land it walks
+    const swim = this.wet ? this.gaitMeta('swim') : null;
+    if (swim) {
+      if (rel > (swim.speed ?? 0.5) * 0.06) this.playGait('swim', this.relFast, 0.35);
+      else if (this.currentName === 'swim' || !this.currentName) this.play(this.idleClip(), 0.5);
+      return;
+    }
     if (this.gaitByStride(rel)) return;
     if (rel < 0.08) {
       if (['walk', 'trot', 'gallop'].includes(this.currentName) || !this.currentName) this.play(this.idleClip(), 0.35);
@@ -516,6 +526,7 @@ export class Actor {
       return;
     }
     if (this.isSwimmer) {
+      this.wet = w !== null && w > g + 0.2;
       if (w !== null && w > g + 0.2) {
         const top = w - Math.max(0.15, h * 0.6), bottom = g + 0.12;
         p.y = clamp(g + this.lift, bottom, Math.max(bottom, top));

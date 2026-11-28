@@ -170,8 +170,23 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         const fam = at && /\bfam:\s*(\w+)/.exec(text.slice(at[0], at[1]))?.[1];
         return fam && FAMILY_CONSTS.includes(fam) ? declaration(fam)(text) : null;
       };
+      // the measured reference table the preset is laid out from (`ref: REF.equid` → equid: {...} in const REF)
+      const refTable: Region['find'] = (text) => {
+        const at = preset(text);
+        const ref = at && [...text.slice(at[0], at[1]).matchAll(/\bref:\s*REF\.(\w+)/g)].pop()?.[1];
+        return ref ? objectEntry('const REF = {', ref)(text) : null;
+      };
       // (Digital Diorama revision 8: the elephant has its own builder and clips; every mammal shares the limb-root blend,
-      // the feet's line keeping, the girdle-drop smoothing and the gait tables)
+      // the feet's line keeping, the girdle-drop smoothing and the gait tables. Revision 10: the others are laid out from
+      // measured reference tables)
+      const measured = species === 'elephant' ? [] : [
+        region('Reference table (measured layout)', refTable),
+        region('Measured layout (refLayout)', declaration('refLayout')),
+        region('Measured legs (refLeg)', declaration('refLeg')),
+        region('Leg profiles (LEG)', declaration('LEG')),
+        region('Ground clearance (sit, lie)', declaration('clearGround')),
+        region('Tail on the ground', declaration('tailOnGround')),
+      ];
       const body = species === 'elephant' ? [
         region('Elephant builder', declaration('elephantBuild')),
         region('Elephant layout', declaration('eleLayout')),
@@ -203,6 +218,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
       add(def.path, 'mammal-rig.mjs', [
         region(`Species preset · ${species}`, preset),
         region('Family defaults', family),
+        ...measured,
         region('Defaults (DEF)', declaration('DEF')),
         ...body,
         region('Limb roots (blendLimbRoots)', declaration('blendLimbRoots')),
@@ -221,23 +237,52 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
       break;
     }
     case 'bird':
+      // (Digital Diorama revision 11: the bird rig rewritten from field measurements)
       add(def.path, 'bird-rig.mjs', [
         region(`Species preset · ${species}`, objectEntry('const SPECIES = {', species)),
-        region('Defaults (BDEF)', declaration('BDEF')),
-        region('Plumage painter', declaration('birdPaint')),
-        region('Body silhouettes', declaration('BODY_FORMS')),
-        region('Skull profiles', declaration('SKULL_FORMS')),
-        region('Builder', declaration('birdBuild')),
+        region('Families (torso, skull, legs)', declaration('FAMILIES')),
+        region('Bill shapes', declaration('BILLS')),
+        region('Plumage painter', declaration('makeBirdPainter')),
+        region('Builder (posture, body, eyes)', declaration('birdBuild')),
+        region('Bill', declaration('billBuild')),
+        region('Crests, tufts, combs, wattles', declaration('birdExtras')),
+        region('Tail', declaration('tailBuild')),
+        region('Folded wings', declaration('foldedWings')),
+        region('Spread wings', declaration('spreadWings')),
+        region('Legs and feet', declaration('legsBuild')),
         region('Clips', declaration('BIRD_CLIPS')),
-        region('Walk styles', declaration('WALK_STYLE')),
-        region('Walk (planted feet)', declaration('birdWalk')),
-        region('Walk set-up', declaration('birdGaitSetup')),
-        region('Leg reach (IK)', declaration('legReach')),
-        region('Proportion sliders (resolveSpec)', declaration('resolveSpec')),
+        region('Clip poses', declaration('birdSample')),
+        region('Walk set-up', declaration('birdMotion')),
+        region('Leg solver (IK)', declaration('birdLeg')),
+        region('Spec from measurements (specFor)', declaration('specFor')),
+        region('Mesh output (finish)', declaration('finish')),
       ]);
       if (!wildId) add('src/assets/data-birds.ts', 'data-birds.ts', [region(`Row · ${species}`, row(species))]);
       break;
-    case 'reptile':
+    case 'reptile': {
+      // (Digital Diorama revision 11: reptiles and amphibians on the herp rig: preset, its measured table, its body plan)
+      if (def.path.endsWith('herp-rig.mjs')) {
+        const preset = objectEntry('const SPECIES = {', species);
+        const fromPreset = (re: RegExp, wrap: (m: string) => string): Region['find'] => (text) => {
+          const at = preset(text), m = at && re.exec(text.slice(at[0], at[1]))?.[1];
+          return m ? declaration(wrap(m))(text) : null;
+        };
+        add(def.path, 'herp-rig.mjs', [
+          region(`Species preset · ${species}`, preset),
+          region('Measured table', fromPreset(/\bT:\s*(T_\w+)/, (m) => m)),
+          region('Body plan', fromPreset(/\bplan:\s*'(\w+)'/, (m) => `${m}Build`)),
+          region('Head', declaration('buildHead')),
+          region('Limbs', declaration('buildLimb')),
+          region('Painter', declaration('makePainter')),
+          region('Gaits (planted feet)', declaration('gaitSample')),
+          region('Snake clips', declaration('snakeSample')),
+          region('Turtle clips', declaration('cheloSample')),
+          region('Frog clips', declaration('frogSample')),
+          region('Parameters', declaration('params')),
+        ]);
+        if (!wildId) add('src/assets/data-reptiles.ts', 'data-reptiles.ts', [region(`Row · ${def.id.slice(8)}`, row(def.id.slice(8)))]);
+        break;
+      }
       add(def.path, def.path.split('/').pop()!, [
         region('Colours', declaration('BASE')),
         region('Colourways', declaration('COLORWAYS')),
@@ -247,6 +292,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
       ]);
       if (!wildId) add('src/assets/data-reptiles.ts', 'data-reptiles.ts', [region(`Row · ${def.id.slice(8)}`, row(def.id.slice(8)))]);
       break;
+    }
     case 'wildform': {
       const plan = extra.wildPlan;
       add(WILD_CATALOG, 'Animals catalog.ts', [region(`Species · ${wildId}`, call(`animal('${wildId}'`))]);

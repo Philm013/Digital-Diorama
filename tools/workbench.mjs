@@ -3,7 +3,7 @@
 //   node tools/workbench.mjs ui --id mammal/zebra --view side --tab code --out shots/wb/zebra-ui.png
 //   node tools/workbench.mjs sheet --ids mammal/zebra,mammal/tiger --views front34,side,front --out shots/wb
 //   node tools/workbench.mjs sheet --group Mammals --out shots/wb/mammals        (every animal in a library group)
-//   node tools/workbench.mjs sheet --ids bird/owl --params '{"specOverride":{"eye":0.34}}' --out shots/wb/owl-try
+//   node tools/workbench.mjs sheet --ids bird/owl --params '{"specOverride":{"eye":{"r":0.2}}}' --out shots/wb/owl-try
 //
 // `ui` captures the whole workbench (library, live view, photo, code); `sheet` saves one image per
 // animal: its reference photo beside the model from each view. --params patches the catalog params

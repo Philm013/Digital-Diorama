@@ -153,7 +153,7 @@ async function buildRaw(def: AssetDef, params: Record<string, unknown>): Promise
     if (fix && fix !== 1) { raw.scale.multiplyScalar(fix); raw.position.multiplyScalar(fix); }
   }
   let clips: THREE.AnimationClip[] = [];
-  if ((def.family === 'mammal' || def.family === 'bird') && mod.createClips) clips = mod.createClips(raw);
+  if ((def.family === 'mammal' || def.family === 'bird' || def.family === 'reptile') && mod.createClips) clips = mod.createClips(raw);
   else if (raw.animations?.length) clips = raw.animations;
   let rigSpec = (mod.rig ?? {}) as Proto['rigSpec'];
   if (def.family === 'wildform') rigSpec = (raw.userData.rig ?? {}) as Proto['rigSpec'];

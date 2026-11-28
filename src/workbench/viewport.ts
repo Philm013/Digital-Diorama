@@ -147,8 +147,9 @@ export class Viewport {
   }
   gridStep = 1;
 
-  view(name: ViewName | 'head' | 'headside') {
+  view(name: ViewName | 'head' | 'headside' | 'body' | 'bodyside') {
     if (name === 'head' || name === 'headside') { this.headView(name === 'headside'); return; }
+    if (name === 'body' || name === 'bodyside') { this.bodyView(name === 'bodyside'); return; }
     const dir = (VIEW_DIRS[name] ?? VIEW_DIRS.front34).clone().normalize();
     const dist = this.radius / Math.sin((this.camera.fov / 2) * DEG) * (name === 'top' || name === 'below' ? 0.92 : 1.0);
     this.camera.position.copy(this.center).addScaledVector(dir, dist);
@@ -167,8 +168,11 @@ export class Viewport {
     const bone = this.model.raw.getObjectByName('Head') ?? this.model.raw.getObjectByName('head');
     if (bone) head = bone.getWorldPosition(new THREE.Vector3());
     if (!head) head = new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y + size.y * 0.78, box.max.z - size.z * 0.12);
-    // frame about a fifth of the body (at least the head's own size)
-    const r = Math.max(Math.max(size.x, size.y, size.z) * 0.2, 1e-4);
+    // frame about a fifth of the body (at least the head's own size); no more than half again the head-to-chest
+    // distance, so the head of a long-tailed lizard or a snake still fills the view
+    const chest = this.model.raw.getObjectByName('Chest') ?? this.model.raw.getObjectByName('Spine4');
+    const neck = bone && chest ? bone.getWorldPosition(new THREE.Vector3()).distanceTo(chest.getWorldPosition(new THREE.Vector3())) * 1.5 : Infinity;
+    const r = Math.max(Math.min(Math.max(size.x, size.y, size.z) * 0.2, neck), 1e-4);
     const dir = (side ? new THREE.Vector3(1, 0.1, 0.05) : new THREE.Vector3(0.55, 0.18, 1)).normalize();
     const dist = r / Math.sin((this.camera.fov / 2) * DEG);
     // a bone sits inside the skull: aim a little ahead of it, toward the snout
@@ -176,6 +180,25 @@ export class Viewport {
     this.camera.position.copy(aim).addScaledVector(dir, dist);
     this.controls.target.copy(aim);
     this.camera.lookAt(aim);
+    this.controls.update();
+  }
+  /** the head and trunk without a long tail or neck stretching the frame: from the Head bone to the Hips (or the model) */
+  bodyView(side = false) {
+    if (!this.model) return;
+    const obj = this.model.object;
+    obj.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(obj, this.model.skinned);
+    const hb = this.model.raw.getObjectByName('Head'), pb = this.model.raw.getObjectByName('Hips');
+    const a = hb ? hb.getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3());
+    const b = pb ? pb.getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3());
+    const ctr = a.clone().lerp(b, 0.5);
+    const r = Math.max(a.distanceTo(b) * 0.75, box.getSize(new THREE.Vector3()).y * 0.6, 1e-4);
+    const dir = (side ? new THREE.Vector3(1, 0.12, 0.02) : new THREE.Vector3(0.75, 0.42, 1)).normalize();
+    const dist = r / Math.sin((this.camera.fov / 2) * DEG);
+    ctr.y = Math.max(ctr.y, box.min.y + r * 0.3);
+    this.camera.position.copy(ctr).addScaledVector(dir, dist);
+    this.controls.target.copy(ctr);
+    this.camera.lookAt(ctr);
     this.controls.update();
   }
   cameraState() { return { p: this.camera.position.toArray(), t: this.controls.target.toArray() }; }

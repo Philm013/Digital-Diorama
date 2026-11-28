@@ -34,15 +34,17 @@ for (const b of BIRDS) {
   add({
     id: `bird/${b.key}`, name: b.name, emoji: b.emoji, category: 'animals', group: 'Birds', family: 'bird', path: P.bird,
     params: { species: b.key, rigMode: 'skinned', mergeForProduction: true },
-    hidden: ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'bodyForm', 'specOverride', 'coat', 'coatGrain', 'shading'],
+    hidden: ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'specOverride', 'coat', 'coatGrain', 'shading'],
     loco: ground ? 'walk' : 'fly', biomes: b.biomes, info: b.info, speed: ground ? 0.8 : 3.5, lift: ground ? 0 : 0,
   });
 }
 /* ---------------- reptiles & amphibians ---------------- */
+export const HERP_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'coat', 'coatGrain', 'shading'];
 for (const r of REPTILES) {
   add({
     id: `reptile/${r.id}`, name: r.name, emoji: r.emoji, category: 'animals', group: r.info.class === 'Amphibia' ? 'Amphibians' : 'Reptiles', family: 'reptile',
-    path: P.reptile(r.id), params: { mergeForProduction: true }, hidden: ['mergeForProduction'], loco: r.loco, biomes: r.biomes, info: r.info,
+    // (Digital Diorama revision 11: every reptile and amphibian on the skinned herp rig, with clips)
+    path: P.herp, params: { species: r.id, rigMode: 'skinned', mergeForProduction: true }, hidden: HERP_HIDDEN, loco: r.loco, biomes: r.biomes, info: r.info,
     speed: r.loco === 'hop' ? 0.6 : r.loco === 'slither' ? 0.5 : 0.45, water: r.loco === 'swim' ? 'column' : undefined,
   });
 }

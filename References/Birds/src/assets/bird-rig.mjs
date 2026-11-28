@@ -1,54 +1,38 @@
 /*
- * BIRD RIG (High Detail) — procedural, skinned, swept-surface birds
- * A parametric low-poly generator for three.js: one import, no loader, no textures.
- * Family-specific torso lofts, S-curved necks, anatomical skulls (occiput, cranium, brow and
- * lores) whose face section flows unbroken into the upper mandible, hinged jaws (cone, hook,
- * flat, dagger, pouch, giant), feathered wing planforms with serrated trailing edges
- * and slotted primaries, fanned/forked/train tails with eyespots, crests, combs and
- * wattles, and perching, webbed, zygodactyl, taloned or ratite feet.
- * Each wing exists twice — folded on the flank and spread on humerus/forearm/hand
- * bones — and the clips swap them with bone-scale keys for clean silhouettes.
+ * BIRD RIG — procedural, skinned birds for three.js (Digital Diorama revision 11: rewritten from scratch)
+ * Every bird is laid out from field-guide measurements of an adult — total length, wingspan, wing chord, tail, tarsus,
+ * bill length and depth, head width and the neck as carried — and its family's measured outline. Body, neck and head
+ * are one continuous skin; the bill grows from the face; the folded wing lies on the flank as a feathered blade whose
+ * primaries reach over the tail, and a spread wing (coverts, secondaries, primaries, slotted fingers) replaces it in
+ * flight; the tail is a fan of rectrices; legs and toes follow the foot type. Plumage is painted by region (crown,
+ * nape, mantle, rump, throat, breast, belly, flank, cheek, lores, mask, collar) and feather tract (coverts, wing bars,
+ * speculum, secondaries, primaries) into one texture. Posture comes from the legs: the torso hangs from the hips at the
+ * species' pitch; where it would reach the ground the legs straighten, and only then does it tilt less (a penguin sits
+ * back on its tail instead). Tails fold like a roof (flat on most birds, nearly upright on a rooster) and grow from
+ * their coverts; long tails rest their tips on the ground.
  *
  * QUICK START
  *   import { createAsset, createClips } from './bird-rig.mjs';
- *   const eagle = createAsset({ species: 'eagle', mergeForProduction: true });
- *   const mixer = new THREE.AnimationMixer(eagle);
- *   mixer.clipAction(createClips(eagle).find(c => c.name === 'flap')).play();
+ *   const owl = createAsset({ species: 'owl', mergeForProduction: true });
+ *   scene.add(owl);
+ *   const mixer = new THREE.AnimationMixer(owl);
+ *   mixer.clipAction(createClips(owl).find(c => c.name === 'perch')).play();
  *
- * SPECIES  32 presets with species-specific torso and skull lofts: songbirds, pigeons, woodpeckers,
- *          kingfishers, parrots, owls, raptors, waders, waterfowl, alcids, ratites, galliforms,
- *          hummingbirds, pelicans, toucans, hornbills, albatrosses and gulls.
- * SPECS    6,412-9,016 triangles at standard detail; 1 solid
- *          material (+1 translucent for glass parts); merged = 1-2 draw calls.
- *          Real-world L x H x W (m): House Sparrow 0.138x0.114x0.048; European Robin
- *          0.128x0.111x0.05; Carrion Crow 0.41x0.315x0.131; Northern Cardinal
- *          0.189x0.161x0.058.
- *          +Z forward, +Y up, ground at y = 0; exact bounds in asset.userData.dimensions.
- * OPTIONS  species, size, age, body/leg/neck/head proportions, neck curve, beak length/
- *          depth/hook, eye size, wingspan, wing breadth, wing tip, tail length/spread/
- *          style, crest, feet, talons, variation, detail, rig mode, pose, colourway.
- * RIG      Root > Hips > Chest > Neck1 > Neck2 > Head > Jaw; Chest > WingL/R > Humerus >
- *          Forearm > Hand; Chest > WingFoldL/R; Hips > Tail; Hips > Thigh > Shin > Tarsus > Toe.
- * CLIPS    perch, walk, hop, peck, flap, glide. createClips(asset), setPose(asset, name, phase).
- * PARTS    animate: see `rig`; detach: crest, wings, wings-folded, tail, beak, eyes, legs, feet.
+ * SPECIES  37: sparrow, robin, american-robin, blue-jay, crow, cardinal, pigeon, mourning-dove, woodpecker,
+ *          downy-woodpecker, kingfisher, macaw, cockatoo, owl, barn-owl, eagle, falcon, flamingo, heron, crane, spoonbill,
+ *          stilt, swan, duck, puffin, penguin, ostrich, kiwi, turkey, rooster, peacock, hummingbird, pelican, toucan,
+ *          hornbill, albatross, seagull.
+ * RIG      Root > Hips > Chest > Neck1 > Neck2 > Head > Jaw; Chest > WingL/R > Humerus > Forearm > Hand;
+ *          Chest > WingFoldL/R; Hips > Tail; Hips > Thigh > Shin > Tarsus > Toe (L/R).
+ * CLIPS    perch (idle: saccadic head turns), walk (planted feet; head-bobbing pigeons, doves and fowl), hop, peck,
+ *          alert, flap, glide. The walk carries userData { gait, stride, speed, hipH }. createClips(asset),
+ *          setPose(asset, name, phase).
+ * OPTIONS  species, size, leg / neck / bill / tail length, head size, wingspan, colourway, painted plumage, feather
+ *          grain, seed, detail, rig mode, pose, shading, hide parts; specOverride deep-merges changes onto the species
+ *          preset (measurements M, palette, plume, bill, eye, wing, tail, extras).
+ * TEST     node tools/test-bird-rig.mjs — every species in every pose above the ground, clips, planted walk feet.
  * LICENSE  CC0 1.0 Universal — this module and all generated geometry.
- *
- * REVISION (Digital Diorama: realism)
- *   - Coat atlas: the plumage painter is rasterised into one texture per asset instead of one
- *     colour per quad, so caps, masks, bars and breast patches have smooth edges (see COAT ATLAS).
- *   - Smooth, crease-aware normals and glossy eyes. Options: coat, coatGrain, shading.
- *
- * REVISION 8 (Digital Diorama: planted feet)
- *   - The walk plants its feet: each toe tip stays put through the stance (the heel rolling up onto it at the
- *     end), then the foot is picked up, carried forward with its toes hanging and set down flat. The hip
- *     (protraction, retraction and abduction), knee and intertarsal joint reach it by inverse kinematics,
- *     the pelvis rolls and yaws by family (waddling waterfowl and penguins), and the head keeps its attitude,
- *     head-bobbers holding it still between thrusts. Stride and timing follow the leg (WALK_STYLE).
- *   - The walk clip carries { gait, stride, speed, hipH } like the mammals' gaits, so the app plays it at the
- *     rate that keeps the feet still (they slid about 1.8 hip heights a step).
- *   - Toes rest on the ground instead of 2-30 mm in it (ostrich, turkey, penguin worst).
  */
-
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -236,11 +220,14 @@ function loft(o) {
   const tangentAt = (u) => {
     const raw = curve.getTangentAt(clamp(u, 0, 1));
     if (bendK <= 0 || closed) return raw;
-    // bendMax caps the window as a fraction of the loft length. On a short loft (a songbird or parrot neck)
-    // a window wider than the loft tilts the rings beside a shared boundary ring, folding a collar crease.
-    const s = u * len, sig = Math.max(len * 0.004, Math.min(bendK * sizeAt(u), len * (o.bendMax ?? 1e9))), acc = V3();
+    const s = u * len, sig = Math.max(len * 0.004, bendK * sizeAt(u)), acc = V3();
     for (let i = 0; i <= NF; i++) { const d = (fs[i] - s) / sig; if (d * d < 9) acc.addScaledVector(ft[i], Math.exp(-d * d)); }
-    return acc.lengthSq() < 1e-12 ? raw : acc.normalize();
+    const t = acc.lengthSq() < 1e-12 ? raw : acc.normalize();
+    // Digital Diorama revision 10: `level(u)` (0..1) stands a section upright, its tangent turned level along the
+    // path's heading: a body measured as vertical slices keeps them so where the path rises into a steep neck
+    const lv = o.level ? o.level(u) : 0;
+    if (lv > 0) { const hz = V3(t.x, 0, t.z); if (hz.lengthSq() > 1e-12) t.lerp(hz.normalize(), lv).normalize(); }
+    return t;
   };
   const us = [], C = [], T = [];
   const KK = closed ? K - 1 : K;
@@ -267,6 +254,9 @@ function loft(o) {
       const a = (j / R) * TAU;
       let [x, y] = sePoint(a, w, ht, hb, nt, nb);
       if (bump) { const f = 1 + bump(u, a, x, y); x *= f; y *= f; }
+      // Digital Diorama extension: `sect` reshapes a section in its own plane (the torso's keeled chest,
+      // hanging belly and flat croup), returning the new [side, up] offsets
+      if (o.sect) [x, y] = o.sect(u, a, x, y, ht, hb);
       row.push(C[k].clone().addScaledVector(Sides[k], x + ox).addScaledVector(Ups[k], y + oy));
     }
     rows.push(row);
@@ -334,17 +324,17 @@ function emit(part, g, zone, skin) {
   const Wt = rows.map((row, k) => row.map((P, j) => sf(us[k], (j / R) * TAU, P)));
   // Digital Diorama revision: a painted loft becomes a coat-atlas patch (see COAT ATLAS)
   const pt = part.coat && typeof zone === 'function' ? loftPatch(g, zf) : null, T = pt && pt.t, L0 = pt ? pt.lead : 0;
+  // (herp rig: a loft may carry its own scale pattern for the atlas, `g.scales`; null = smooth skin)
+  if (pt && g.scales !== undefined) pt.scales = g.scales;
   const ctr = V3();
   const kEnd = g.closed ? nr : nr - 1;
   for (let k = 0; k < kEnd; k++) {
-    const k1 = (k + 1) % nr, uk = us[k], uk1 = g.closed && k1 === 0 ? 1 : us[k1];
+    const k1 = (k + 1) % nr, um = g.closed && k1 === 0 ? (us[k] + 1) / 2 : (us[k] + us[k1]) / 2;
     const t0 = pt ? T[k + L0] : 0, t1 = pt ? T[k + 1 + L0] : 0;
     for (let j = 0; j < R; j++) {
       const j1 = (j + 1) % R, A = rows[k][j], B = rows[k1][j], Cc = rows[k1][j1], D = rows[k][j1], s0 = j / R, s1 = (j + 1) / R;
-      // One zone per quad for the flat-colour fallback; painted lofts are rasterised into the coat atlas,
-      // so their patterns follow the surface (u, a) space instead of the mesh grid.
       ctr.copy(A).add(B).add(Cc).add(D).multiplyScalar(0.25);
-      const zn = zf((uk + uk1) / 2, ((j + 0.5) / R) * TAU, ctr);
+      const zn = zf(um, ((j + 0.5) / R) * TAU, ctr);
       part.tri(A, Cc, B, zn, Wt[k][j], Wt[k1][j1], Wt[k1][j], pt && [s0, t0, s1, t1, s0, t1], pt);
       part.tri(A, D, Cc, zn, Wt[k][j], Wt[k][j1], Wt[k1][j1], pt && [s0, t0, s1, t0, s1, t1], pt);
     }
@@ -407,6 +397,7 @@ function sheet(part, o) {
   }
   // Digital Diorama revision: a painted membrane becomes two coat-atlas patches, one per face
   const pF = part.coat && typeof o.zone === 'function' ? sheetPatch(F, zf, 1) : null, pB = pF && sheetPatch(B, zf, -1);
+  if (pF && o.scales !== undefined) { pF.scales = o.scales; pB.scales = o.scales; }
   for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
     const um = (i + 0.5) / nu, vm = (j + 0.5) / nv, zF = zf(um, vm, 1), zB = zf(um, vm, -1);
     const w = [Wt[i][j], Wt[i + 1][j], Wt[i + 1][j + 1], Wt[i][j + 1]];
@@ -532,10 +523,28 @@ function mixW(A, B, t) {
 
 /* ── clips & poses: samples are { Bone: [rx, ry, rz] degrees | { r: [...], p: [dx, dy, dz] } } ── */
 const _e = new THREE.Euler(), _q = new THREE.Quaternion();
-function bakeClip(info, name, duration, frames, sample, loop = true) {
+/** Bakes a clip from sample(u), 0..1, at `frames` even keys; with `refine`, also wherever the joints turn fast (see below). */
+function bakeClip(info, name, duration, frames, sample, loop = true, refine = false) {
   const times = [], samples = [];
-  for (let i = 0; i < frames; i++) { const u = i / (frames - 1); times.push(u * duration); samples.push(sample(loop ? u % 1 : u) || {}); }
-  if (loop) samples[frames - 1] = samples[0];
+  let us = Array.from({ length: frames }, (_, i) => i / (frames - 1)), ss = us.map(u => sample(loop ? u % 1 : u) || {});
+  if (loop) ss[frames - 1] = ss[0];
+  // Digital Diorama revision 8: a key half way between two keys wherever the joints turn so fast between them (a leg near
+  // full stretch at the end of a gallop's stance swung its thigh 22° in one key) that interpolating their rotations moves
+  // a planted foot off its place (a giraffe's sank 2 cm); up to three times, so a fast stretch gets up to seven keys more
+  if (refine) {
+    // intervals to check: every one at first, then only the halves of those just split
+    let todo = us.slice(0, -1).map((_, i) => i);
+    for (let pass = 0; pass < 3 && todo.length; pass++) {
+      const add = [];
+      for (const i of todo) { const m = (us[i] + us[i + 1]) / 2, sm = sample(loop ? m % 1 : m) || {}; if (sampleGap(info, ss[i], ss[i + 1], sm) > 1.5) add.push([i, m, sm]); }
+      // insert from the end so the earlier indices stay valid, and list the two halves for the next pass
+      const next = [];
+      for (let k = add.length - 1; k >= 0; k--) { const [i, m, sm] = add[k]; us.splice(i + 1, 0, m); ss.splice(i + 1, 0, sm); }
+      add.forEach(([i], k) => { const at = i + k; next.push(at, at + 1); });
+      todo = next;
+    }
+  }
+  for (let i = 0; i < us.length; i++) { times.push(us[i] * duration); samples.push(ss[i]); }
   const tracks = [];
   for (const b of info.bones) {
     const rq = [], pv = [];
@@ -556,6 +565,14 @@ function bakeClip(info, name, duration, frames, sample, loop = true) {
   const clip = new THREE.AnimationClip(name, duration, tracks);
   clip.userData = { loop };
   return clip;
+}
+/** The most any bone's rotation in sample `m` differs (degrees) from half way between samples `a` and `b`. */
+const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qm = new THREE.Quaternion();
+function sampleGap(info, a, b, m) {
+  const quat = (s, n, q) => { const v = s[n], r = !v ? null : Array.isArray(v) ? v : v.r; _e.set((r ? r[0] : 0) * DEG, (r ? r[1] : 0) * DEG, (r ? r[2] : 0) * DEG, 'YXZ'); return q.setFromEuler(_e); };
+  let worst = 0;
+  for (const n of info.bones) { quat(a, n, _qa).slerp(quat(b, n, _qb), 0.5); worst = Math.max(worst, _qa.angleTo(quat(m, n, _qm)) / DEG); }
+  return worst;
 }
 function applySample(rig, sample) {
   for (const e of rig.list) {
@@ -619,7 +636,8 @@ function sheetPatch(G, zf, face) {
 /** Paints every patch used by `parts` into one atlas; returns the texture and each patch's tile. */
 function paintAtlas(parts, cfg, hexOf) {
   const patches = [], seen = new Set();
-  for (const part of parts) for (const pt of part.pt) if (pt && !seen.has(pt)) { seen.add(pt); pt.k = part.coatK || 1; pt.gloss = part.name === 'eyes' ? 0.2 : 1; patches.push(pt); }
+  // (herp rig: `cfg.gloss` makes wet amphibian skin shinier; eyes are always glossy)
+  for (const part of parts) for (const pt of part.pt) if (pt && !seen.has(pt)) { seen.add(pt); pt.k = part.coatK || 1; pt.gloss = part.name === 'eyes' ? 0.2 : (cfg.gloss ?? 1); patches.push(pt); }
   if (!patches.length) return null;
   const mn = V3(Infinity, Infinity, Infinity), mx = V3(-Infinity, -Infinity, -Infinity), q = V3();
   for (const part of parts) for (let i = 0; i < part.p.length; i += 3) { q.set(part.p[i], part.p[i + 1], part.p[i + 2]); mn.min(q); mx.max(q); }
@@ -699,6 +717,37 @@ function creaseTile() {
   return (CREASE2 = F);
 }
 
+/**
+ * Digital Diorama revision 10 (herp rig): scales. A periodic tile of a staggered lattice of rounded scales (rows offset by
+ * half a scale, a little jittered), storing for each texel its distance to the nearest scale's edge (f2 - f1) and to its
+ * centre (f1). paintPatch darkens the seams between scales and lightens their crowns. `kind`: 'granular' (round beads:
+ * geckos, chameleons, Gila-like lizards), 'keeled' (scales longer than wide, rows along the body: snakes, iguanas, most
+ * lizards), 'plates' (large squarish shields: crocodilian backs, tortoise legs, snake bellies).
+ */
+const SCALE_TILE = 128;
+const SCALE_TILES = new Map();
+function scaleTile(kind) {
+  if (SCALE_TILES.has(kind)) return SCALE_TILES.get(kind);
+  const N = SCALE_TILE, C = kind === 'plates' ? 6 : 12, F = new Float32Array(N * N * 2);
+  // (keeled scales are longer along the body, the patch's rows)
+  const ax = kind === 'keeled' ? 0.72 : 1, jit = kind === 'granular' ? 0.22 : kind === 'plates' ? 0.08 : 0.1;
+  const wr = (i) => ((i % C) + C) % C;
+  // lattice point (i, j): column i, row j, odd rows shifted by half a column ('plates' are not staggered)
+  const site = (i, j) => [i + 0.5 + (kind === 'plates' ? 0 : (wr(j) % 2) * 0.5) + jit * (hash3(wr(i), wr(j), 0, 91) - 0.5), j + 0.5 + jit * (hash3(wr(i), wr(j), 0, 92) - 0.5)];
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const px = ((x + 0.5) / N) * C, py = ((y + 0.5) / N) * C, cx = Math.floor(px), cy = Math.floor(py);
+    let f1 = 9, f2 = 9;
+    for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) {
+      const [sx, sy] = site(cx + dx, cy + dy), ddx = sx - px, ddy = (sy - py) * ax;
+      const d = kind === 'plates' ? Math.max(Math.abs(ddx), Math.abs(ddy)) : Math.hypot(ddx, ddy);
+      if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
+    }
+    F[(y * N + x) * 2] = f2 - f1; F[(y * N + x) * 2 + 1] = f1;
+  }
+  SCALE_TILES.set(kind, F);
+  return F;
+}
+
 function paintPatch(pt, tile, data, AW, shade, soft, crease = null) {
   const { grid, K, J, t, at, zoneAt, wrap } = pt, { x: X0, y: Y0, w, h } = tile, A = Math.round(255 * (pt.gloss ?? 1));
   const rowK = new Int32Array(h), rowF = new Float32Array(h), colJ = new Int32Array(w), colF = new Float32Array(w);
@@ -724,7 +773,13 @@ function paintPatch(pt, tile, data, AW, shade, soft, crease = null) {
   // creases (see creaseTile): cells about `crease.cell` texels across; round a loft a whole number of tiles, so the net
   // closes on itself; offset per patch
   let ct = null, sx = 1, sy = 1, ox = 0, oy = 0, cwid = 0, cdark = 1;
-  if (crease) {
+  // (herp rig: a patch may carry its own scale patterns, `pt.scales` (one set, or several each on its own zones), or none)
+  const sc0 = pt.scales === undefined ? crease && crease.kind ? crease : null : pt.scales;
+  const scs = (Array.isArray(sc0) ? sc0 : sc0 ? [sc0] : []).map((sc) => {
+    const st = scaleTile(sc.kind), N = SCALE_TILE, C = sc.kind === 'plates' ? 6 : 12, s = (N / C) / sc.cell;
+    return { sc, st, ssy: s * (sc.stretch ?? 1), ssx: wrap ? (N * Math.max(1, Math.round((w * s) / N))) / w : s };
+  });
+  if (crease && !crease.kind) {
     ct = creaseTile(); const N = CREASE_TILE, s = (N / CREASE_CELLS) / crease.cell;
     sy = s; sx = wrap ? (N * Math.max(1, Math.round((w * s) / N))) / w : s;
     ox = (pt.K * 37 + pt.J * 11) % N; oy = (pt.K * 13 + pt.J * 29) % N; cwid = crease.width; cdark = crease.dark;
@@ -737,6 +792,15 @@ function paintPatch(pt, tile, data, AW, shade, soft, crease = null) {
       shade(zz, P, rgb, (y * w + x) * 3);
       if (ct && crease.zones.includes(zz) && ct[((Math.floor(y * sy) + oy) % CREASE_TILE) * CREASE_TILE + ((Math.floor(x * sx) + ox) % CREASE_TILE)] < cwid) {
         const o = (y * w + x) * 3; rgb[o] *= cdark; rgb[o + 1] *= cdark; rgb[o + 2] *= cdark;
+      }
+      for (const { sc, st, ssx, ssy } of scs) {
+        if (sc.zones && !sc.zones.includes(zz)) continue;
+        const i = (((Math.floor(y * ssy) + oy) % SCALE_TILE) * SCALE_TILE + ((Math.floor(x * ssx) + ox) % SCALE_TILE)) * 2;
+        const e = st[i], c = st[i + 1], o = (y * w + x) * 3;
+        // seams dark, crowns a little lighter
+        const k = e < sc.width ? sc.dark : 1 + (sc.light ?? 0.08) * Math.max(0, 1 - c / 0.38);
+        rgb[o] *= k; rgb[o + 1] *= k; rgb[o + 2] *= k;
+        break;
       }
     }
   }
@@ -942,7 +1006,8 @@ function finish(build, opt) {
   if (smooth && opt.seamRadius) {
     const body = live.find(p => p.name === 'body' && !p.glass);
     if (body) for (const p of live) if (/^leg-/.test(p.name) && !p.glass) blendSeamNormals(geoOf.get(body), geoOf.get(p), opt.seamRadius);
-    // (Digital Diorama revision 8: other parts that meet along a shared row, such as the elephant's face and trunk)
+    // (Digital Diorama revision 8: other parts that meet along a shared row, such as the elephant's face and trunk;
+    // revision 9: the skull where it meets the neck, so the join behind the ears shades as one surface)
     for (const [a, b] of opt.seams || []) { const A = live.find(p => p.name === a && !p.glass), Bp = live.find(p => p.name === b && !p.glass); if (A && Bp) blendSeamNormals(geoOf.get(A), geoOf.get(Bp), opt.seamRadius * 0.5); }
   }
   for (const glass of [false, true]) {
@@ -1053,1181 +1118,1145 @@ function withZones(geo, labels, base) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
- *  TORSO PROFILES — posterior to anterior stations: [u, half-width, back, belly,
- *  centre height]. Width is relative to bodyW/2; heights are relative to bodyH.
- *  These are anatomical silhouettes, not a scale transform of one universal egg.
+ *  BIRD RIG — +Z forward, +Y up, the bird's left = +X, ground at y = 0. Every species is laid out from field-guide
+ *  measurements of an adult (cm; see SPECIES): the torso, head, bill, legs, tail and wings in true proportion.
  * ════════════════════════════════════════════════════════════════════════════ */
-const BODY_FORMS = {
-  songbird: [[0,.22,.22,.24,-.02],[.2,.74,.37,.47,-.02],[.44,.96,.43,.56,0],[.68,1,.42,.54,0],[.85,.78,.36,.45,.02],[1,.43,.29,.38,.04]],
-  robin: [[0,.26,.26,.31,-.03],[.2,.84,.42,.55,-.02],[.47,1.05,.49,.64,0],[.69,.98,.46,.63,.01],[.86,.76,.4,.5,.03],[1,.43,.31,.42,.05]],
-  corvid: [[0,.2,.22,.2,-.02],[.18,.64,.37,.39,0],[.4,.87,.42,.48,0],[.67,1.08,.46,.57,0],[.85,.93,.39,.53,.02],[1,.46,.29,.39,.03]],
-  cardinal: [[0,.19,.2,.23,-.02],[.22,.75,.38,.47,0],[.46,.99,.47,.58,0],[.7,1.05,.46,.63,.01],[.86,.83,.38,.53,.02],[1,.44,.3,.4,.04]],
-  parrot: [[0,.23,.26,.23,0],[.23,.82,.43,.42,0],[.48,1.02,.52,.53,0],[.72,.98,.51,.6,0],[.87,.79,.42,.55,.01],[1,.46,.31,.42,.03]],
-  owl: [[0,.39,.36,.37,-.01],[.18,.76,.48,.53,0],[.43,1.03,.55,.6,0],[.67,1.04,.55,.62,0],[.85,.86,.47,.55,.02],[1,.55,.35,.43,.04]],
-  raptor: [[0,.21,.23,.23,-.01],[.19,.68,.37,.39,0],[.42,.88,.46,.5,0],[.68,1.08,.52,.67,0],[.85,.96,.46,.68,.02],[1,.5,.34,.5,.04]],
-  wader: [[0,.21,.21,.2,0],[.2,.65,.36,.31,0],[.48,.94,.42,.37,0],[.69,1,.39,.41,0],[.86,.73,.32,.39,.02],[1,.38,.25,.3,.03]],
-  flamingo: [[0,.32,.29,.25,0],[.19,.82,.42,.38,0],[.44,1.04,.45,.47,0],[.67,.99,.43,.5,0],[.85,.78,.37,.44,.02],[1,.43,.27,.32,.04]],
-  spoonbill: [[0,.25,.25,.24,0],[.2,.74,.37,.39,0],[.47,1.02,.43,.47,0],[.71,1.07,.41,.51,0],[.87,.77,.34,.45,.02],[1,.43,.27,.33,.04]],
-  waterfowl: [[0,.32,.26,.3,0],[.18,.87,.37,.45,-.02],[.46,1.07,.43,.54,0],[.69,1,.42,.56,0],[.87,.76,.34,.49,.02],[1,.44,.26,.39,.04]],
-  swan: [[0,.37,.31,.32,0],[.18,.86,.42,.49,0],[.42,1.06,.43,.55,0],[.68,1.02,.4,.58,0],[.86,.8,.36,.55,.01],[1,.44,.28,.42,.04]],
-  penguin: [[0,.34,.27,.29,-.02],[.19,.75,.41,.48,0],[.42,1.07,.49,.58,0],[.65,1.04,.51,.61,0],[.85,.76,.4,.49,0],[1,.44,.3,.35,.02]],
-  ratite: [[0,.33,.26,.3,0],[.2,.87,.42,.52,0],[.42,1.18,.51,.61,0],[.63,1.08,.5,.57,0],[.83,.67,.37,.41,.02],[1,.37,.24,.31,.04]],
-  galliform: [[0,.28,.3,.3,0],[.18,.81,.42,.45,0],[.42,1.1,.51,.55,0],[.68,1.03,.49,.62,0],[.86,.84,.4,.58,.02],[1,.49,.3,.46,.04]],
-  peafowl: [[0,.27,.28,.29,0],[.18,.81,.42,.46,0],[.43,1.05,.49,.53,0],[.69,.98,.46,.59,0],[.86,.77,.37,.49,.02],[1,.43,.28,.38,.04]],
-  hummingbird: [[0,.19,.17,.17,0],[.22,.67,.31,.32,0],[.46,.95,.42,.43,0],[.71,.99,.44,.5,0],[.86,.72,.32,.41,.02],[1,.39,.24,.31,.03]],
-  pelican: [[0,.31,.29,.29,0],[.17,.81,.41,.43,0],[.42,1.07,.45,.59,0],[.68,1.1,.48,.72,0],[.86,.86,.39,.65,.02],[1,.45,.29,.45,.04]],
-  toucan: [[0,.22,.23,.23,0],[.2,.72,.38,.42,0],[.45,1,.45,.53,0],[.7,1.02,.45,.6,0],[.86,.8,.39,.54,.01],[1,.44,.3,.39,.03]],
-  gull: [[0,.19,.22,.2,0],[.18,.7,.35,.37,0],[.44,1,.42,.47,0],[.68,.98,.39,.48,0],[.85,.76,.33,.43,.02],[1,.43,.27,.33,.03]],
+const BASE = {
+  body: '#7a6a52', belly: '#e8e0d0', wing: '#6a5a44', flight: '#3e3428', head: '#7a6a52', face: '#e8e0d0', accent: '#c8a040',
+  beak: '#3a3530', jaw: '#3a3530', leg: '#c49a7a', eye: '#1a120a', pupil: '#050505',
 };
-
-/* ════════════════════════════════════════════════════════════════════════════
- *  SKULL PROFILES — occiput (0) to bill base (1): [u, half-width, crown, cheek,
- *  centreline]. Units are multiples of the head radius; the final station is
- *  appended from the bill's own cross-section so the culmen runs unbroken from
- *  forehead to bill tip. `len` is the occiput→bill-base distance in head radii.
- * ════════════════════════════════════════════════════════════════════════════ */
-const SKULL_FORMS = {
-  songbird:    { len: 1.5,  p: [[0,.6,.58,.58,0],[.3,.95,.95,.82,.03],[.6,.86,.84,.7,0],[.84,.66,.6,.46,-.06]] },
-  robin:       { len: 1.42, p: [[0,.62,.6,.6,0],[.3,.99,.99,.88,.04],[.6,.88,.88,.74,.01],[.85,.66,.6,.48,-.05]] },
-  corvid:      { len: 1.78, p: [[0,.62,.58,.58,0],[.28,.92,.86,.8,.02],[.58,.84,.78,.68,-.01],[.85,.62,.52,.44,-.08]] },
-  cardinal:    { len: 1.46, p: [[0,.6,.6,.58,0],[.3,.96,1,.84,.04],[.62,.86,.88,.7,.01],[.85,.64,.6,.46,-.05]] },
-  parrot:      { len: 1.34, p: [[0,.64,.62,.62,0],[.26,1,1.02,.92,.04],[.5,.98,.98,.88,.02],[.72,.86,.8,.74,-.06],[.88,.72,.56,.58,-.16]] },
-  owl:         { len: 1.32, faceMax: 1.9, p: [[0,.72,.66,.66,0],[.26,1.02,1,.96,.02],[.56,1.04,.98,.98,0],[.82,.88,.82,.82,-.04]] },
-  raptor:      { len: 1.62, p: [[0,.64,.6,.62,0],[.26,.98,.92,.88,.02],[.52,.96,.92,.8,.01],[.74,.8,.74,.62,-.06],[.9,.6,.5,.44,-.14]] },
-  wader:       { len: 1.86, p: [[0,.56,.52,.54,0],[.28,.88,.78,.74,.01],[.58,.8,.7,.62,-.02],[.85,.6,.48,.4,-.08]] },
-  flamingo:    { len: 1.6,  p: [[0,.58,.56,.58,0],[.28,.9,.84,.8,.02],[.56,.86,.78,.76,0],[.84,.72,.62,.62,-.08]] },
-  spoonbill:   { len: 1.84, p: [[0,.56,.54,.56,0],[.28,.88,.76,.76,.01],[.58,.82,.68,.66,-.02],[.86,.64,.5,.46,-.09]] },
-  waterfowl:   { len: 1.76, p: [[0,.62,.56,.6,0],[.28,.92,.8,.82,0],[.6,.86,.72,.72,-.02],[.85,.7,.56,.52,-.08]] },
-  swan:        { len: 1.88, p: [[0,.6,.56,.6,0],[.28,.9,.78,.82,0],[.58,.86,.7,.74,-.02],[.86,.74,.56,.58,-.06]] },
-  penguin:     { len: 1.82, p: [[0,.66,.6,.62,0],[.28,.96,.88,.86,.01],[.58,.9,.8,.76,-.01],[.85,.7,.58,.52,-.08]] },
-  ratite:      { len: 1.62, p: [[0,.58,.54,.56,0],[.3,.9,.78,.78,0],[.62,.82,.68,.66,-.02],[.86,.64,.5,.46,-.08]] },
-  galliform:   { len: 1.5,  p: [[0,.6,.58,.58,0],[.28,.94,.9,.8,.02],[.58,.84,.8,.68,0],[.84,.64,.56,.44,-.08]] },
-  peafowl:     { len: 1.52, p: [[0,.6,.58,.58,0],[.28,.92,.9,.78,.03],[.6,.84,.8,.66,0],[.85,.64,.56,.44,-.07]] },
-  hummingbird: { len: 1.38, p: [[0,.58,.56,.56,0],[.3,.94,.92,.84,.02],[.62,.82,.78,.66,-.01],[.86,.58,.48,.4,-.06]] },
-  pelican:     { len: 1.84, p: [[0,.62,.56,.6,0],[.26,.9,.78,.8,0],[.58,.84,.7,.72,-.02],[.86,.72,.56,.56,-.08]] },
-  hornbill:    { len: 1.48, p: [[0,.6,.58,.58,0],[.28,.94,.88,.8,.02],[.56,.88,.82,.72,0],[.84,.74,.7,.56,-.05]] },
-  toucan:      { len: 1.3,  p: [[0,.6,.58,.58,0],[.26,.94,.94,.82,.03],[.52,.9,.9,.76,.01],[.74,.82,.8,.62,-.03],[.9,.74,.68,.5,-.08]] },
-  gull:        { len: 1.7,  p: [[0,.6,.56,.58,0],[.28,.92,.84,.78,.02],[.58,.84,.76,.66,0],[.85,.64,.54,.44,-.08]] },
-};
-
-/* ════════════════════════════════════════════════════════════════════════════
- *  BIRD BUILDER — +Z forward, +Y up, left = +X, ground at y = 0. Lengths are
- *  multiples of the body length L (tail base → breast). Wings exist twice: a
- *  folded wing lying on the flank and a spread planform skinned to humerus /
- *  forearm / hand; clips swap them with bone-scale keys.
- * ════════════════════════════════════════════════════════════════════════════ */
-function birdBuild(B, S) {
-  const rig = B.rig, det = B.det, L = S.L, paint = B.paint;
-  const P = S.pitch * DEG, fwd = V3(0, Math.sin(P), Math.cos(P)), upb = V3(0, Math.cos(P), -Math.sin(P));
-  const legH = S.legLen * L + S.thigh * L * 0.5, bodyH = S.bodyH * L, bodyW = S.bodyW * L;
-  const C0 = V3(0, legH + bodyH * 0.42, 0);
-  const bp = (s, k = 0) => C0.clone().addScaledVector(fwd, (s - 0.5) * L).addScaledVector(upb, k * bodyH);
-  const profile = BODY_FORMS[S.bodyForm] || BODY_FORMS.songbird;
-  const W = prof(profile.map(k => [k[0], k[1]])), HT = prof(profile.map(k => [k[0], k[2]]));
-  const HB = prof(profile.map(k => [k[0], k[3]])), CY = prof(profile.map(k => [k[0], k[4]]));
-  const ringRes = 2 * Math.round(8 * det + 3);
-  const nl = S.neckLen * L, hr = S.headR * L;
-  const nc = S.neckCurve || 0, na = S.neckAng;
-  // Derived necks curl forward at the top toward the head's carriage; otherwise the skull would have to turn
-  // ~60 degrees within one head radius and its rings would fold into a crease at the throat.
-  // A short neck takes as much of the neck-to-head turn as it can afford without folding (about its length
-  // over 1.35x its radius), spread evenly along it, so the skull is left a gentler bend; long necks keep their
-  // S-profile with a partial curl at the top.
-  const shortTurn = S.neckLen < 0.3 ? Math.min((na + S.headAng) * (S.neckCurl ?? 0.6), (nl / (1.35 * hr * (S.neckThin ?? (S.neckLen < .15 ? .86 : .66)))) / DEG) : 0;
-  const shapeKeys = S.neckShape ? S.neckShape.map(k => k.slice())
-    : S.neckLen < 0.3 ? [[0, na - 18 * nc], [1, na - 18 * nc - Math.max(0, shortTurn)]]
-    : [[0, na - 18 * nc], [0.45, na + 22 * nc], [1, lerp(na - 25 * nc, -S.headAng, (S.neckCurl ?? 0.4) * sstep(0.25, 0.6, S.neckLen))]];
-  const meanAng = shapeKeys.reduce((s, k) => s + k[1], 0) / shapeKeys.length, amp = 1 + (S.neckCurveAdj || 0);
-  const thetaAt = prof(shapeKeys.map(([s, d]) => [s, meanAng + (d - meanAng) * amp]));
-  // Short-necked birds carry thick necks, but only the very shortest (owls, penguins) are as wide as
-  // the skull; at 0.2 the neck is clearly visible and must stay narrower than the head it supports.
-  const nr1 = hr * (S.neckThin ?? (S.neckLen < .15 ? .86 : S.neckLen < .45 ? .66 : .52));
-  const baseFactor = S.neckBase ?? (S.neckLen < .45 ? 1.15 : S.neckLen > .8 ? 1.32 : 1.48);
-  // a short neck finishes close to the skull's size (raptor and corvid hackles), so the head flows into it
-  const nrBase = nr1 * baseFactor, nrTop = Math.max(nr1 * (S.neckNape ?? 1.08), S.neckLen < 0.3 ? hr * 0.84 : 0);
-  const rootR = Math.min(Math.max(nrBase * 1.05, Math.min(bodyH, bodyW) * (S.neckRootR ?? 0.25)), bodyW * .43);
-  const flareU = clamp((S.neckFlare ?? 0.32) * Math.max(1, 0.55 / Math.max(S.neckLen, 0.05)), 0.2, 0.75);
-  const neckR = (u) => {
-    // a short neck is only a fairing between shoulder and skull: any waist on it reads as a collar groove
-    if (S.neckLen < 0.3) return lerp(rootR, nrTop, sstep(0, 1, u));
-    const taper = lerp(nrBase, nr1, sstep(flareU * 0.6, 0.72, u));
-    return u < flareU ? lerp(rootR, taper, sstep(0, flareU, u)) : lerp(taper, nrTop, sstep(0.78, 1, u));
-  };
-  // The last body station and first neck station share a centre, radius, radial frame, and vertices.
-  // Its tangent starts at the anterior shoulder, preventing a welded-looking collar.
-  const rootAngle = thetaAt(0) * DEG;
-  const neckStart = () => bp(S.neckRootU ?? .84, CY(S.neckRootU ?? .84))
-    .add(V3(0, Math.sin(rootAngle), Math.cos(rootAngle)).multiplyScalar(L * (S.neckJoinLength ?? (S.neckLen < .45 ? lerp(.07, .11, clamp(Math.abs(rootAngle - P) / (45 * DEG), 0, 1)) : .18))));
-  // The egg profile's front cap would narrow below the neck before widening back to it, cutting a collar
-  // groove round the neck base; near the junction the body never shrinks below the neck root.
-  // smooth max: a hard max would stop the taper dead and leave a convex kink ring
-  const smax = (x, y, k) => 0.5 * (x + y + Math.sqrt((x - y) * (x - y) + k * k));
-  const floorN = (v, nv, u) => smax(v, nv * sstep(0.6, 0.85, u), nv * 0.12);
-  const mkBody = () => loft({ pts: [0, .25, .5, .75, .84].map(u => bp(u, CY(u))).concat([neckStart()]), seg: Math.round(26 * det), rad: ringRes, up: upb,
-    w: (u) => lerp(floorN(W(u) * bodyW * 0.5, neckR(0) * .92, u), neckR(0) * .92, sstep(.7, 1, u)),
-    ht: (u) => lerp(floorN(HT(u) * bodyH, neckR(0), u), neckR(0), sstep(.7, 1, u)),
-    hb: (u) => lerp(floorN(HB(u) * bodyH, neckR(0) * 1.02, u), neckR(0) * 1.02, sstep(.7, 1, u)),
-    cap0: { type: 'round', len: 0.65, n: 3 }, cap1: 'open', bend: 0,
-    bump: S.fluff ? (u, a) => S.fluff * (vnoise(u * 30, a * 4, 0, 5) - 0.5) : null });
-  let body = mkBody();
-  // Ground clearance: upright or steeply pitched bodies (penguins, owls) must rest on their legs, not
-  // sink through the floor. Raise the body until its lowest point and its tail tip clear the ground;
-  // the legs are built afterwards, so they automatically span the real gap.
-  {
-    let low = Infinity; for (const row of body.rows) for (const p of row) low = Math.min(low, p.y);
-    const T0 = S.tail, lift = (T0.lift ?? Math.max(0, S.pitch * 0.8 + 2)) * DEG;
-    const td = fwd.clone().multiplyScalar(-1).addScaledVector(upb, Math.tan(lift)).normalize();
-    const tailLow = bp(0, 0.12).y + Math.min(0, td.y) * Math.min(T0.len, 0.6) * L; // long trains/sickles may brush the ground
-    const clear = (S.groundClear ?? 0.02) * L, need = Math.max(clear - low, clear * 0.5 - tailLow);
-    if (need > 0) { C0.y += need; body = mkBody(); }
-  }
-  rig.add('Root', null, [0, 0, 0]);
-  rig.add('Hips', 'Root', bp(0.3, 0.1));
-  rig.add('Chest', 'Hips', bp(0.72, 0.15));
-  // The S-curve's tangent is integrated along arc length from the body's anterior shoulder.
-  const N0 = neckStart(), NSEG = 28, npts = [N0.clone()];
-  for (let i = 0; i < NSEG; i++) {
-    const th = thetaAt((i + 0.5) / NSEG) * DEG;
-    npts.push(npts[i].clone().add(V3(0, Math.sin(th), Math.cos(th)).multiplyScalar(nl / NSEG)));
-  }
-  const neck = loft({
-    pts: npts, seg: Math.round((14 + 12 * S.neckLen) * det), rad: ringRes,
-    w: (u) => neckR(u) * 0.92, ht: (u) => neckR(u), hb: (u) => neckR(u) * 1.02,
-    // the integrated theta(s) path is already smooth; raw tangents keep the shared end rings untilted
-    up: [0, 1, 0], cap0: 'open', cap1: 'open', bend: 0
-  });
-  neck.rows[neck.main[0]] = body.rows[body.main[1]];
-  const nc1 = makePath(npts);
-  rig.add('Neck1', 'Chest', nc1.getPointAt(0.3)); rig.add('Neck2', 'Neck1', nc1.getPointAt(0.68));
-  // skull: one swept surface from the occiput through the cranium, brow and lores that ends on the
-  // exact cross-section of the bill base. The upper mandible then reuses that ring vertex-for-vertex,
-  // so the culmen is a single unbroken line from forehead to bill tip instead of a cone in a sphere.
-  const ha = S.headAng * DEG, hd = V3(0, -Math.sin(ha), Math.cos(ha)), hu = V3(0, Math.cos(ha), Math.sin(ha));
-  const neckEnd = npts[npts.length - 1];
-  const tEnd = neckEnd.clone().sub(npts[npts.length - 2]).normalize();
-  rig.add('Head', 'Neck2', neckEnd);
-  const Bk = S.beak, bl = Bk.len * hr, bw = Bk.w * hr, bh = Bk.h * hr;
-  const spoonWidth = Bk.spoon ?? 1.8, lowerK = Bk.style === 'spoon' ? 0.42 : 0.25;
-  // flat: parallel-sided, rounding off over the last few percent (duck nail, pelican hook) rather than a
-  // square-cut end. spoon: narrow shaft, then a rounded spatula widest just before the tip.
-  const flatTip = (u) => lerp(1, 1 - (Bk.tipTaper ?? 0.45), sstep(1 - (Bk.tipLen ?? 0.14), 1, u));
-  const spoonW = (u) => {
-    const shaft = 1 - 0.35 * Math.min(u, 0.55), peak = 0.86;
-    if (u <= peak) return lerp(shaft, spoonWidth, sstep(0.5, peak, u));
-    const t = (u - peak) / (1 - peak); return spoonWidth * Math.sqrt(Math.max(0.12, 1 - t * t * 0.88));
-  };
-  const bwP = Bk.style === 'flat' ? (u) => bw * (1 - 0.25 * u) * flatTip(u) : Bk.style === 'big' ? (u) => bw * (1 - 0.72 * Math.pow(u, 1.15)) : Bk.style === 'spoon' ? (u) => bw * spoonW(u) : (u) => bw * Math.pow(1 - u, 0.8);
-  const bhP = Bk.style === 'big' ? (u) => bh * (1 - 0.76 * Math.pow(u, 1.3)) : Bk.style === 'spoon' ? (u) => bh * lerp(0.62, 0.34, sstep(0.5, 0.86, u)) : (u) => bh * Math.pow(1 - u, Bk.style === 'flat' ? 0.25 : 0.9);
-  const beakCap = Bk.style === 'flat' || Bk.style === 'spoon' ? { type: 'round', len: 0.3 } : { type: 'point', len: Bk.style === 'big' ? 0.55 : 0.3 };
-  const billW0 = bwP(0), billT0 = bhP(0), billB0 = billT0 * lowerK, faceDrop = hr * (Bk.y ?? 0.1);
-  const SKF = SKULL_FORMS[S.skullForm] || SKULL_FORMS[S.bodyForm] || SKULL_FORMS.songbird;
-  const sl = hr * (SKF.len ?? 1.5) * (S.skullLen ?? 1);
-  // Deep-billed birds (toucans, macaws) would balloon the whole face if it had to reach the full bill
-  // section in one station, so the face adopts most of it and the bill flares the remainder itself.
-  // A face only carries the bill section through when the two are a similar size. Bills much smaller
-  // than the face (owls) would pinch it into a cone, and much larger ones (toucans) would balloon it,
-  // so in both cases the face keeps its own shape and the bill does the flaring.
-  // The face section is kept within a bounded factor of the bill's, so neither surface has to deform
-  // violently at the junction; whatever difference remains is resolved over the bill's first few percent.
-  const lore = SKF.p[SKF.p.length - 1];
-  // Width and forehead are drawn close to the bill, so a small bill grows out of a tapering face
-  // (songbirds) unless the skull keeps a broad facial disc (owls). The chin keeps more room because the
-  // lower mandible hangs below the upper's underside and the chin has to cover its root.
-  const join = (loreV, billV, maxK) => {
-    const m = Bk.join ?? clamp(1 - Math.abs(1 - billV / Math.max(loreV, 1e-9)) * 1.1, 0.3, 0.88);
-    return clamp(lerp(loreV, billV, m), billV * 0.8, billV * maxK);
-  };
-  const loreW = lore[1] * hr * (S.headW ?? 0.92), loreT = lore[2] * hr, loreB = lore[3] * hr, faceMax = SKF.faceMax ?? 1.35;
-  const endW = join(loreW, billW0, faceMax), endT = join(loreT, billT0, faceMax), endB = join(loreB, billB0, 1.8);
-  // Station tables carry absolute radii, with the bill-base cross-section appended as the last station.
-  // When the bill is taller or wider than the face (parrots, toucans), the forehead rises into the culmen
-  // rather than dipping into a notch in front of it.
-  const skW = prof(SKF.p.map(s => [s[0], Math.max(s[1] * hr * (S.headW ?? 0.92), endW * sstep(0.5, 1, s[0]))]).concat([[1, endW]]));
-  const skT = prof(SKF.p.map(s => [s[0], Math.max(s[2] * hr, endT * sstep(0.5, 1, s[0]))]).concat([[1, endT]]));
-  const skB = prof(SKF.p.map(s => [s[0], s[3] * hr]).concat([[1, endB]]));
-  const skY = prof(SKF.p.map(s => [s[0], s[4] * hr]).concat([[1, -faceDrop]]));
-  // The skull axis leaves the neck along its end tangent and turns toward the head direction no faster than
-  // the section on the inside of the turn allows: bending tighter than that radius folds the throat into a
-  // crease. The turn is taken as early as possible, so the face and bill still finish exactly on the head
-  // direction (a pelican's neck rises steeply while its head angles down).
-  // the occiput never narrows below the neck it leaves; the floor fades in from zero so ring 1 still matches
-  const nFloor = (v, nv, u) => smax(v, nv * sstep(0, 0.12, u) * (1 - sstep(0.25, 0.55, u)), nv * 0.1);
-  const headHT = (u) => nFloor(lerp(neckR(1), skT(u) * (1 + (S.headCrest || 0) * bell(u, 0.32, 0.4)), sstep(0, .34, u)), neckR(1), u);
-  const headHB = (u) => nFloor(lerp(neckR(1) * 1.02, skB(u), sstep(0, .34, u)), neckR(1) * 1.02, u);
-  const elev = (v) => Math.atan2(v.y, v.z), thHead = elev(hd), NSK = 24, dsk = sl / NSK, sPts = [neckEnd.clone()];
-  let thSk = elev(tEnd);
-  const turn = Math.abs(thHead - thSk), inner0 = Math.max(thHead < thSk ? headHB(0.15) : headHT(0.15), hr * 0.15);
-  const kBend = clamp((0.85 * sl) / Math.max(turn * inner0, 1e-9), 1.2, 2.4);
-  for (let i = 0; i < NSK; i++) {
-    const uu = (i + 0.5) / NSK, inner = Math.max(thHead < thSk ? headHB(uu) : headHT(uu), hr * 0.15);
-    thSk += clamp(thHead - thSk, -dsk / (inner * kBend), dsk / (inner * kBend));
-    sPts.push(sPts[i].clone().add(V3(0, Math.sin(thSk), Math.cos(thSk)).multiplyScalar(dsk)));
-  }
-  const head = loft({
-    pts: sPts, seg: Math.round(20 * det), rad: ringRes, up: hu,
-    w: (u) => nFloor(lerp(neckR(1) * .92, skW(u), sstep(0, .34, u)), neckR(1) * .92, u), ht: headHT, hb: headHB,
-    oy: (u) => skY(u) * sstep(0, .3, u), nb: (u) => lerp(2, 3, sstep(.78, 1, u)),
-    cap0: 'open', cap1: 'open', bend: 0
-  });
-  head.rows[head.main[0]] = neck.rows[neck.main[1]];
-  const HW = rig.W('Head');
-  const ringAt = (g, u) => { const [m0, m1] = g.main; return g.rows[clamp(Math.round(m0 + (m1 - m0) * u), m0, m1)]; };
-  const centreOf = (ring) => ring.reduce((s, p) => s.clone().add(p), V3()).divideScalar(ring.length);
-  const hc = centreOf(ringAt(head, 0.32));
-  // The bill continues along the skull's own end frame, so there is no kink at the junction.
-  const billRing = head.rows[head.main[1]];
-  const b0 = centreOf(billRing), bd = head.T[head.T.length - 1].clone(), bu = head.Ups[head.Ups.length - 1].clone();
-  // eyes sit in the orbit, just behind the lores, rather than on a sphere's equator
-  const eyeR = S.eye * hr, yaw = (S.eyeYaw ?? 72) * DEG, eyeU = S.eyeU ?? 0.52;
-  const eyes = [1, -1].map((side) => {
-    const dir = hd.clone().multiplyScalar(Math.cos(yaw)).add(V3(side * Math.sin(yaw), 0, 0)).addScaledVector(hu, 0.22).normalize();
-    const hit = surfaceToward(head, hc, dir, clamp(eyeU - 0.16, 0.08, 0.9), clamp(eyeU + 0.16, 0.12, 0.95));
-    return { c: hit.p.clone().addScaledVector(hit.n, -eyeR * (S.eyeInset ?? 0.6)), dir: hit.n.clone().lerp(dir, 0.5).normalize(), u: hit.s, a: hit.a };
-  });
-  // beak: upper mandible continues the skull, lower mandible hangs from the Jaw bone
-  // droop: straight proximal half then a smooth downward bend (flamingo-style filter bill)
-  const hookBend = (u) => (Bk.hook || 0) * bl * Math.pow(u, Bk.hookPow ?? 2.5);
-  const bend = (u) => hookBend(u) + (Bk.decurve || 0) * bl * 0.3 * u * u + (Bk.curve || 0) * bl * Math.sin(Math.PI * u) * 0.25 + (Bk.droop || 0) * bl * 0.55 * Math.pow(Math.max(0, u - 0.38) / 0.62, 1.6);
-  const bpts = [0, 0.2, 0.4, 0.55, 0.7, 0.85, 1].map(u => b0.clone().addScaledVector(bd, u * bl * (1 - 0.18 * (Bk.droop || 0) * Math.max(0, u - 0.4))).addScaledVector(bu, -bend(u)));
-  // The bill leaves the face at the skull's end section and reaches its own in the first few percent.
-  const fix = (end, start) => (u) => lerp(end / Math.max(start, 1e-9), 1, sstep(0, 0.14, u));
-  const wFix = fix(endW, billW0), tFix = fix(endT, billT0), bFix = fix(endB, billB0);
-  // Cone and flat profiles reach zero at the tip, which collapses the last ring onto the cap and
-  // leaves non-manifold edges. A small floor keeps the tip a real (if tiny) section.
-  const tipW = bw * 0.05, tipH = bh * 0.05;
-  const billSeg = Bk.style === 'spoon' ? 24 : 12;
-  const upper = loft({ pts: bpts, seg: Math.round(billSeg * det), rad: ringRes, up: bu, w: (u) => Math.max(bwP(u) * wFix(u), tipW), ht: (u) => Math.max(bhP(u) * tFix(u), tipH), hb: (u) => Math.max(bhP(u) * lowerK * bFix(u), tipH * 0.6), nt: (u) => lerp(2, lerp(2, 1.3, Bk.keel ?? 0), sstep(0, 0.2, u)), nb: 3, cap0: 'open', cap1: beakCap, bend: 0 });
-  upper.rows[upper.main[0]] = billRing; // shared with the skull: one continuous culmen
-  // The gape starts just inside the cheek so the jaw is never a floating slab.
-  const jawP = b0.clone().addScaledVector(bu, -bh * 0.15).addScaledVector(bd, -hr * 0.06);
-  rig.add('Jaw', 'Head', jawP, jawP.clone().addScaledVector(bd, bl));
-  // A pouch bulges the underside only: displacing the whole jaw would drag its top edge away from the
-  // upper mandible and open a gap at the gape.
-  // scoop (parrots): a deep, broad, blunt lower mandible whose front edge rises into the upper hook.
-  // pouch (pelicans): skin hangs deepest near the base and tapers away before the tip.
-  const scoop = Bk.lowerStyle === 'scoop', lowerLen = Bk.lower ?? 0.92;
-  const pouchAt = (u) => sstep(0, 0.15, u) * (1 - sstep(0.4, 0.95, u));
-  const lpts = [0, 0.25, 0.5, 0.75, 1].map(u => jawP.clone().addScaledVector(bd, u * bl * lowerLen)
-    .addScaledVector(bu, scoop ? bh * 0.34 * u * u : -(bend(u * lowerLen) - hookBend(u * lowerLen) * 0.4)));
-  const lower = loft({ pts: lpts, seg: Math.round((Bk.style === 'spoon' ? 16 : 7) * det), rad: 2 * Math.round(4 * det + 1), up: bu,
-    w: scoop ? (u) => bw * 0.9 * (1 - 0.32 * u) : (u) => Math.max(bwP(u) * 0.9, tipW),
-    ht: scoop ? (u) => bh * 0.26 * (1 - 0.3 * u) : (u) => Math.max(bhP(u) * 0.2, tipH * 0.6),
-    hb: scoop ? (u) => bh * 0.6 * (1 - 0.42 * u) : (u) => Math.max(bhP(u) * ((Bk.lowerDepth ?? 0.55) + (Bk.pouch || 0) * 1.6 * pouchAt(u)), tipH * 0.6),
-    nt: 3, cap0: { type: 'round', len: 0.4 }, cap1: scoop ? { type: 'round', len: 0.55, n: 3 } : beakCap, bend: 0 });
-  const tipFrom = Bk.tipFrom ?? 0.72, tipLower = Bk.tipLower ?? true;
-  emit(B.part('beak', { group: 'head' }), upper, (u) => Bk.tip && (Bk.tipUpper ?? true) && u > tipFrom ? Bk.tip : 'beak', HW);
-  emit(B.part('beak', { group: 'head' }), lower, (u) => Bk.tip && tipLower && u > tipFrom ? Bk.tip : 'jaw', rig.W('Jaw'));
-  if (Bk.casque) {
-    // Hornbill casque: a helmet riding the culmen. Its spine follows the culmen line and its base is
-    // buried in the upper mandible, so it reads as part of the bill instead of a block glued on top.
-    const Cq = Bk.casque, cl = Cq.len ?? 0.6, cH = bh * (Cq.h ?? 0.6);
-    const culmen = (u) => b0.clone().addScaledVector(bd, u * bl).addScaledVector(bu, -bend(u) + bhP(u) * tFix(u));
-    const H = (f) => cH * sstep(0, 0.3, f) * (1 - 0.55 * sstep(0.7, 1, f));
-    const cpts = [0, 0.15, 0.32, 0.5, 0.68, 0.84, 1].map(f => culmen(f * cl).addScaledVector(bu, H(f) * 0.45 + cH * 0.18 * sstep(0.55, 1, f)));
-    const casque = loft({ pts: cpts, seg: Math.round(12 * det), rad: ringRes, up: bu,
-      w: (f) => Math.max(bwP(f * cl) * wFix(f * cl) * (Cq.w ?? 0.85), tipW), ht: (f) => Math.max(H(f) * 0.55, tipH), hb: (f) => H(f) * 0.55 + bh * 0.3,
-      nt: Cq.flat ?? 3, cap0: { type: 'round', len: 0.3 }, cap1: { type: 'round', len: 0.6, n: 3 }, bend: 0.3 });
-    emit(B.part('beak', { group: 'head' }), casque, (f) => f > 0.88 && Cq.tipZone ? Cq.tipZone : (Cq.zone ?? 'beak'), HW);
-  }
-  // head & neck painting needs eye positions
-  emit(B.part('head', { group: 'head' }), head, (u, a, P2) => u < .08 ? paint({ part: 'neck', u: 1, a, P: P2 }) : paint({ part: 'head', u, a, P: P2, eyes, hd, billBase: b0 }), HW);
-  emit(B.part('neck', { group: 'body' }), neck, (u, a, P2) => u < .08 ? paint({ part: 'body', u: 1, a, P: P2 }) : paint({ part: 'neck', u, a, P: P2 }), (u) => u < 0.3 ? rig.W2('Chest', 'Neck1', u / 0.3) : u < 0.7 ? rig.W2('Neck1', 'Neck2', (u - 0.3) / 0.4) : rig.W2('Neck2', 'Head', sstep(0.75, 1, u)));
-  emit(B.part('body', { group: 'body' }), body, (u, a, P2) => paint({ part: 'body', u, a, P: P2 }), (u) => rig.W2('Hips', 'Chest', sstep(0.35, 0.75, u)));
-  for (const e of eyes) {
-    const eg = ellipsoid(e.c, eyeR, eyeR, eyeR, e.dir, hu, Math.round(5 * det + 2), 2 * Math.round(4 * det + 2));
-    emit(B.part('eyes', { group: 'head' }), eg, (u) => u > (S.pupilBig ? 0.78 : 0.86) ? 'pupil' : 'eye', HW);
-    if (S.eyeRing) { const bas = basisFrom(e.dir, hu), ring = []; for (let i = 0; i < 12; i++) { const t = (i / 12) * TAU; ring.push(e.c.clone().addScaledVector(e.dir, eyeR * 0.3).addScaledVector(bas.s, Math.cos(t) * eyeR * 1.05).addScaledVector(bas.u, Math.sin(t) * eyeR * 1.05)); }
-      emit(B.part('eyes', { group: 'head' }), loft({ pts: ring, closed: true, seg: 12, rad: 4, w: eyeR * S.eyeRing, ht: eyeR * S.eyeRing * 0.5, hb: eyeR * S.eyeRing * 0.5, up: e.dir }), 'face', HW); }
-  }
-  // crests, combs and wattles
-  if (S.crest && S.crest.h > 0) {
-    const Cr = S.crest, ch = Cr.h * hr, part = B.part('crest', { group: 'head' });
-    if (Cr.style === 'comb') {
-      // The comb's base follows the crown itself; a straight base line would lift off the curved skull.
-      sheet(part, { nu: 10, nv: 2, f: (u, v) => head.at(lerp(0.1, 0.66, u), Math.PI / 2).p
-        .addScaledVector(hu, v * ch * (0.55 + 0.45 * Math.abs(Math.sin(u * Math.PI * 3.5))) - hr * 0.05), th: hr * 0.12, zone: Cr.zone ?? 'accent', skin: HW });
-    } else if (Cr.style === 'peak') {
-      // Cardinal-type crest: one solid, laterally compressed tuft swept up and back from the crown. Its
-      // root is buried in the skull, so it grows out of the head rather than standing on it as quills.
-      const raise = clamp(S.crestRaise ?? 0.3, 0, 1), sweep = (Cr.sweep ?? 38) * lerp(1.3, 0.45, raise) * DEG;
-      const root = head.at(Cr.at ?? 0.46, Math.PI / 2), chR = ch * lerp(0.8, 1.15, raise);
-      const dirC = hu.clone().multiplyScalar(Math.cos(sweep)).addScaledVector(hd, -Math.sin(sweep)).normalize();
-      const pts = [root.p.clone().addScaledVector(root.n, -hr * 0.4), root.p.clone(),
-        root.p.clone().addScaledVector(dirC, chR * 0.45).addScaledVector(hd, chR * 0.06), root.p.clone().addScaledVector(dirC, chR)];
-      const base = hr * (Cr.base ?? 0.5), thk = hr * (Cr.thk ?? 0.2);
-      emit(part, loft({ pts, seg: Math.round(9 * det), rad: 2 * Math.round(4 * det + 2), up: hd,
-        w: (u) => thk * Math.pow(1 - u, 0.7), ht: (u) => base * Math.pow(1 - u, 1.1), hb: (u) => base * 0.85 * Math.pow(1 - u, 0.85),
-        cap0: { type: 'round', len: 0.3 }, cap1: 'point', bend: 0.3 }), Cr.zone ?? 'accent', HW);
-    } else if (Cr.style === 'recurve') {
-      // Cockatoo crest: long, flat feathers rooted along the crown midline. Relaxed, they lie back over
-      // the crown with up-curled tips; raised, they fan upward and curl forward toward the bill.
-      const n = Cr.n ?? 8, raise = clamp(S.crestRaise ?? 0.2, 0, 1), NP = 7;
-      for (let i = 0; i < n; i++) {
-        // feathers alternate either side of the midline, so the crest has width from the front
-        const t = n === 1 ? 0.5 : i / (n - 1), side = i % 2 ? 1 : -1;
-        const uR = lerp(0.62, 0.24, t), aR = Math.PI / 2 + side * (Cr.spread ?? 0.22) * (0.35 + 0.65 * t);
-        const { p, n: nr } = head.at(uR, aR);
-        const len = ch * (0.45 + 0.55 * Math.sin(Math.PI * Math.min(1, 0.2 + t * 0.85)));
-        const lat = V3(side * (Cr.splay ?? 0.16) * (0.3 + 0.7 * t), 0, 0), curl = Cr.curl ?? 0.9;
-        // relaxed: hug the crown back toward the occiput, then lift off into an up-curled tip
-        const uEnd = Math.max(0.02, uR - 0.45 * len / sl), relax = [];
-        for (let k = 0; k <= 3; k++) { const q = head.at(lerp(uR, uEnd, k / 3), aR); relax.push(q.p.addScaledVector(q.n, hr * (0.02 + 0.05 * k)).addScaledVector(lat, hr * 0.25 * k)); }
-        let hug = 0; for (let k = 1; k <= 3; k++) hug += relax[k].distanceTo(relax[k - 1]);
-        const rest = Math.max(len - hug, len * 0.3);
-        const back = relax[3].clone().sub(relax[2]).normalize().addScaledVector(hu, 0.25).add(lat).normalize();
-        const tipDir = back.clone().addScaledVector(hu, curl * 0.9).normalize();
-        relax.push(relax[3].clone().addScaledVector(back, rest * 0.4));
-        relax.push(relax[4].clone().addScaledVector(tipDir, rest * 0.35));
-        relax.push(relax[5].clone().addScaledVector(tipDir.clone().addScaledVector(hu, 0.3).normalize(), rest * 0.25));
-        // raised: fan up from the root and curl forward toward the bill
-        const fanA = lerp(32, -38, t) * DEG;
-        const up0 = hu.clone().multiplyScalar(Math.cos(fanA)).addScaledVector(hd, Math.sin(fanA)).addScaledVector(lat, 1.4).normalize();
-        const raised = [p.clone()];
-        for (let k = 1; k < NP; k++) { const f = k / (NP - 1); raised.push(raised[k - 1].clone().addScaledVector(up0.clone().addScaledVector(hd, curl * 0.7 * f * f).normalize(), len / (NP - 1))); }
-        const pts = [p.clone().addScaledVector(nr, -hr * 0.12), ...relax.map((q, k) => q.lerp(raised[k], raise))];
-        const vane = hr * (Cr.vane ?? 0.15), thk = hr * (Cr.thk ?? 0.035);
-        // vanes lie flat on the head when relaxed and turn into the sagittal plane as the fan opens
-        emit(part, loft({ pts, seg: 10, rad: 6, up: hu.clone().lerp(V3(1, 0, 0), raise).normalize(),
-          w: (u) => vane * Math.pow(Math.sin(Math.PI * clamp(0.15 + u * 0.85, 0, 1)), 0.6), ht: thk, hb: thk, cap0: 'round', cap1: 'point', bend: 0.5 }),
-          (u) => u < 0.22 || t < 0.15 ? (Cr.baseZone ?? 'head') : (Cr.zone ?? 'accent'), HW);
-      }
-    } else {
-      const n = Cr.n ?? 7;
-      for (let i = 0; i < n; i++) {
-        // laid plumes root at the nape (back of the skull); upright crests root along the crown
-        const t = n === 1 ? 0.5 : i / (n - 1), { p, n: nr } = Cr.pair ? head.at(0.34, Math.PI / 2 + (i % 2 ? 1 : -1) * 0.75) : Cr.lay ? head.at(lerp(0.16, 0.05, t), Math.PI / 2 + 0.25 + (t - 0.5) * 0.4) : head.at(lerp(0.52, 0.14, t), Math.PI / 2 + (Cr.style === 'fan' ? 0 : (t - 0.5) * 0.3));
-        let dir = nr.clone().addScaledVector(hd, Cr.style === 'fan' ? 0.4 - t * 1.2 : -0.9 - t * 0.6).normalize();
-        // lay: plumes swept back along the nape (herons, egrets) instead of standing upright
-        if (Cr.lay) dir = dir.lerp(hd.clone().multiplyScalar(-1).addScaledVector(hu, 0.12 - t * 0.1), Cr.lay).normalize();
-        const l = ch * (Cr.style === 'fan' ? 0.75 + 0.25 * Math.sin(Math.PI * t) : 1 - 0.35 * Math.abs(t - 0.3)), dr = (Cr.droop || 0) * l;
-        const pts = [p.clone().addScaledVector(nr, -hr * 0.1), p.clone().addScaledVector(dir, l * 0.55).addScaledVector(hu, -dr * 0.2), p.clone().addScaledVector(dir, l).addScaledVector(hd, -l * (Cr.curl ?? 0.15)).addScaledVector(hu, -dr)];
-        emit(part, tube(pts, (u) => hr * (Cr.thk ?? 0.09) * (1 - 0.6 * u) * (Cr.ball && u > 0.85 ? 2.4 : 1), 4, 5, { cap1: { type: 'round', len: 0.8 } }), (u) => Cr.tipZone && u > 0.8 ? Cr.tipZone : 'accent', HW);
-      }
-    }
-  }
-  if (S.wattle > 0) for (const side of [1, -1]) {
-    const p = jawP.clone().addScaledVector(hd, bl * 0.15).add(V3(side * bw * 0.4, 0, 0)), l = S.wattle * hr;
-    emit(B.part('crest', { group: 'head' }), loft({ pts: [p, p.clone().addScaledVector(hu, -l * 0.5), p.clone().addScaledVector(hu, -l).addScaledVector(hd, -l * 0.15)], seg: 5, rad: 8, w: (u) => l * 0.22 * (0.6 + Math.sin(Math.PI * u)), ht: (u) => l * 0.12 * (0.6 + Math.sin(Math.PI * u)), up: hd }), S.wattleZone ?? 'accent', rig.W('Jaw'));
-  }
-  // tail fan
-  const T = S.tail, tb = bp(0, 0.12), defLift = Math.max(0, S.pitch * 0.8 + 2);
-  const tdir = fwd.clone().multiplyScalar(-1).addScaledVector(upb, Math.tan((T.lift ?? defLift) * DEG)).normalize();
-  rig.add('Tail', 'Hips', tb);
-  const tl = T.len * L, nT = T.n ?? 10, tpart = B.part('tail', { group: 'tail', coatK: 1.6 });
-  const side = new THREE.Vector3().crossVectors(upb, tdir).normalize();
-  for (let i = 0; i < nT; i++) {
-    const t = nT === 1 ? 0 : i / (nT - 1) - 0.5, ang = t * (T.fan ?? 40) * DEG, d = tdir.clone().applyAxisAngle(upb, ang);
-    let fl = tl * (T.style === 'fork' ? 0.7 + 1.2 * Math.abs(t) : T.style === 'wedge' ? 1 - 0.7 * Math.abs(t) : T.style === 'long' ? (Math.abs(t) < 0.12 ? 1 : 0.45) : 1) * (0.94 + 0.06 * Math.cos(i * 2.1));
-    const fw = Math.min(tl * 0.16, L * 0.09) * (T.style === 'train' ? 1.6 : 1) * (T.wide ?? 1), sd = new THREE.Vector3().crossVectors(upb, d).normalize();
-    const droop = (T.droop || 0) * fl;
-    sheet(tpart, { nu: Math.round(5 * det), nv: 2,
-      f: (u, v) => tb.clone().addScaledVector(d, u * fl).addScaledVector(sd, (v - 0.5) * fw * Math.sin(Math.PI * clamp(0.12 + u * 0.95, 0, 1)) ** 0.5 * (T.style === 'train' ? 0.6 + 0.8 * u : 1)).addScaledVector(upb, i * 0.0015 * L - droop * u * u + (v - 0.5) * 0.0 * fw),
-      th: (u) => fw * 0.06 * (1 - 0.6 * u), zone: (u, v) => (T.eyespots && u > 0.78 && Math.abs(v - 0.5) < 0.3 + 0.1 * Math.sin(u * 30)) ? (u > 0.88 ? 'face' : 'accent') : (T.tip && u > 0.82 ? T.tip : paint({ part: 'tail', u, a: v, P: tb })), skin: (u) => u < 0.1 ? rig.W2('Hips', 'Tail', u / 0.1) : rig.W('Tail') });
-  }
-  // wings: spread planform (WingL/R → Humerus → Forearm → Hand) and folded wing (WingFoldL/R).
-  // Built in the body's (X, upb, fwd) frame with the root station buried inside the chest and
-  // skinned to WingL/R, so pitching Hips into flight levels the wings with the torso and flapping
-  // Humerus/Forearm/Hand hinges cleanly at the shoulder without ever detaching the wing root.
-  const Wg = S.wing, span = Wg.span * L, chord = Wg.chord * L;
-  const shoulderY = bp(0.68, 0.20), foldShoulderY = bp(0.68, 0.38);
-  const wPt = (base, dx, dy, dz) => base.clone().add(V3(dx, 0, 0)).addScaledVector(upb, dy).addScaledVector(fwd, dz);
-  for (const sd of [1, -1]) {
-    const sfx = sd > 0 ? 'L' : 'R';
-    const rootP = wPt(shoulderY, sd * bodyW * 0.04, -bodyH * 0.03, 0);
-    const sh = wPt(shoulderY, sd * bodyW * 0.25, 0, 0);
-    const el = wPt(sh, sd * span * 0.27, span * 0.02, -span * 0.03);
-    const wr = wPt(el, sd * span * 0.3, span * 0.01, span * 0.03);
-    const tipP = wPt(wr, sd * span * 0.43, -span * 0.01, -span * (Wg.sweep ?? 0.12));
-    rig.add('Wing' + sfx, 'Chest', sh); rig.add('Humerus' + sfx, 'Wing' + sfx, sh, el); rig.add('Forearm' + sfx, 'Humerus' + sfx, el, wr); rig.add('Hand' + sfx, 'Forearm' + sfx, wr, tipP);
-    const le = makePath([rootP, sh, el, wr, tipP]), ku = knotUs(le, 5);
-    const spec = rig.spec(['Wing' + sfx, 'Humerus' + sfx, 'Forearm' + sfx, 'Hand' + sfx], [0, ku[1], ku[2], ku[3]], 0.24);
-    const slotted = Wg.tip === 'slotted', tipK = Wg.tip === 'pointed' ? 0.12 : 0.45;
-    const rootChord = Math.min(0.72, (0.45 * L) / Math.max(chord, 1e-6));
-    const cP = prof([[0, rootChord], [ku[1], 0.94], [ku[2], 0.96], [ku[3], 0.88], [0.86, slotted ? 0.55 : 0.7], [1, slotted ? 0.3 : tipK]]);
-    const wpart = B.part('wings', { group: 'wingSpread', coatK: 3 });
-    sheet(wpart, { nu: Math.round(18 * det), nv: Math.round(4 * det),
-      f: (u, v) => {
-        const p = le.getPointAt(u), c = chord * cP(u) * (1 - 0.07 * Math.abs(Math.sin(u * Math.PI * (Wg.feathers ?? 9))) * v ** 3);
-        const rootTuck = 1 - sstep(0, ku[2], u);
-        return wPt(p, -sd * bodyW * 0.08 * rootTuck * v, Math.sin(Math.PI * v) * c * 0.06 * (1 - u * 0.5) - bodyH * 0.04 * rootTuck * v, -v * c + (u > 0.85 ? -(u - 0.85) * c * 0.8 * v : 0));
-      },
-      th: (u, v) => (chord * 0.038 * (1 - 0.5 * u) + bodyH * 0.09 * Math.pow(1 - sstep(0, ku[2], u), 2)) * (1 - 0.68 * v),
-      zone: (u, v) => paint({ part: 'wing', u, a: v, P: sh }), skin: (u) => rig.chain(spec, u) });
-    if (slotted) for (let i = 0; i < 6; i++) {
-      const t = i / 5, base = le.getPointAt(lerp(0.8, 0.98, t)), d = wPt(V3(), sd * (0.6 + 0.4 * t), 0, -(1 - t) * 0.8).normalize(), fl = chord * (0.65 - 0.15 * Math.abs(t - 0.5));
-      sheet(wpart, { nu: 4, nv: 2, f: (u, v) => wPt(base, 0, u * u * fl * 0.08, -chord * 0.15 + (v - 0.5) * chord * 0.12 * Math.sin(Math.PI * clamp(u * 0.9 + 0.1, 0, 1))).addScaledVector(d, u * fl), th: chord * 0.02, zone: 'flight', skin: rig.W('Hand' + sfx) });
-    }
-    // folded wing lying on the flank, primaries crossing over the tail
-    rig.add('WingFold' + sfx, 'Chest', foldShoulderY.clone().add(V3(sd * bodyW * 0.45, 0, 0)));
-    const fl = (Wg.foldLength ?? (0.62 + (Wg.fold ?? 0.35))) * L, fh = bodyH * (Wg.foldH ?? 0.5);
-    sheet(B.part('wings-folded', { group: 'wingFold' }), { nu: Math.round(10 * det), nv: Math.round(4 * det),
-      f: (u, v) => { const s = clamp(0.72 - u * (Wg.foldReach ?? 0.95), -0.45, 1), env = Math.pow(Math.sin(Math.PI * clamp(u * 0.92 + 0.06, 0, 1)), 0.5), ang = lerp(1.15, 1.15 - (Wg.foldH ?? 0.5) * 2.1 * env, v);
-        const hit = body.at(clamp(s, 0.03, 0.97), sd > 0 ? ang : Math.PI - ang), P2 = hit.p.addScaledVector(hit.n, bodyW * 0.035);
-        if (s < 0.03) P2.addScaledVector(fwd, (s - 0.03) * L).addScaledVector(upb, (0.03 - s) * L * 0.15);
-        return P2; },
-      th: (u, v) => bodyH * 0.06 * (1 - 0.6 * u), zone: (u, v, face, Pp) => paint({ part: 'fold', u, a: v, P: Pp || shoulderY }), skin: rig.W('WingFold' + sfx) });
-  }
-  // legs: hidden thigh, feathered drumstick, scaly tarsus and toes
-  const lp = B.part('legs', { group: 'legs' }), fpart = B.part('feet', { group: 'feet' });
-  // Anatomical order: femur + knee hidden inside the body contour → feathered drumstick that
-  // emerges from the belly (started inside the body so the seam is buried) → optional bare tibia
-  // (waders) → intertarsal joint ("backwards knee", heel behind the foot) → tarsus → toes.
-  const bare = clamp(S.bareTibia ?? 0, 0, 0.9);
-  for (const sd of [1, -1]) {
-    const sfx = sd > 0 ? 'L' : 'R', hip = bp(0.44, -0.05).add(V3(sd * bodyW * 0.2, 0, 0));
-    const lr = S.legThk * L;
-    const belly = surfaceToward(body, hip, V3(sd * 0.3, -1, 0.05).normalize(), 0.2, 0.8).p;
-    const foot = V3(hip.x + sd * bodyW * 0.03, 0.012 * L, C0.z + (S.footFwd ?? 0.04) * L);
-    const tA = (S.heelAng ?? 14) * DEG, tLen = Math.max(S.legLen * L, lr * 2.5);
-    const ankle = V3(foot.x, foot.y + tLen * Math.cos(tA), foot.z - tLen * Math.sin(tA));
-    const knee = hip.clone().lerp(belly, 0.55).add(V3(0, 0, 0.05 * L * Math.max(0.2, Math.cos(P))));
-    if (knee.y < ankle.y + lr * 3) knee.y = ankle.y + lr * 3;
-    rig.add('Thigh' + sfx, 'Hips', hip, knee); rig.add('Shin' + sfx, 'Thigh' + sfx, knee, ankle); rig.add('Tarsus' + sfx, 'Shin' + sfx, ankle, foot); rig.add('Toe' + sfx, 'Tarsus' + sfx, foot, foot.clone().add(V3(0, 0, 0.1 * L)));
-    // drumstick / tibia: one continuous loft from inside the body to the heel
-    const tibDir = knee.clone().sub(ankle), tibLen = tibDir.length(); tibDir.normalize();
-    const ext = Math.min(tibLen * 0.4, bodyH * 0.32), top = knee.clone().addScaledVector(tibDir, ext);
-    const uK = ext / (ext + tibLen), uF = bare > 0 ? uK + (1 - uK) * (1 - bare) : 1;
-    const rTop = Math.min(bodyW * 0.17, bodyH * 0.24) * (S.thighK ?? 1);
-    const rFe = S.feathered ? lr * 2.3 : bare > 0 ? lr * 1.45 : lr * 1.7;
-    // teardrop drumstick: full where it leaves the belly, tapering quickly toward the hock
-    const keys = [[0, rTop * 0.9], [uK, rTop], [uK + (uF - uK) * 0.3, lerp(rTop, rFe, 0.45)], [uK + (uF - uK) * 0.65, lerp(rTop, rFe, 0.85)], [uF, rFe]];
-    if (bare > 0) keys.push([Math.min(0.999, uF + (1 - uF) * 0.12), lr * 1.12], [1, lr * 1.08]);
-    const tibR = prof(keys);
-    const tib = loft({ pts: [top, knee, knee.clone().lerp(ankle, 0.5), ankle], seg: Math.round(12 * det), rad: 2 * Math.round(4 * det + 2), up: [1, 0, 0], w: tibR, ht: tibR, hb: tibR, cap0: { type: 'round', len: 0.5 }, cap1: { type: 'round', len: 0.4 }, bend: 0.3 });
-    emit(lp, tib, (u) => (bare <= 0 || u < uF) ? paint({ part: 'thigh', u, a: 0, P: knee }) : 'leg', (u) => rig.W2('Thigh' + sfx, 'Shin' + sfx, sstep(uK * 0.6, uK + (1 - uK) * 0.3, u)));
-    // intertarsal joint knob: readable heel where the bare tibia meets the tarsus
-    if (!S.feathered) {
-      const jr = lr * (S.jointK ?? 1.32);
-      emit(lp, ellipsoid(ankle, jr, jr, jr * 1.12, tibDir, [0, 0, 1], Math.round(4 * det + 2), 2 * Math.round(3 * det + 2)), 'leg', rig.W2('Shin' + sfx, 'Tarsus' + sfx, 0.5));
-    }
-    // tarsus: laterally compressed, feathered "boot" on raptors and owls
-    const tarR = S.feathered ? prof([[0, lr * 2.0], [0.55, lr * 1.55], [0.75, lr * 1.05], [1, lr * 0.95]]) : (u) => lr * (1.02 - 0.1 * u);
-    // Digital Diorama revision 8: the toes rest on the ground rather than in it. Their roots ran along the Toe bone's
-    // head (1.2 % of the body length up) at a radius of up to 4 % of it, the tarsus ended there in a round cap, and the
-    // talons hooked below the ground, so every bird stood sunk 2-30 mm (ostrich, turkey and penguin the most). They now
-    // start from a point raised by the toe's radius; the bone stays where it was.
-    const F = S.feet, toeL = (S.toeLen ?? 0.28) * L, tr = lr * 0.8;
-    const base = foot.clone(); base.y = Math.max(foot.y, tr * 1.04);
-    const tar = loft({ pts: [ankle, ankle.clone().lerp(base, 0.5), base], seg: Math.round(7 * det), rad: 2 * Math.round(3 * det + 2), up: [0, 0, 1], w: (u) => tarR(u) * 0.86, ht: tarR, hb: tarR, cap0: { type: 'round', len: 0.4 }, cap1: { type: 'round', len: 0.5 }, bend: 0.3 });
-    emit(lp, tar, (u) => S.feathered && u < 0.62 ? paint({ part: 'thigh', u: 1, a: 0, P: ankle }) : 'leg', rig.W('Tarsus' + sfx));
-    // foot pad hides the toe convergence
-    emit(fpart, ellipsoid(V3(foot.x, Math.max(foot.y + tr * 0.5, tr * 1.1), foot.z), tr * 1.45, tr * 1.05, tr * 1.6, [0, 0, 1], [0, 1, 0], 4, 8), 'leg', rig.W('Toe' + sfx));
-    const dirs = F === 'zygo' ? [[-0.35, 1], [0.15, 1], [-2.8, 0.75], [2.6, 0.6]] : F === 'ratite' ? [[0.08, 1.2], [0.6, 0.75]] : [[-0.55, 0.9], [0, 1], [0.55, 0.9], [Math.PI, F === 'webbed' ? 0.3 : 0.6]];
-    const tips = [];
-    for (const [ang, k] of dirs) {
-      const d = V3(Math.sin(ang * sd), 0, Math.cos(ang)), e = foot.clone().addScaledVector(d, toeL * k); e.y = tr * 0.8;
-      tips.push(e);
-      emit(fpart, tube([base, base.clone().lerp(e, 0.5).add(V3(0, tr * 0.6, 0)), e], (u) => tr * (1 - 0.35 * u), 4, 5, { cap1: { type: 'round', len: 0.7 } }), 'leg', rig.W('Toe' + sfx));
-      if (S.talons) emit(fpart, tube([e, e.clone().addScaledVector(d, tr * S.talons * 1.4).add(V3(0, tr * 0.5, 0)), e.clone().addScaledVector(d, tr * S.talons * 2.2).add(V3(0, Math.max(-tr * 1.2, tr * 0.06 - e.y), 0))], (u) => tr * 0.55 * (1 - u * 0.9), 4, 4, { cap1: 'point' }), 'beak', rig.W('Toe' + sfx));
-    }
-    if (F === 'webbed') sheet(fpart, { nu: 2, nv: 6, f: (u, v) => { const x = v * 2, i = Math.min(1, Math.floor(x)), t = x - i; return base.clone().lerp(tips[i].clone().lerp(tips[i + 1], t), u * (1 - 0.25 * Math.sin(Math.PI * t) * u)); }, th: tr * 0.25, zone: 'leg', skin: rig.W('Toe' + sfx) });
-  }
-  return { L, C0, fwd, upb, hd, hu, hr, bodyH, legH, body, neck, head, eyes, spanP: span };
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
- *  BIRD SPECIES — L = body length (m); other lengths are multiples of L.
- * ════════════════════════════════════════════════════════════════════════════ */
-const BDEF = {
-  L: 0.1, bodyH: 0.6, bodyW: 0.6, pitch: 25, legLen: 0.28, thigh: 0.35, legThk: 0.028, neckLen: 0.2, neckAng: 62, neckCurve: 0, headR: 0.26, headAng: 4, headW: 0.92,
-  beak: { len: 0.8, w: 0.36, h: 0.4, style: 'cone' }, eye: 0.2, eyeYaw: 72, wing: { span: 1.6, chord: 0.55, tip: 'round', fold: 0.3, sweep: 0.12 },
-  tail: { len: 0.7, fan: 34, n: 10, style: 'fan' }, feet: 'perch', toeLen: 0.26, pattern: {},
-};
-const BP = (body, belly, wing, flight, head, face, accent, beak, leg, eye = '#1a120a', extra = {}) => ({ body, belly, wing, flight, head, face, accent, beak, leg, eye, pupil: '#050505', jaw: beak, ...extra });
-const SPECIES = {
-  sparrow: { label: 'House Sparrow', sci: 'Passer domesticus', bodyForm: 'songbird', L: 0.075, headR: 0.21, neckLen: 0.08, neckThin: 0.8, neckNape: 1.0, neckAng: 70, eye: 0.21, maskW: 0.16, maskWBill: 0.5,
-    beak: { len: 0.75, w: 0.24, h: 0.32, style: 'cone' }, pattern: { mask: true, maskShape: 'stripe', throat: 'face', cap: 'head', cheek: 'accent', nape: 'body', wingBar: true },
-    // Digital Diorama revision: black-streaked brown back and edged wing feathers
-    marks: { back: 'streaks', wing: 'edged', zone: 'face', light: 'accent', freq: 1.3 },
-    palette: BP('#8a6a48', '#c9c0b0', '#7a5432', '#4a3a2a', '#7d7d78', '#2a2420', '#e8e0d0', '#3a3530', '#c49a7a') },
-  robin: { label: 'European Robin', sci: 'Erithacus rubecula', bodyForm: 'robin', L: 0.07, bodyH: 0.68, bodyW: 0.66, headR: 0.21, neckLen: 0.08, neckThin: 0.82, neckNape: 1.0, neckAng: 72, eye: 0.22,
-    beak: { len: 0.88, w: 0.15, h: 0.17, style: 'cone' }, pattern: { breast: 'accent', face: 'accent', faceU: 0.4, faceTop: 0.45, forehead: 'accent', foreheadU: 0.72, throat: 'accent' },
-    palette: BP('#7a6a4a', '#e8e2d6', '#6e5e40', '#5a4a34', '#7a6a4a', '#d9762e', '#d9762e', '#2a2420', '#b08a6a') },
-  crow: { label: 'Carrion Crow', sci: 'Corvus corone', bodyForm: 'corvid', L: 0.2, headR: 0.24, beak: { len: 1.3, w: 0.38, h: 0.48, style: 'cone', hook: 0.06 }, wing: { span: 2.2, chord: 0.62, tip: 'slotted', fold: 0.4 }, tail: { len: 0.85, fan: 30, n: 12 }, legLen: 0.35,
-    palette: BP('#1a1a1e', '#1d1d22', '#1e1e24', '#141418', '#16161a', '#16161a', '#2a2a36', '#111114', '#1d1d20', '#1a1208') },
-  cardinal: { label: 'Northern Cardinal', sci: 'Cardinalis cardinalis', bodyForm: 'cardinal', L: 0.09, headR: 0.22, neckLen: 0.08, neckThin: 0.8, neckNape: 1.0, neckAng: 70, maskW: 0.42, maskWBill: 0.95,
-    crest: { h: 1.25, style: 'peak', base: 0.52, thk: 0.2, sweep: 40 }, beak: { len: 0.85, w: 0.3, h: 0.42, style: 'cone' }, tail: { len: 1.0, fan: 26, n: 10 },
-    pattern: { mask: true, maskShape: 'stripe', chin: 'face', chinU: 0.55 }, palette: BP('#c22a24', '#d63a2c', '#a8221e', '#8a1c18', '#c8261f', '#141010', '#d8322a', '#e8742c', '#9a6a5a') },
-  pigeon: { label: 'Rock Pigeon', sci: 'Columba livia', bodyForm: 'waterfowl', skullForm: 'songbird', L: 0.2, pitch: 24, bodyH: 0.62, bodyW: 0.66, headR: 0.2, neckLen: 0.3, neckAng: 66, neckThin: 0.7,
-    beak: { len: 0.72, w: 0.25, h: 0.28, style: 'cone' }, eye: 0.17, legLen: 0.24, legThk: 0.035, wing: { span: 2.2, chord: 0.64, tip: 'pointed', fold: 0.38 }, tail: { len: 0.62, fan: 34, n: 10 },
-    // Digital Diorama revision: pale grey wings with two black bars (not dark bands), green-purple sheen only on the lower neck
-    pattern: { neck: 'accent', wingBands: false }, marks: { wing: 'bars', zone: 'flight', freq: 0.45 },
-    palette: BP('#8d949c', '#b5b9bd', '#a5abb1', '#3d4148', '#7e858d', '#d8d5c8', '#5b7d72', '#4a4b50', '#c66f75', '#e86f44') },
-  woodpecker: { label: 'Great Spotted Woodpecker', sci: 'Dendrocopos major', bodyForm: 'corvid', skullForm: 'corvid', L: 0.15, pitch: 50, bodyH: 0.56, bodyW: 0.54, headR: 0.22, neckLen: 0.12, neckThin: 0.72,
-    beak: { len: 1.65, w: 0.22, h: 0.25, style: 'cone' }, eye: 0.16, feet: 'zygo', legLen: 0.18, crest: { h: 0.45, style: 'peak', base: 0.25, thk: 0.12, sweep: 22 }, wing: { span: 1.85, chord: 0.6, tip: 'round', fold: 0.34 }, tail: { len: 0.9, fan: 20, n: 10, style: 'wedge', lift: 35 },
-    pattern: { mask: 'face', maskShape: 'stripe', wingBar: true, cheek: 'belly' }, marks: { wing: 'spots', tail: 'bars', light: 'belly', zone: 'body', freq: 1.2 },
-    palette: BP('#171719', '#eeeae0', '#202024', '#f0ece2', '#171719', '#171719', '#d12b27', '#343338', '#65616a', '#a13b32') },
-  kingfisher: { label: 'Common Kingfisher', sci: 'Alcedo atthis', bodyForm: 'songbird', skullForm: 'wader', L: 0.14, pitch: 28, bodyH: 0.54, bodyW: 0.58, headR: 0.25, neckLen: 0.08, neckThin: 0.8,
-    beak: { len: 2.25, w: 0.2, h: 0.22, style: 'cone' }, eye: 0.17, legLen: 0.12, wing: { span: 1.65, chord: 0.55, tip: 'round', fold: 0.35 }, tail: { len: 0.35, fan: 26, n: 8 },
-    pattern: { headAll: true, face: 'belly', breast: 'accent' }, palette: BP('#147da0', '#e8a14d', '#1687ad', '#205c79', '#146e91', '#f0e5d0', '#d97f32', '#25292c', '#c56d52', '#2a1b12') },
-  macaw: { label: 'Scarlet Macaw', sci: 'Ara macao', bodyForm: 'parrot', L: 0.26, pitch: 50, bodyH: 0.55, headR: 0.28, headAng: 20, neckLen: 0.14, neckThin: 0.8, maskW: 0.5, maskWBill: 0.8, beak: { len: 0.85, w: 0.55, h: 1.0, style: 'hook', hook: 0.42, lower: 0.62, lowerStyle: 'scoop', keel: 0.15, y: 0.05 }, feet: 'zygo', legLen: 0.18,
-    wing: { span: 1.9, chord: 0.62, tip: 'pointed', fold: 0.55 }, tail: { len: 2.8, fan: 16, n: 8, style: 'long', lift: 45 }, eye: 0.16, pattern: { face: 'face', faceU: 0.5, faceTop: 0.8, faceSlope: 0.25, mask: 'face', maskShape: 'stripe', wingBands: true, tail: 'body' },
-    palette: BP('#d8241e', '#d8241e', '#f2c21a', '#2a5ad8', '#d8241e', '#f2ede6', '#2a8a3a', '#efe6d0', '#5a5a60', '#e8e0b0', { flight: '#2a5ad8', jaw: '#1d1a1a' }) },
-  // Digital Diorama revision: eyes set into the facial disc (huge bulging black eyes), barred underparts, mottled back
-  owl: { label: 'Great Horned Owl', sci: 'Bubo virginianus', bodyForm: 'owl', L: 0.32, pitch: 72, bodyH: 0.85, bodyW: 0.8, neckLen: 0.08, headR: 0.44, headW: 1.0, headAng: -4, eye: 0.22, eyeYaw: 16, eyeInset: 0.55, eyeRing: 0.4,
-    marks: { belly: 'bars', back: 'streaks', wing: 'bars', tail: 'bars', freq: 1.6, zone: 'accent', light: 'face' },
-    beak: { len: 0.32, w: 0.22, h: 0.3, style: 'hook', hook: 0.5, y: 0.25 }, crest: { h: 0.75, n: 2, style: 'tuft', thk: 0.16, curl: -0.3, pair: true }, feet: 'zygo', talons: 1.4, feathered: true, legLen: 0.12, fluff: 0.05,
-    wing: { span: 1.9, chord: 0.75, tip: 'round', fold: 0.25 }, tail: { len: 0.6, fan: 40, n: 10, lift: 35 }, pattern: { mask: 'face', throat: 'belly', barred: true },
-    palette: BP('#7a5e40', '#c9b08a', '#6a5034', '#4a3a28', '#7a5e40', '#d8b88a', '#3a2c1e', '#3a3632', '#c9b08a', '#f2a81a') },
-  eagle: { label: 'Bald Eagle', sci: 'Haliaeetus leucocephalus', bodyForm: 'raptor', L: 0.45, pitch: 35, headR: 0.24, beak: { len: 1.05, w: 0.42, h: 0.62, style: 'hook', hook: 0.42 }, eye: 0.15, eyeYaw: 50, talons: 1.6, feathered: true, legLen: 0.22,
-    wing: { span: 2.4, chord: 0.75, tip: 'slotted', fold: 0.45 }, tail: { len: 0.75, fan: 36, n: 12 }, pattern: { headAll: true, neck: 'head', tail: 'head' },
-    palette: BP('#3a2a1c', '#3e2e20', '#3a2a1c', '#2a1e14', '#f4f2ec', '#f4f2ec', '#f4f2ec', '#f2c21a', '#f2c21a', '#f2d24a') },
-  falcon: { label: 'Peregrine Falcon', sci: 'Falco peregrinus', bodyForm: 'raptor', L: 0.38, pitch: 34, bodyH: 0.55, bodyW: 0.54, headR: 0.22, neckLen: 0.14, neckThin: 0.68,
-    beak: { len: 0.72, w: 0.34, h: 0.5, style: 'hook', hook: 0.55 }, eye: 0.16, eyeYaw: 48, talons: 1.55, feathered: true, legLen: 0.24, wing: { span: 2.85, chord: 0.52, tip: 'pointed', fold: 0.62, sweep: 0.25 }, tail: { len: 0.78, fan: 28, n: 10 },
-    // Digital Diorama revision: a black hood and moustache over a white throat and cheek, finely barred underparts
-    pattern: { mask: 'face', throat: 'belly', cheek: 'belly', barred: true }, maskR: 0.5, marks: { belly: 'bars', back: 'bars', tail: 'bars', freq: 3.2, barW: 0.13, zone: 'accent', throatPlain: true },
-    palette: BP('#5a6672', '#f0ebe0', '#4f5a66', '#2a3036', '#262b31', '#171b20', '#4a5058', '#60636a', '#e3b52b', '#33251a') },
-  flamingo: { label: 'Greater Flamingo', sci: 'Phoenicopterus roseus', bodyForm: 'flamingo', L: 0.36, pitch: 8, legLen: 1.1, thigh: 2.1, legThk: 0.036, bareTibia: 0.78, heelAng: 5, footFwd: 0.02, neckLen: 1.6, neckAng: 70, neckThin: 0.42, neckBase: 1.4, neckNape: 1.2,
-    neckShape: [[0, 30], [0.22, 78], [0.5, 116], [0.74, 98], [0.9, 58], [1, 32]], headR: 0.16, headAng: 8, headW: 0.84,
-    beak: { len: 1.95, w: 0.56, h: 0.78, style: 'cone', droop: 0.8, tip: 'face', y: 0.18 }, eye: 0.18, feet: 'webbed', wing: { span: 2.0, chord: 0.62, tip: 'round', fold: 0.35 }, tail: { len: 0.4, fan: 30, n: 8 },
-    palette: BP('#f2a0a8', '#f4b0b6', '#e8707e', '#1d1a1a', '#f2a0a8', '#1d1a1a', '#e8707e', '#f2e6d6', '#e88a96', '#f2d24a') },
-  heron: { label: 'Grey Heron', sci: 'Ardea cinerea', bodyForm: 'wader', L: 0.32, pitch: 18, legLen: 0.66, thigh: 1.4, legThk: 0.04, bareTibia: 0.55, heelAng: 8, neckLen: 1.05, neckAng: 66, neckBase: 1.45, neckThin: 0.46, neckNape: 1.15,
-    neckShape: [[0, 42], [0.25, 92], [0.52, 112], [0.78, 82], [1, 40]], headR: 0.17, headW: 0.82, headAng: 2, beak: { len: 2.6, w: 0.32, h: 0.38, style: 'cone' },
-    crest: { h: 2.6, n: 2, style: 'tuft', thk: 0.05, curl: 0.0, lay: 1, droop: 0.3 }, eye: 0.2, wing: { span: 2.2, chord: 0.7, tip: 'round', fold: 0.35 }, tail: { len: 0.45, fan: 30, n: 8 }, pattern: { neck: 'belly', cap: 'face' },
-    palette: BP('#8a8e94', '#e8e8e4', '#7a7e84', '#2a2c30', '#f0f0ec', '#1d1d20', '#1d1d20', '#d8b03a', '#b8a060', '#f2d24a') },
-  crane: { label: 'Sandhill Crane', sci: 'Antigone canadensis', bodyForm: 'wader', skullForm: 'wader', L: 0.48, pitch: 15, bodyH: 0.58, bodyW: 0.58, legLen: 0.75, thigh: 1.25, legThk: 0.04, bareTibia: 0.55, neckLen: 1.35, neckAng: 78, neckThin: 0.42, neckBase: 1.35,
-    neckShape: [[0, 54], [0.4, 82], [0.75, 88], [1, 70]], headR: 0.14, headW: 0.78, beak: { len: 2.4, w: 0.28, h: 0.3, style: 'cone' }, eye: 0.19, wing: { span: 2.5, chord: 0.7, tip: 'slotted', fold: 0.4 }, tail: { len: 0.45, fan: 35, n: 10 },
-    pattern: { neck: 'head', forehead: 'accent', cheek: 'face', headAll: true }, marks: { back: 'scaled', wing: 'edged', zone: 'flight', light: 'belly', freq: 0.9 },
-    palette: BP('#97948c', '#b8b5ae', '#8f8c84', '#3a3b3d', '#9a9b96', '#e8e0d2', '#b92f2c', '#565453', '#333638', '#c9883b') },
-  spoonbill: { label: 'Roseate Spoonbill', sci: 'Platalea ajaja', bodyForm: 'spoonbill', L: 0.4, pitch: 14, bodyH: 0.6, bodyW: 0.66, legLen: 0.42, thigh: 1.15, legThk: 0.042, bareTibia: 0.5, heelAng: 9, neckLen: 0.9, neckAng: 67, neckBase: 1.25, neckThin: 0.46, neckRootR: 0.27, neckFlare: 0.24,
-    neckShape: [[0, 40], [0.35, 84], [0.7, 88], [1, 52]], headR: 0.16, headW: 0.8, headAng: 16,
-    beak: { len: 3.6, w: 0.24, h: 0.25, style: 'spoon', spoon: 2.9, curve: 0.08, tip: 'beak' }, eye: 0.19, feet: 'webbed', toeLen: 0.3, wing: { span: 2.05, chord: 0.66, tip: 'round', fold: 0.38 }, tail: { len: 0.42, fan: 32, n: 8 }, pattern: { neck: 'head', headAll: true },
-    palette: BP('#ef91a5', '#f6b6bd', '#dd6f91', '#bd496b', '#f19bad', '#f4a1b0', '#e56e88', '#8b8b82', '#d9959c', '#f6db81') },
-  stilt: { label: 'Black-necked Stilt', sci: 'Himantopus mexicanus', bodyForm: 'wader', L: 0.17, pitch: 17, bodyH: 0.5, bodyW: 0.5, legLen: 0.78, thigh: 1.25, legThk: 0.03, bareTibia: 0.62, heelAng: 6, neckLen: 0.55, neckAng: 68, neckThin: 0.55,
-    neckShape: [[0, 52], [0.5, 76], [1, 64]], headR: 0.15, headW: 0.78, headAng: 4,
-    beak: { len: 2.1, w: 0.2, h: 0.22, style: 'cone' }, eye: 0.18, feet: 'perch', toeLen: 0.36, wing: { span: 1.9, chord: 0.58, tip: 'pointed', fold: 0.4 }, tail: { len: 0.5, fan: 24, n: 8 }, pattern: { neck: 'head', headAll: true },
-    palette: BP('#17191c', '#f4f1ea', '#1c1d20', '#242529', '#17191c', '#f4f1ea', '#f4f1ea', '#1e2022', '#ee7f82', '#d94f54') },
-  swan: { label: 'Mute Swan', sci: 'Cygnus olor', bodyForm: 'swan', L: 0.62, pitch: -2, bodyH: 0.55, bodyW: 0.62, legLen: 0.16, thigh: 0.4, footFwd: -0.08, heelAng: 22, neckLen: 1.3, neckAng: 74, neckThin: 0.5, neckBase: 1.6, neckNape: 1.12, neckRootU: 0.84,
-    neckShape: [[0, 24], [0.2, 64], [0.45, 100], [0.68, 104], [0.86, 72], [1, 44]], headR: 0.15, headAng: 24, beak: { len: 1.7, w: 0.5, h: 0.42, style: 'flat', tip: 'face' }, eye: 0.16,
-    feet: 'webbed', toeLen: 0.22, wing: { span: 2.0, chord: 0.7, tip: 'round', fold: 0.2, foldH: 0.65 }, tail: { len: 0.35, fan: 40, n: 10, lift: 12 },
-    palette: BP('#f6f4ee', '#f2f0ea', '#f4f2ec', '#eceae4', '#f6f4ee', '#1d1d1d', '#f6f4ee', '#e8742c', '#2a2826') },
-  duck: { label: 'Mallard', sci: 'Anas platyrhynchos', bodyForm: 'waterfowl', L: 0.36, pitch: 4, bodyH: 0.55, bodyW: 0.62, legLen: 0.16, thigh: 0.36, footFwd: -0.06, heelAng: 20, neckLen: 0.4, neckAng: 70, neckShape: [[0, 32], [0.35, 74], [0.75, 72], [1, 46]], headR: 0.2, headAng: 8, beak: { len: 1.15, w: 0.55, h: 0.4, style: 'flat' }, eye: 0.16,
-    feet: 'webbed', toeLen: 0.22, wing: { span: 1.7, chord: 0.6, tip: 'pointed', fold: 0.25 }, tail: { len: 0.35, fan: 44, n: 10, lift: 15 }, crest: { h: 0.0 },
-    pattern: { headAll: true, neck: 'head', collar: true, breast: 'accent', speculum: true }, palette: BP('#8a8a86', '#d8d4cc', '#7a766e', '#5a5650', '#1e6a3a', '#f4f2ec', '#6a3a2a', '#e8c43a', '#e8823a') },
-  puffin: { label: 'Atlantic Puffin', sci: 'Fratercula arctica', bodyForm: 'penguin', skullForm: 'parrot', L: 0.25, pitch: 58, bodyH: 0.64, bodyW: 0.58, headR: 0.27, neckLen: 0.1, neckThin: 0.84,
-    beak: { len: 0.82, w: 0.28, h: 0.78, style: 'big', decurve: 0.12, tip: 'face', tipFrom: 0.75 }, eye: 0.15, feet: 'webbed', legLen: 0.1, wing: { span: 1.45, chord: 0.48, tip: 'pointed', fold: 0.3 }, tail: { len: 0.22, fan: 30, n: 8 },
-    pattern: { headAll: true, face: 'belly', bellyFront: true }, palette: BP('#1b2024', '#f0eee5', '#22282d', '#31363b', '#171a1d', '#ded9ca', '#e46d35', '#e8832f', '#e36b3d', '#59402d') },
-  penguin: { label: 'Emperor Penguin', sci: 'Aptenodytes forsteri', bodyForm: 'penguin', L: 0.78, pitch: 84, bodyH: 0.52, bodyW: 0.5, legLen: 0.03, thigh: 0.12, footFwd: 0.2, heelAng: 40, bareTibia: 0, thighK: 1.7, groundClear: 0.01, legThk: 0.05, neckLen: 0.14, neckAng: 85, headR: 0.17, headAng: 10, beak: { len: 1.5, w: 0.3, h: 0.32, style: 'cone', curve: -0.4 }, eye: 0.12,
-    feet: 'webbed', toeLen: 0.12, wing: { span: 0.62, chord: 0.24, tip: 'round', fold: 0.0, foldH: 0.6, foldReach: 0.55 }, tail: { len: 0.12, fan: 30, n: 6 }, pattern: { headAll: true, neck: 'head', face: 'face', bellyFront: true },
-    palette: BP('#1d2228', '#f4f2ea', '#1d2228', '#1d2228', '#15181c', '#f2b23a', '#f2b23a', '#1d1d20', '#1d1d20', '#1a120a', { jaw: '#e8923a' }) },
-  ostrich: { label: 'Ostrich', sci: 'Struthio camelus', bodyForm: 'ratite', L: 0.72, pitch: 12, bodyH: 0.72, bodyW: 0.68, legLen: 1.0, thigh: 0.9, legThk: 0.075, thighK: 1.25, heelAng: 10, neckLen: 1.25, neckAng: 78, neckThin: 0.5, neckRootR: 0.26,
-    neckShape: [[0, 64], [0.4, 84], [0.8, 92], [1, 86]], headR: 0.13, headAng: 6, beak: { len: 1.6, w: 0.55, h: 0.32, style: 'flat' }, eye: 0.3,
-    feet: 'ratite', toeLen: 0.28, wing: { span: 0.75, chord: 0.45, tip: 'round', fold: 0.15 }, tail: { len: 0.4, fan: 60, n: 10, droop: 0.3 }, fluff: 0.06, pattern: { neck: 'face', thigh: 'leg', headAll: true },
-    palette: BP('#1d1b1a', '#1d1b1a', '#1d1b1a', '#f2f0ea', '#c8a49a', '#d8b0a4', '#f2f0ea', '#c89a7a', '#d8a098') },
-  kiwi: { label: 'North Island Brown Kiwi', sci: 'Apteryx mantelli', bodyForm: 'ratite', skullForm: 'wader', L: 0.35, pitch: 22, bodyH: 0.78, bodyW: 0.72, legLen: 0.32, thigh: 0.65, legThk: 0.065, neckLen: 0.2, neckAng: 55, headR: 0.16, headW: 0.78,
-    beak: { len: 3.1, w: 0.18, h: 0.2, style: 'cone', curve: 0.12 }, eye: 0.13, feet: 'ratite', toeLen: 0.42, wing: { span: 0.12, chord: 0.12, tip: 'round', fold: 0, foldLength: 0.14, foldH: 0.2 }, tail: { len: 0, fan: 20, n: 1 }, fluff: 0.08,
-    pattern: { headAll: true, neck: 'head' }, marks: { back: 'streaks', belly: 'streaks', zone: 'flight', freq: 1.5 },
-    palette: BP('#65503c', '#755e47', '#594532', '#493929', '#6c5540', '#705944', '#8b7459', '#b79b79', '#8f7b64', '#2b2118') },
-  turkey: { label: 'Wild Turkey', sci: 'Meleagris gallopavo', bodyForm: 'galliform', skullForm: 'galliform', L: 0.68, pitch: 24, bodyH: 0.76, bodyW: 0.75, headR: 0.17, neckLen: 0.48, neckAng: 70, neckThin: 0.48, legLen: 0.42, legThk: 0.06, bareTibia: 0.25,
-    beak: { len: 0.75, w: 0.38, h: 0.42, style: 'cone', hook: 0.12 }, eye: 0.16, wattle: 1.5, wattleZone: 'face', wing: { span: 1.75, chord: 0.7, tip: 'round', fold: 0.25 }, tail: { len: 1.0, fan: 110, n: 18, lift: 65 },
-    pattern: { neck: 'face', headAll: true, barred: true }, marks: { back: 'scaled', belly: 'chevrons', wing: 'bars', tail: 'bars', zone: 'flight', light: 'jaw', freq: 2.2 },
-    palette: BP('#3b2b21', '#46352a', '#514031', '#2a2420', '#4c6e83', '#9c3c3c', '#c09a55', '#d6b45f', '#b66d63', '#2a1a12', { jaw: '#7a5a34' }) },
-  rooster: { label: 'Rooster', sci: 'Gallus gallus domesticus', bodyForm: 'galliform', L: 0.38, pitch: 28, bodyH: 0.7, headR: 0.2, beak: { len: 0.8, w: 0.4, h: 0.5, style: 'cone', hook: 0.12 }, crest: { h: 1.2, style: 'comb', zone: 'face' }, wattle: 1.0, wattleZone: 'face', maskR: 0.42, eye: 0.16,
-    wing: { span: 1.6, chord: 0.62, tip: 'round', fold: 0.2 }, tail: { len: 1.6, fan: 40, n: 10, style: 'long', lift: 28, droop: 0.5 }, legLen: 0.4, legThk: 0.05, thigh: 0.5, thighK: 1.15, bareTibia: 0.2,
-    pattern: { neck: 'accent', headAll: true, mask: 'face' }, palette: BP('#a8381e', '#1d2a22', '#8a2a14', '#1d2a22', '#d8742a', '#d8241e', '#e88a2a', '#e8c43a', '#e8c43a', '#d8742a', { tail: '#1d3a2a' }) },
-  peacock: { label: 'Indian Peafowl', sci: 'Pavo cristatus', bodyForm: 'peafowl', L: 0.45, pitch: 22, headR: 0.17, neckLen: 0.75, neckAng: 72, neckShape: [[0, 58], [0.5, 80], [1, 76]], bareTibia: 0.3, beak: { len: 0.8, w: 0.36, h: 0.4, style: 'cone' }, crest: { h: 1.1, n: 7, style: 'fan', thk: 0.04, ball: true }, eye: 0.17,
-    wing: { span: 1.7, chord: 0.62, tip: 'round', fold: 0.3 }, tail: { len: 2.6, fan: 60, n: 18, style: 'train', droop: 0.15, eyespots: true }, legLen: 0.55, legThk: 0.05,
-    pattern: { neck: 'head', headAll: true, mask: 'face' }, palette: BP('#1e5ac8', '#1a3a7a', '#c8b48a', '#6a4a2a', '#1e5ac8', '#f2f0ea', '#e8c43a', '#d8c8b0', '#a8a098', '#1a120a', { flight: '#2a8a4a' }) },
-  hummingbird: { label: 'Ruby-throated Hummingbird', sci: 'Archilochus colubris', bodyForm: 'hummingbird', L: 0.05, bodyH: 0.55, bodyW: 0.5, pitch: 30, legLen: 0.06, thigh: 0.18, legThk: 0.018, headR: 0.21, neckLen: 0.07, neckThin: 0.8, neckNape: 1.0, neckAng: 66, beak: { len: 1.75, w: 0.12, h: 0.12, style: 'cone' }, eye: 0.23,
-    wing: { span: 1.6, chord: 0.32, tip: 'pointed', fold: 0.45 }, tail: { len: 0.55, fan: 30, n: 8, style: 'fork' }, pattern: { throat: 'accent' }, palette: BP('#2a8a4a', '#d8d8d0', '#2a6a3a', '#3a3a3a', '#2a8a4a', '#2a2a2a', '#d8241e', '#1d1d1d', '#2a2a2a') },
-  pelican: { label: 'Brown Pelican', sci: 'Pelecanus occidentalis', bodyForm: 'pelican', L: 0.55, pitch: 15, neckLen: 0.95, neckAng: 60, neckBase: 1.5, footFwd: -0.02,
-    neckShape: [[0, 46], [0.35, 96], [0.7, 104], [1, 62]], headR: 0.16, headAng: 30, beak: { len: 4.2, w: 0.42, h: 0.3, style: 'flat', hook: 0.06, hookPow: 9, tipTaper: 0.55, tipLen: 0.1, pouch: 1.2 }, eye: 0.15,
-    feet: 'webbed', legLen: 0.18, wing: { span: 2.4, chord: 0.62, tip: 'slotted', fold: 0.3 }, tail: { len: 0.4, fan: 30, n: 10 }, pattern: { headAll: true, neck: 'face' },
-    palette: BP('#6a6a6a', '#5a5a5c', '#7a766e', '#2a2826', '#f2eed8', '#5a3a2a', '#e8d870', '#a89a8a', '#3a3a3a') },
-  toucan: { label: 'Toco Toucan', sci: 'Ramphastos toco', bodyForm: 'toucan', L: 0.3, pitch: 40, headR: 0.22, beak: { len: 3.8, w: 0.5, h: 1.25, style: 'big', curve: 0.1, decurve: 0.22, keel: 0.6, lowerDepth: 0.75, tip: 'face', tipFrom: 0.88, tipLower: false }, eye: 0.17, eyeRing: 0.5, feet: 'zygo', legLen: 0.2,
-    wing: { span: 1.4, chord: 0.6, tip: 'round', fold: 0.2 }, tail: { len: 0.95, fan: 20, n: 8, lift: 25 }, pattern: { throat: 'belly', mask: 'accent', bellyFront: true },
-    palette: BP('#141416', '#f4f2ea', '#141416', '#141416', '#141416', '#1d1d1d', '#3ab8e8', '#f28a1a', '#4a6ab8') },
-  cockatoo: { label: 'Sulphur-crested Cockatoo', sci: 'Cacatua galerita', bodyForm: 'parrot', L: 0.24, pitch: 46, bodyH: 0.58, headR: 0.27, headAng: 18, neckLen: 0.12, neckThin: 0.82, eye: 0.15, eyeRing: 0.4,
-    beak: { len: 0.72, w: 0.54, h: 0.92, style: 'hook', hook: 0.44, lower: 0.62, lowerStyle: 'scoop', keel: 0.15, y: 0.06 }, crest: { h: 2.3, n: 8, style: 'recurve', vane: 0.16, thk: 0.035, curl: 0.9 },
-    feet: 'zygo', legLen: 0.18, wing: { span: 2.1, chord: 0.66, tip: 'round', fold: 0.45 }, tail: { len: 1.15, fan: 24, n: 10, style: 'wedge', lift: 30 }, pattern: { headAll: true },
-    palette: BP('#f3f2ec', '#f1f0ea', '#efeee8', '#f2ead0', '#f6f5f0', '#dfe8f0', '#f4cd2b', '#2b2c30', '#4f5054', '#1a1410') },
-  hornbill: { label: 'Great Hornbill', sci: 'Buceros bicornis', bodyForm: 'corvid', skullForm: 'hornbill', L: 0.42, pitch: 28, headR: 0.17, neckLen: 0.4, neckAng: 60, neckThin: 0.62, eye: 0.17, maskW: 0.45, maskWBill: 0.9,
-    beak: { len: 4.1, w: 0.4, h: 0.8, style: 'big', decurve: 0.42, keel: 0.35, casque: { len: 0.6, h: 0.85, w: 0.92, zone: 'beak', tipZone: 'face' } },
-    feet: 'perch', legLen: 0.2, legThk: 0.045, wing: { span: 2.5, chord: 0.78, tip: 'slotted', fold: 0.4 }, tail: { len: 1.5, fan: 24, n: 10 }, pattern: { neck: 'accent', headAll: true, mask: 'face', maskShape: 'stripe' },
-    palette: BP('#17181b', '#ece8dc', '#1b1c1f', '#efe9d6', '#1b1c1f', '#101012', '#ede0a2', '#f0c033', '#55524c', '#c8352a', { jaw: '#efd57c' }) },
-  albatross: { label: 'Wandering Albatross', sci: 'Diomedea exulans', bodyForm: 'gull', skullForm: 'pelican', L: 0.62, pitch: 12, bodyH: 0.52, bodyW: 0.58, headR: 0.18, neckLen: 0.38, neckAng: 58,
-    beak: { len: 1.9, w: 0.34, h: 0.42, style: 'flat', hook: 0.2, hookPow: 8, tip: 'face', tipFrom: 0.88 }, eye: 0.14, feet: 'webbed', legLen: 0.16, wing: { span: 3.8, chord: 0.44, tip: 'pointed', fold: 0.72, sweep: 0.3 }, tail: { len: 0.48, fan: 28, n: 10 },
-    pattern: { headAll: true, neck: 'head', wingTips: true }, marks: { wing: 'edged', light: 'belly', freq: 1 },
-    palette: BP('#f4f2e9', '#f7f5ed', '#4a4b4e', '#24262a', '#f7f5ed', '#f5f1e6', '#d6c7ab', '#e1c7a8', '#c8b59c', '#3c2c20') },
-  seagull: { label: 'Herring Gull', sci: 'Larus argentatus', bodyForm: 'gull', L: 0.32, pitch: 15, headR: 0.22, beak: { len: 1.2, w: 0.3, h: 0.38, style: 'cone', hook: 0.12, tip: 'accent', tipUpper: false }, eye: 0.14, feet: 'webbed', legLen: 0.32,
-    wing: { span: 2.6, chord: 0.55, tip: 'pointed', fold: 0.6 }, tail: { len: 0.6, fan: 36, n: 10 }, pattern: { headAll: true, neck: 'head', wingTips: true },
-    palette: BP('#a8b0b8', '#f6f6f4', '#a8b0b8', '#1d1d20', '#f6f6f4', '#f6f6f4', '#d8241e', '#f2c21a', '#e8a8a0', '#f2e6a0') },
-};
-
-/* ════════════════════════════════════════════════════════════════════════════
- *  BIRD FAMILY — schema, plumage painter, flight & perching clips, assembly
- * ════════════════════════════════════════════════════════════════════════════ */
-const DEFAULT_SPECIES = 'eagle';
-const ZONE_KEYS = ['body', 'belly', 'wing', 'flight', 'head', 'face', 'accent', 'beak', 'jaw', 'leg', 'eye', 'pupil'];
+const ZONE_KEYS = Object.keys(BASE);
 const ZONE_ROLES = { body: 'body', belly: 'body', wing: 'body', flight: 'body', head: 'body', face: 'body', accent: 'body', beak: 'keratin', jaw: 'keratin', leg: 'keratin', eye: 'eye', pupil: 'pupil' };
-const ZONE_LABELS = { body: 'Back / mantle', belly: 'Belly', wing: 'Wing coverts', flight: 'Flight feathers', head: 'Head / neck', face: 'Face / mask / throat', accent: 'Accent (crest, comb, breast, patches)', beak: 'Beak / claws', jaw: 'Lower mandible', leg: 'Legs / feet', eye: 'Iris', pupil: 'Pupil' };
-const BASE = { ...SPECIES[DEFAULT_SPECIES].palette };
-export const COLORWAYS = colorwaysFor(BASE);
-export const presets = COLORWAYS;
-export const species = Object.fromEntries(Object.entries(SPECIES).map(([k, v]) => [k, { label: v.label, scientific: v.sci }]));
-const R = (label, def, min, max, step, describe, affects = 'geometry') => ({ type: 'range', default: def, min, max, step, label, affects, describe });
-const CH = (label, def, options, describe, affects = 'geometry') => ({ type: 'choice', default: def, options, label, affects, describe });
+const ZONE_LABELS = { body: 'Back / mantle', belly: 'Belly / underparts', wing: 'Wing coverts', flight: 'Flight & tail feathers', head: 'Head / crown', face: 'Face / throat / mask', accent: 'Accent (crest, comb, breast, patches)', beak: 'Bill / claws', jaw: 'Lower mandible', leg: 'Legs / feet', eye: 'Iris', pupil: 'Pupil' };
+const pal = (o) => ({ ...BASE, jaw: o.beak ?? BASE.jaw, ...o });
 
-// Swaps spread vs folded wing visibility with bone-scale keys. Scale 0.001 hides without removing
-// the bone, so clip scale tracks always reference valid nodes and static-mode part filtering keeps
-// only the needed wing set. This prevents wings from appearing detached during fold transitions.
-const fold = (s) => ({
-  WingL: { r: [0, 0, 0], s: s ? 0.001 : 1 },
-  WingR: { r: [0, 0, 0], s: s ? 0.001 : 1 },
-  WingFoldL: { r: [0, 0, 0], s: s ? 1 : 0.001 },
-  WingFoldR: { r: [0, 0, 0], s: s ? 1 : 0.001 },
-});
+/* ── small vector helpers ── */
+const X = (v) => V3(v[0], v[1], v[2]);
+const smooth01 = (t) => t * t * (3 - 2 * t);
+const along = (a, b, t) => a.clone().lerp(b, t);
 
-// Expresses a bone rotation [rx, ry, rz] (defined in the body's aligned [X, upb, fwd] frame)
-// in the rest-pose world frame via R_x(-P) · R(rx, ry, rz) · R_x(+P).
-const _qp = new THREE.Quaternion(), _qpi = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _eb = new THREE.Euler();
-function bodyEuler(rx, ry, rz, pitchDeg) {
-  _qp.setFromAxisAngle(V3(1, 0, 0), -pitchDeg * DEG);
-  _qpi.copy(_qp).invert();
-  _eb.set(rx * DEG, ry * DEG, rz * DEG, 'YXZ');
-  _qb.setFromEuler(_eb).premultiply(_qp).multiply(_qpi);
-  _eb.setFromQuaternion(_qb, 'YXZ');
-  return [_eb.x / DEG, _eb.y / DEG, _eb.z / DEG];
-}
-
-// Streamlined flight legs: in Three.js, positive X rotation swings a downward-hanging leg
-// backward (-Z) and up (+Y) behind the body. Because Thigh inherits Hips' forward flight pitch
-// (bodyPitch), we subtract bodyPitch so the world leg trail angle is consistent across all species.
-function flightLegs(o, bodyPitch = 20) {
-  const thighRx = clamp(48 - bodyPitch, -25, 52);
-  for (const [sfx, k] of [['L', 1], ['R', -1]]) {
-    o['Thigh' + sfx] = [thighRx, 0, -k * 3];
-    o['Shin' + sfx] = [18, 0, 0];
-    o['Tarsus' + sfx] = [14, 0, 0];
-    o['Toe' + sfx] = [72, 0, 0];
-  }
-  return o;
-}
-
-function birdLegs(o, sw, lift, tuck = 0) {
-  for (const [sfx, k] of [['L', 1], ['R', -1]]) {
-    const s = sw * k, l = Math.max(0, lift * k);
-    o['Thigh' + sfx] = [-s + tuck * 40, 0, 0]; o['Shin' + sfx] = [l * 25 + tuck * 30, 0, 0]; o['Tarsus' + sfx] = [-l * 55 + tuck * 75, 0, 0];
-    o['Toe' + sfx] = [s - l * 25 + l * 55 - tuck * 140 + tuck * 60, 0, 0];
-  }
-  return o;
-}
-/* ── planted-foot walk (Digital Diorama revision 8) ─────────────────────────────────────────────────────────────
- * The walk used to swing each leg on a sine (birdLegs) while the app moved the bird at a speed the clip knew nothing
- * about, so its feet slid (1.8 hip heights a step on average) and dipped up to 4 cm into the ground. Now each foot
- * is planted for `duty` of the cycle, drawn back under the body at the pace the clip walks at, then lifted, its toes
- * hanging, and carried forward to land flat. The hip (a little protraction and retraction, and the abduction that
- * keeps the foot on its line while the pelvis rolls and yaws), the knee and the intertarsal joint reach it; the toes
- * stay level whatever the leg above does. The head keeps its attitude in the world, and head-bobbers (pigeons,
- * fowl) hold it still between thrusts. createClips stores the stride (the distance one cycle covers), so the app
- * plays the walk at the rate its feet need, as it does the mammals' gaits.
- */
-// lambda: stride / hip height; duty: share of the cycle a foot is planted; lift: toe clearance in the swing / hip
-// height; fr: the Froude number v²/(g·h) of the clip's own pace (the step rate is held below a leg pendulum's);
-// femur: hip swing (±degrees); rise: the hips' rise and fall / hip height; heel: how far the foot
-// rolls onto its toes before lifting (degrees); toe: how far the toes hang in the swing (degrees); roll, yaw: pelvis
-// waddle (degrees); sway: sideways shift / hip height; bob: head bob (1 = the head holds still in the world between
-// thrusts); nod: head nod (degrees)
-const WALK_STYLE = {
-  base: { lambda: 0.85, duty: 0.6, lift: 0.09, fr: 0.16, femur: 6, heel: 18, toe: 40, roll: 2, yaw: 2, sway: 0.012, rise: 0.012, bob: 0, nod: 2 },
-  songbird: { bob: 0.35 }, robin: { bob: 0.35 }, cardinal: { bob: 0.35 }, corvid: { bob: 0.55, lambda: 0.9 },
-  galliform: { lambda: 0.95, bob: 0.9, roll: 2.5 }, peafowl: { lambda: 0.95, bob: 0.8 },
-  wader: { lambda: 0.8, duty: 0.64, lift: 0.07, fr: 0.11, heel: 15, toe: 50, bob: 0.45 }, flamingo: { lambda: 0.75, duty: 0.64, lift: 0.06, fr: 0.1, heel: 15, toe: 50, bob: 0.2 },
-  spoonbill: { lambda: 0.8, duty: 0.64, lift: 0.07, fr: 0.11, heel: 15, toe: 45, bob: 0.4 },
-  waterfowl: { lambda: 0.7, heel: 14, toe: 30, roll: 6, yaw: 4, sway: 0.03, nod: 3 }, swan: { lambda: 0.65, heel: 12, toe: 28, roll: 5, yaw: 3, sway: 0.025 },
-  penguin: { lambda: 0.42, duty: 0.7, lift: 0.05, fr: 0.08, femur: 4, heel: 8, toe: 15, roll: 4, yaw: 7, sway: 0.03, rise: 0.003, nod: 1 },
-  ratite: { lambda: 1.15, duty: 0.58, lift: 0.07, fr: 0.2, femur: 8, heel: 22, toe: 35, roll: 1.5, yaw: 1.5, nod: 1.5 },
-  raptor: { lambda: 0.75, heel: 12, toe: 22, roll: 3, yaw: 2.5, sway: 0.02 }, owl: { lambda: 0.7, heel: 12, toe: 22, roll: 3, yaw: 2.5, sway: 0.02 },
-  parrot: { lambda: 0.7, heel: 14, toe: 28, roll: 3.5, yaw: 3, sway: 0.025 },
-};
-const FLIGHTLESS = new Set(['penguin', 'ostrich', 'kiwi']);
-// pigeons borrow the waterfowl torso but walk like pigeons
-const WALK_SPECIES = { pigeon: { lambda: 0.85, heel: 16, toe: 38, roll: 2.5, yaw: 2.5, sway: 0.015, bob: 1, nod: 2 }, kiwi: { lambda: 0.95, bob: 0.3 } };
-const _gX = V3(1, 0, 0), _gE = new THREE.Euler(), _gQh = new THREE.Quaternion(), _gQ1 = new THREE.Quaternion(), _gM = new THREE.Quaternion(), _gMi = new THREE.Quaternion(), _gQa = new THREE.Quaternion(), _gQb = new THREE.Quaternion();
-const _gP = V3(), _gJ = V3(), _gK = V3(), _gF = V3(), _gf = V3(), _gd = V3();
-const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-const mjerk = (t) => t * t * t * (10 + t * (6 * t - 15));   // minimum-jerk 0 → 1
-const hermite = (w, p0, p1, m0, m1) => { const w2 = w * w, w3 = w2 * w; return (2 * w3 - 3 * w2 + 1) * p0 + (w3 - 2 * w2 + w) * m0 + (-2 * w3 + 3 * w2) * p1 + (w3 - w2) * m1; };
-const eulerOf = (q) => { _gE.setFromQuaternion(q, 'YXZ'); return [_gE.x / DEG, _gE.y / DEG, _gE.z / DEG]; };
 /**
- * Two links of lengths l1, l2 in a bone's (Y, Z) plane reaching (ty, tz) from the first joint: the first link's
- * angle atan2(y, z) and the elbow, bending to the side `sign` (that of the rest pose; out of reach, the chain points
- * at the target).
+ * A two-bone limb solved in model space: shoulder S, target T for the end of the second bone, lengths la and lb, and a pole
+ * direction p (where the middle joint should point). Returns the middle joint.
  */
-function reach2(ty, tz, l1, l2, sign) {
-  const d = clamp(Math.hypot(ty, tz), Math.abs(l1 - l2) * 1.001 + 1e-9, (l1 + l2) * 0.9995);
-  const af = Math.atan2(ty, tz), b = Math.acos(clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1));
-  const at = (a) => ({ a, ey: l1 * Math.sin(a), ez: l1 * Math.cos(a) }), e = at(af + b);
-  return Math.sign(e.ez * (ty - e.ey) - e.ey * (tz - e.ez)) === sign ? e : at(af - b);
+function twoBone(S, T, la, lb, pole) {
+  const d0 = T.clone().sub(S), dist = clamp(d0.length(), Math.abs(la - lb) + 1e-6, la + lb - 1e-6), dir = d0.normalize();
+  const x = (la * la - lb * lb + dist * dist) / (2 * dist), y = Math.sqrt(Math.max(0, la * la - x * x));
+  const perp = pole.clone().addScaledVector(dir, -pole.dot(dir));
+  if (perp.lengthSq() < 1e-12) perp.set(0, 1, 0).addScaledVector(dir, -dir.y);
+  perp.normalize();
+  return S.clone().addScaledVector(dir, x).addScaledVector(perp, y);
 }
-/** The hips' sway, rise and turn at walk phase u (shared by the walk and its set-up). */
-function walkHips(G, u) {
-  const c1 = Math.cos(TAU * (u - G.duty / 2)), c2 = Math.cos(2 * TAU * (u - G.duty / 2));   // c1: +1 left mid-stance, −1 right; c2: +1 at either
-  const k = fract(u) * G.fix.length, i = Math.floor(k), f = k - i, fix = G.fix.length ? lerp(G.fix[i % G.fix.length], G.fix[(i + 1) % G.fix.length], f) : 0;
-  // (the pelvis rocks over the stance foot, not about its middle: the swing side rises, the stance hip keeps its height)
-  const roll = -G.roll * c1;
-  return { c1, c2, dy: -G.drop + G.bobA * c2 + fix + G.hipX * Math.abs(Math.sin(roll * DEG)), roll, yaw: G.yaw * c1, sway: G.sway * c1 };
+/** Rotation taking the frame (a0, n0) onto (a1, n1): a = bone direction, n = bend-plane normal (both re-orthogonalised). */
+const _m0 = new THREE.Matrix4(), _m1 = new THREE.Matrix4();
+function frameRot(a0, n0, a1, n1) {
+  const f = (a, n, m) => {
+    const x = a.clone().normalize(), z = n.clone().addScaledVector(x, -n.dot(x));
+    if (z.lengthSq() < 1e-12) z.copy(Math.abs(x.y) < 0.9 ? V3(0, 1, 0) : V3(1, 0, 0)).addScaledVector(x, -(Math.abs(x.y) < 0.9 ? x.y : x.x));
+    z.normalize();
+    const y = new THREE.Vector3().crossVectors(z, x);
+    return m.makeBasis(x, y, z);
+  };
+  f(a0, n0, _m0); f(a1, n1, _m1);
+  return new THREE.Quaternion().setFromRotationMatrix(_m1.multiply(_m0.invert()));
 }
+const _eu = new THREE.Euler();
+/** Quaternion → sample angles in degrees (Euler YXZ, as bakeClip and applySample read them). */
+const qDeg = (q) => { _eu.setFromQuaternion(q, 'YXZ'); return [_eu.x / DEG, _eu.y / DEG, _eu.z / DEG]; };
+const degQ = (r) => new THREE.Quaternion().setFromEuler(_eu.set((r ? r[0] : 0) * DEG, (r ? r[1] : 0) * DEG, (r ? r[2] : 0) * DEG, 'YXZ'));
+
 /**
- * The lowest points of a bird's body and tail at rest (a few per part, legs and feet aside), and how far the walk takes
- * them down: returns, for 32 phases, how much to lift the hips so the body never sinks below where it stood (or below
- * the ground), and how far to raise the tail so it stays clear too.
+ * Forward kinematics of a sample: world rotation and world head position of every bone (rest bones carry identity rotation,
+ * so a bone's world rotation is the product of its chain's local rotations). Memoised per bone.
  */
-function walkClearance(rig, parts, G) {
-  const hips = rig.head('Hips'), tailH = rig.has('Tail') ? rig.head('Tail') : null, lows = [];
-  for (const pt of parts) {
-    if (pt.group === 'legs' || pt.group === 'feet' || pt.glass) continue;
-    const idx = [];
-    for (let i = 0; i < pt.count; i++) idx.push(i);
-    idx.sort((a, b) => pt.p[a * 3 + 1] - pt.p[b * 3 + 1]);
-    for (const i of idx.slice(0, 24)) {
-      let bi = pt.si[i * 4], bw = pt.sw[i * 4];
-      for (let k = 1; k < 4; k++) if (pt.sw[i * 4 + k] > bw) { bw = pt.sw[i * 4 + k]; bi = pt.si[i * 4 + k]; }
-      const name = rig.list[bi].name, tail = name === 'Tail';
-      if (!tail && !/^(Root|Hips|Chest|WingFold[LR])$/.test(name)) continue;
-      lows.push({ tail, P: V3(pt.p[i * 3], pt.p[i * 3 + 1], pt.p[i * 3 + 2]) });
-    }
-  }
-  const margin = 0.004 * G.hipH, low = (set) => Math.min(...lows.filter((l) => l.tail === set).map((l) => l.P.y), Infinity);
-  const tBody = Math.min(low(false), margin), tTail = Math.min(low(true), margin);
-  const Qh = new THREE.Quaternion(), Qt = new THREE.Quaternion(), e = new THREE.Euler(), v = V3(), N = 32, fix = [], at = [];
-  for (let n = 0; n < N; n++) {
-    const u = n / N, h = walkHips({ ...G, fix: [] }, u);
-    Qh.setFromEuler(e.set(0, h.yaw * DEG, h.roll * DEG, 'YXZ'));
-    let m = Infinity;
-    for (const l of lows) if (!l.tail) m = Math.min(m, v.copy(l.P).sub(hips).applyQuaternion(Qh).y + hips.y + h.dy);
-    fix.push(Math.max(0, tBody - m)); at.push({ u, h });
-  }
-  // a little smoothing, so the lift has no corners
-  const sm = fix.map((f, n) => Math.max(f, 0.25 * fix[(n + N - 1) % N] + 0.5 * f + 0.25 * fix[(n + 1) % N]));
-  let tailUp = 0;
-  if (tailH) for (; tailUp < 40; tailUp += 1) {
-    let ok = true;
-    for (const [n, { u, h }] of at.entries()) {
-      Qh.setFromEuler(e.set(0, h.yaw * DEG, h.roll * DEG, 'YXZ'));
-      Qt.setFromEuler(e.set((tailUp + 2 * h.c2) * DEG, (-1.2 * h.yaw + 3 * Math.sin(TAU * u)) * DEG, 0, 'YXZ'));
-      for (const l of lows) if (l.tail && v.copy(l.P).sub(tailH).applyQuaternion(Qt).add(tailH).sub(hips).applyQuaternion(Qh).y + hips.y + h.dy + sm[n] < tTail) { ok = false; break; }
-      if (!ok) break;
-    }
-    if (ok) break;
-  }
-  return { fix: sm.map((f) => +f.toFixed(5)), tailUp };
-}
-/** Walk geometry for one bird, from its skeleton (plain numbers, so the asset's userData stays clonable). */
-function birdGaitSetup(rig, S, species, parts = []) {
-  const st = { ...WALK_STYLE.base, ...(WALK_STYLE[S.bodyForm] || {}), ...(WALK_SPECIES[species] || {}) };
-  const rel = (n) => { const e = rig.by[n]; return (e.parent ? e.head.clone().sub(e.parent.head) : e.head.clone()).toArray(); };
-  const legs = ['L', 'R'].map((s) => {
-    const g = { s, t: rel('Thigh' + s), a: rel('Shin' + s), b: rel('Tarsus' + s), c: rel('Toe' + s), foot: rig.head('Toe' + s).toArray() };
-    g.sign = Math.sign(g.b[2] * g.c[1] - g.b[1] * g.c[2]) || 1;
-    return g;
-  });
-  const J = rig.head('ThighL'), hipH = J.y, g0 = legs[0], d1 = st.femur * DEG;
-  const l2 = Math.hypot(g0.b[1], g0.b[2]), l3 = Math.hypot(g0.c[1], g0.c[2]);
-  // the leg may reach 94 % of its length; legs nearly straight at rest that cannot crouch (penguins, whose knees sit
-  // high in a body that almost touches the ground) may straighten a little past where they stand
-  const kn = rig.head('ShinL'), extRest = Math.hypot(kn.y - g0.foot[1], kn.z - g0.foot[2]) / (l2 + l3);
-  let ext = 0.94;
-  const bobA = st.rise * hipH, low = Math.cos(TAU * st.duty);   // the hips' bob, lowest at double support
-  // a stride and crouch the leg can reach at both ends of a stance and in its middle without straightening (94 % of its
-  // reach), the hips lifted by `lift` where the body or tail would otherwise touch the ground
-  const wl = (u) => hipX * Math.abs(Math.sin(st.roll * DEG * Math.cos(TAU * (u - st.duty / 2))));
-  let zc = 0;   // where the stance is centred, from the foot's place at rest (moved back if a leg reaches further that way)
-  const fits = (stride, drop, lift = [0, 0, 0]) => [[1, -d1, low, lift[0] + wl(0)], [-1, d1, low, lift[1] + wl(st.duty)], [0, 0, 1, lift[2] + wl(st.duty / 2)]].every(([e, th, b, f]) => {
-    const ky = J.y - drop + bobA * b + f + g0.a[1] * Math.cos(th) - g0.a[2] * Math.sin(th), kz = J.z + g0.a[1] * Math.sin(th) + g0.a[2] * Math.cos(th);
-    return Math.hypot(ky - g0.foot[1], g0.foot[2] + zc + e * st.duty * stride / 2 - kz) <= ext * (l2 + l3);
-  });
-  const hipX = Math.abs(J.x - rig.head('Hips').x), G = { hipH, hipX, duty: st.duty, bobA, roll: st.roll, yaw: st.yaw, sway: st.sway * hipH, fix: [] };
-  const solve = () => {
-    let stride = st.lambda * hipH, drop = 0, clr = { fix: [], tailUp: 0 };
-    for (let k = 0; k < 24; k++) {
-      drop = 0; while (drop < 0.12 * hipH && !fits(stride, drop)) drop += 0.004 * hipH;
-      clr = walkClearance(rig, parts, { ...G, drop });
-      const fx = (u) => clr.fix.length ? clr.fix[Math.round(fract(u) * clr.fix.length) % clr.fix.length] : 0;
-      if (fits(stride, drop, [Math.max(fx(0), fx(0.5)), Math.max(fx(st.duty), fx(st.duty + 0.5)), Math.max(fx(st.duty / 2), fx(st.duty / 2 + 0.5))])) break;
-      stride *= 0.92;
-    }
-    return { stride, drop, clr, zc };
-  };
-  let best = solve();
-  if (best.stride < 0.5 * st.lambda * hipH) {
-    ext = clamp(extRest + 0.012, 0.94, 0.995);
-    for (const k of [0, -0.1, -0.2, -0.3]) { zc = k * hipH; const r = solve(); if (r.stride > best.stride * 1.03) best = r; }
-  }
-  const { stride, drop, clr } = best; zc = best.zc;
-  // (short strides would otherwise patter: a cycle takes at least 0.38 of the leg's pendulum period, as in fowl and ostriches)
-  const T = clamp(Math.max(stride / Math.sqrt(st.fr * 9.81 * hipH), 0.38 * TAU * Math.sqrt(hipH / 9.81)), 0.22, 2.4);
-  const tr = S.legThk * S.L * 0.8, toeReach = (S.toeLen ?? 0.28) * S.L * (S.feet === 'ratite' ? 1.2 : 1) + (S.talons ? tr * S.talons * 2.2 : 0);
-  // rolling up onto long toes, or hanging them, lifts the foot by toeReach·sin(angle): keep that within a quarter of the hip height
-  const tMax = Math.asin(clamp(0.25 * hipH / Math.max(1e-6, toeReach), 0, 1)) / DEG, toeA = Math.min(st.toe, tMax), heelA = Math.min(st.heel, 0.8 * toeA);
-  const n2 = rel('Neck2'), n3 = rel('Head');
-  return {
-    hipH: +hipH.toFixed(4), stride: +stride.toFixed(4), T: +T.toFixed(3), duty: st.duty, lift: st.lift * hipH, drop, bobA, hipX, zc, fix: clr.fix, tailUp: clr.tailUp, femur: d1,
-    heel: heelA * DEG, toe: toeA * DEG, toeReach, roll: st.roll, yaw: st.yaw, sway: st.sway * hipH, bob: st.bob, nod: st.nod, hips: rel('Hips'), legs,
-    neck: { n2, n3, sign: Math.sign(n2[2] * n3[1] - n2[1] * n3[2]) || 1 },
-  };
-}
-/** One leg reaching its foot target F (model space) from the posed hips, with the toes pitched `toe` (radians) in the world. */
-function legReach(o, leg, F, th1, toe) {
-  const { t, a, b, c } = leg, xb = b[0] + c[0];
-  _gJ.set(t[0], t[1], t[2]).applyQuaternion(_gQh).add(_gP);
-  // the abduction that brings the foot target into the plane the knee and intertarsal joint fold in
-  const local = (phi) => {
-    _gQ1.setFromEuler(_gE.set(th1, 0, phi, 'YXZ'));
-    _gM.copy(_gQh).multiply(_gQ1); _gMi.copy(_gM).invert();
-    _gK.set(a[0], a[1], a[2]).applyQuaternion(_gM).add(_gJ);
-    return _gf.copy(F).sub(_gK).applyQuaternion(_gMi);
-  };
-  let phi = 0;
-  for (let i = 0; i < 6; i++) {
-    const g = local(phi).x - xb;
-    if (Math.abs(g) < 1e-7) break;
-    const dg = (local(phi + 1e-4).x - xb - g) / 1e-4;
-    if (Math.abs(dg) < 1e-9) break;
-    phi = clamp(phi - g / dg, -0.7, 0.7);
-  }
-  local(phi);
-  const r = reach2(_gf.y, _gf.z, Math.hypot(b[1], b[2]), Math.hypot(c[1], c[2]), leg.sign);
-  const th2 = wrapA(Math.atan2(b[1], b[2]) - r.a), th3 = wrapA(Math.atan2(c[1], c[2]) - th2 - Math.atan2(_gf.y - r.ey, _gf.z - r.ez));
-  _gQa.copy(_gM).multiply(_gQb.setFromAxisAngle(_gX, th2 + th3)).invert().multiply(_gQb.setFromAxisAngle(_gX, toe));
-  o['Thigh' + leg.s] = [th1 / DEG, 0, phi / DEG]; o['Shin' + leg.s] = [th2 / DEG, 0, 0]; o['Tarsus' + leg.s] = [th3 / DEG, 0, 0]; o['Toe' + leg.s] = eulerOf(_gQa);
-}
-function birdWalk(u, A) {
-  const G = A.gait, { duty, stride } = G, D = duty * stride, o = fold(true);
-  const { c2, dy, roll, yaw, sway } = walkHips(G, u);
-  o.Hips = { r: [0, yaw, roll], p: [sway, dy, 0] };
-  _gQh.setFromEuler(_gE.set(0, yaw * DEG, roll * DEG, 'YXZ'));
-  _gP.set(G.hips[0] + sway, G.hips[1] + dy, G.hips[2]);
-  for (const leg of G.legs) {
-    // the foot is placed by its toe tip, which stays put on the ground through the stance (the heel rolling up onto it
-    // at the end); in the swing the tip leaves and lands at the ground's speed, rising first and settling last
-    const ph = fract(u + (leg.s === 'L' ? 0 : 0.5)), f = leg.foot, R = G.toeReach;
-    let tz, ty = 0, p, th1;
-    if (ph < duty) { const s = ph / duty; tz = R + G.zc + D * (0.5 - s); p = G.heel * sstep(0.78, 1, s); th1 = -G.femur + 2 * G.femur * s; }
+function fkOf(info, s) {
+  const memo = new Map();
+  const get = (name) => {
+    if (memo.has(name)) return memo.get(name);
+    const par = info.parent[name], v = s[name], r = !v ? null : Array.isArray(v) ? v : v.r, p = v && !Array.isArray(v) ? v.p : null;
+    const qL = degQ(r), rest = info.rest[name];
+    let out;
+    if (!par) out = { q: qL, p: V3(rest[0] + (p ? p[0] : 0), rest[1] + (p ? p[1] : 0), rest[2] + (p ? p[2] : 0)) };
     else {
-      const w = (ph - duty) / (1 - duty), mf = 2 * G.femur * (1 - duty) / duty;
-      // (the toes are picked up before they move on, and set down before the weight comes onto them)
-      tz = R + G.zc - D / 2 + stride * mjerk(clamp((w - 0.08) / 0.77, 0, 1)) - stride * (1 - duty) * w;
-      ty = G.lift * sstep(0, 0.25, w) * (1 - sstep(0.62, 1, w));
-      p = lerp(G.heel, G.toe, sstep(0, 0.3, w)) * (1 - sstep(0.55, 0.88, w));
-      th1 = hermite(w, G.femur, -G.femur, mf, mf);
+      const P = get(par), off = V3(rest[0] + (p ? p[0] : 0), rest[1] + (p ? p[1] : 0), rest[2] + (p ? p[2] : 0)).applyQuaternion(P.q);
+      out = { q: P.q.clone().multiply(qL), p: P.p.clone().add(off) };
     }
-    legReach(o, leg, _gF.set(f[0], ty + f[1] * Math.cos(p) + R * Math.sin(p), f[2] + tz + f[1] * Math.sin(p) - R * Math.cos(p)), th1, p);
-  }
-  // head: a hold and a thrust each step (head-bobbers), otherwise carried level; either way it keeps its attitude
-  const N = G.neck, tau = fract(2 * u), th = 0.42, half = stride / 2, hold = half * (1 - th), m = -half * th;
-  const zr = G.bob * (tau < th ? hermite(tau / th, -hold / 2, hold / 2, m, m) : hold / 2 - half * (tau - th));
-  _gQa.copy(_gQh).invert();
-  _gd.set(0, -0.6 * G.bobA * c2, zr).applyQuaternion(_gQa);
-  const ty = N.n2[1] + N.n3[1] + _gd.y, tz = N.n2[2] + N.n3[2] + _gd.z;
-  const r = reach2(ty, tz, Math.hypot(N.n2[1], N.n2[2]), Math.hypot(N.n3[1], N.n3[2]), N.sign);
-  const a1 = wrapA(Math.atan2(N.n2[1], N.n2[2]) - r.a), a2 = wrapA(Math.atan2(N.n3[1], N.n3[2]) - a1 - Math.atan2(ty - r.ey, tz - r.ez));
-  _gQa.copy(_gQh).multiply(_gQb.setFromAxisAngle(_gX, a1 + a2)).invert().multiply(_gQb.setFromAxisAngle(_gX, G.nod * c2 * DEG));
-  o.Neck1 = [a1 / DEG, 0, 0]; o.Neck2 = [a2 / DEG, 0, 0]; o.Head = eulerOf(_gQa);
-  o.Tail = [G.tailUp + 2 * c2, -1.2 * yaw + 3 * Math.sin(TAU * u), 0];
-  return o;
+    memo.set(name, out);
+    return out;
+  };
+  return get;
 }
-const BIRD_CLIPS = {
-  perch: { label: 'Perch / idle', loop: true, dur: () => 4.2, frames: 43, build: (u, A) => {
-    const look = Math.sin(TAU * u) * 28 * pulseSq(u, 0.15, 0.45), cock = 10 * pulseSq(u, 0.6, 0.8), breathe = 2 * Math.sin(TAU * 3 * u);
-    return Object.assign(fold(true), birdLegs({}, 0, 0), { Hips: { r: [breathe, 0, 0], p: [0, -0.004 * A.L * Math.sin(TAU * 2 * u), 0] }, Neck2: [0, look * 0.4, 0], Head: [-cock * 0.3, look * 0.6, cock], Tail: [-6 * pulseSq(u, 0.85, 0.92), 0, 0] });
-  } },
-  walk: { label: 'Walk', loop: true, dur: (A) => A.T.walk, frames: 41, build: (u, A) => {
-    if (A.gait) return birdWalk(u, A);
-    const s = Math.sin(TAU * u), bob = Math.sin(TAU * 2 * u);
-    return Object.assign(fold(true), birdLegs({}, 22 * s, Math.sin(TAU * u - 0.6)), { Hips: { r: [0, 3 * s, 2 * s], p: [0, 0.01 * A.L * Math.abs(bob), 0] }, Neck1: [6 * bob, 0, 0], Head: [-6 * bob, 0, 0], Tail: [2 * bob, 4 * s, 0] });
-  } },
-  hop: { label: 'Hop', loop: true, dur: (A) => A.T.hop, frames: 25, build: (u, A) => {
-    const air = bell(u, 0.45, 0.3), crouch = bell(u, 0.1, 0.12) + bell(u, 0.9, 0.12);
-    return Object.assign(fold(true), birdLegs({}, 0, 0), { Hips: { r: [5 * air, 0, 0], p: [0, A.L * 0.35 * air - A.L * 0.05 * crouch, 0] }, ThighL: [18 * crouch - 8 * air, 0, 0], ThighR: [18 * crouch - 8 * air, 0, 0], TarsusL: [-24 * crouch, 0, 0], TarsusR: [-24 * crouch, 0, 0], ToeL: [4 * crouch + 24 * air, 0, 0], ToeR: [4 * crouch + 24 * air, 0, 0], Tail: [-10 * air, 0, 0] });
-  } },
-  peck: { label: 'Peck / forage', loop: true, dur: () => 2.0, frames: 31, build: (u, A) => {
-    const d = Math.pow(Math.max(0, Math.sin(TAU * 2 * u)), 3);
-    return Object.assign(fold(true), birdLegs({}, 0, 0), { Hips: { r: [10 * d, 0, 0], p: [0, -0.02 * A.L * d, 0] }, Neck1: [28 * d, 0, 0], Neck2: [22 * d, 0, 0], Head: [24 * d, 0, 0], Jaw: [8 * d, 0, 0], Tail: [-8 * d, 0, 0] });
-  } },
-  flap: { label: 'Fly (flapping)', loop: true, dur: (A) => A.T.flap, frames: 25, build: (u, A) => {
-    // Flapping cycle: wing rotations are conjugated into the body's (X, upb, fwd) frame so the wing
-    // hinges along the shoulder flank line while the root stays locked to the chest.
-    const s = Math.sin(TAU * u), c = Math.cos(TAU * u), down = Math.max(0, -c);
-    const humerusX = 3 * c;
-    const humerusZ = k => k * (34 * s);
-    const forearmY = k => k * 8 * down;
-    const forearmZ = k => k * 15 * Math.sin(TAU * u - 0.7);
-    const handY = k => k * 12 * down;
-    const handZ = k => k * 22 * Math.sin(TAU * u - 1.1);
-    const bodyBob = A.L * 0.14 * down;
-    const bodyPitch = A.pitch * 0.88 + 4 * s;
-    const neckBend = -A.pitch * 0.5;
-    const tailCock = 3 * s;
-    // Digital Diorama revision 8: flightless birds (penguins, ostriches, kiwis) flap standing, as they do in display or to
-    // keep their balance; they used to lie face down on the ground in the flight posture
-    const o = A.flightless ? Object.assign(fold(false), birdLegs({}, 0, 0), { Hips: { r: [2 * s, 0, 0], p: [0, 0.004 * A.L * down, 0] }, Tail: [tailCock, 0, 0] })
-      : Object.assign(fold(false), flightLegs({}, bodyPitch), {
-        Hips: { r: [bodyPitch, 0, 0], p: [0, bodyBob - 0.03 * A.L * s, 0] },
-        Neck1: [neckBend, 0, 0], Head: [neckBend * 0.55, 0, 0], Tail: [tailCock, 0, 0]
-      });
-    for (const [sfx, k] of [['L', 1], ['R', -1]]) {
-      o['Humerus' + sfx] = bodyEuler(humerusX, 0, humerusZ(k), A.pitch);
-      o['Forearm' + sfx] = bodyEuler(0, forearmY(k), forearmZ(k), A.pitch);
-      o['Hand' + sfx] = bodyEuler(0, handY(k), handZ(k), A.pitch);
-    }
-    return o;
-  } },
-  glide: { label: 'Glide / soar', loop: true, dur: () => 3.5, frames: 29, build: (u, A) => {
-    // Gliding: wings held steady in a slight dihedral in the body frame, legs streamlined behind.
-    const s = Math.sin(TAU * u), c = Math.cos(TAU * u);
-    const dihedral = 5 + 2.5 * c;
-    const bodyBob = A.L * 0.06 * Math.sin(TAU * 2 * u);
-    const bodyPitch = A.pitch * 0.85 + 2.5 * s;
-    const neckBend = -A.pitch * 0.45;
-    const headDip = -5 * s;
-    const tailRudder = 6 * s;
-    // (flightless birds hold their wings out standing, as they do to cool off or to sun themselves)
-    const o = A.flightless ? Object.assign(fold(false), birdLegs({}, 0, 0), { Hips: { r: [0, 0, 2 * s], p: [0, 0, 0] }, Head: [0, headDip, 0], Tail: [0, 0, tailRudder * 0.5] })
-      : Object.assign(fold(false), flightLegs({}, bodyPitch), {
-        Hips: { r: [bodyPitch, 0, 5 * s], p: [0, bodyBob, 0] },
-        Neck1: [neckBend, 0, 0], Head: [neckBend * 0.5, headDip, -6 * s], Tail: [0, 0, tailRudder]
-      });
-    for (const [sfx, k] of [['L', 1], ['R', -1]]) {
-      o['Humerus' + sfx] = bodyEuler(0, 0, k * (dihedral + 1.5 * s * k), A.pitch);
-      o['Forearm' + sfx] = bodyEuler(0, 0, -k * 3, A.pitch);
-      o['Hand' + sfx] = bodyEuler(0, k * 3, k * 5, A.pitch);
-    }
-    return o;
-  } },
-};
-function pulseSq(u, a, b) { return sstep(a - 0.05, a + 0.05, u) * (1 - sstep(b - 0.05, b + 0.05, u)); }
-
-export const params = withZones({
-  species: CH('Species', DEFAULT_SPECIES, Object.keys(SPECIES), 'Anatomical preset; other controls are relative to it.'),
-  bodyForm: CH('Body silhouette', 'auto', ['auto', ...Object.keys(BODY_FORMS)], 'Anatomical torso profile; auto uses the species-specific silhouette.'),
-  size: R('Size (× species)', 1, 0.3, 2.5, 0.01, 'Real-world scale multiplier; geometry is recomputed.'),
-  age: R('Age (chick → adult)', 1, 0.3, 1, 0.01, 'Chicks: big heads and eyes, short wings, beaks and tails, fluffier bodies.'),
-  bodyLength: R('Body length', 1, 0.7, 1.4, 0.01, 'Body loft length.'),
-  girth: R('Plumpness', 1, 0.7, 1.5, 0.01, 'Body depth and width.'),
-  legLength: R('Leg length', 1, 0.3, 2.5, 0.01, 'Visible tarsus length.'),
-  neckLength: R('Neck length', 1, 0.3, 2, 0.01, 'Neck sweep length.'),
-  neckCurve: R('Neck S-curve', 0, -1, 1, 0.01, 'Adds to (or removes) the species neck curvature.'),
-  headSize: R('Head size', 1, 0.6, 1.6, 0.01, 'Head radius.'),
-  beakLength: R('Beak length', 1, 0.4, 2.2, 0.01, 'Mandible length.'),
-  beakDepth: R('Beak depth', 1, 0.5, 2, 0.01, 'Mandible height and width.'),
-  beakHook: R('Beak hook', 0, -0.5, 1, 0.01, 'Extra downward hook at the tip.'),
-  eyeSize: R('Eye size', 1, 0.6, 1.6, 0.01, 'Eyeball radius.'),
-  wingspan: R('Wingspan', 1, 0.4, 1.8, 0.01, 'Spread-wing half-span.'),
-  wingChord: R('Wing breadth', 1, 0.6, 1.6, 0.01, 'Wing chord.'),
-  wingTip: CH('Wing tip', 'auto', ['auto', 'round', 'pointed', 'slotted'], 'Planform tip: rounded, pointed (falcon/gull) or slotted primaries (eagle/crow).'),
-  tailLength: R('Tail length', 1, 0, 2.5, 0.01, 'Tail feather length.'),
-  tailSpread: R('Tail spread', 1, 0.3, 2.5, 0.01, 'Fan angle of the tail feathers.'),
-  tailStyle: CH('Tail style', 'auto', ['auto', 'fan', 'fork', 'wedge', 'long', 'train'], 'Tail feather arrangement.'),
-  crestSize: R('Crest / comb', 1, 0, 2.5, 0.01, 'Crest, plume or comb size (species with crests).'),
-  crestRaise: R('Crest raise', 0.2, 0, 1, 0.01, 'Erectile crests (cockatoos, cardinals): 0 lies flat, 1 fully raised.'),
-  feet: CH('Feet', 'auto', ['auto', 'perch', 'webbed', 'zygo', 'ratite'], 'Toe arrangement.'),
-  talons: R('Talons', 1, 0, 2.5, 0.01, 'Claw length.'),
-  variation: R('Individual variation', 0, 0, 1, 0.01, 'Random per-individual proportion changes.'),
-  seed: R('Seed', 1, 1, 999, 1, 'Seed for variation.'),
-  detail: CH('Geometry detail', 'standard', ['draft', 'standard', 'high'], 'Sweep sampling density.'),
-  rigMode: CH('Rig mode', 'skinned', ['skinned', 'static'], 'Skinned skeleton with clips, or the pose baked into plain meshes.'),
-  pose: CH('Pose', 'perch', Object.keys(BIRD_CLIPS), 'Rest pose (skinned) or baked pose (static). Flight poses swap in the spread wings.'),
-  posePhase: R('Pose phase', 0, 0, 1, 0.01, 'Point in the pose cycle.'),
-  colorway: CH('Colourway', 'natural', COLORWAY_KEYS, 'Natural plumage or a curated transform.', 'colors'),
-  coat: { type: 'toggle', default: true, label: 'Painted coat', affects: 'colors', describe: 'Paint markings into a coat texture (crisp stripes, spots and patch edges); off: one colour per mesh face.' },
-  coatGrain: { type: 'range', default: 0.06, min: 0, max: 0.25, step: 0.01, label: 'Coat grain', affects: 'colors', describe: 'Faint tonal variation in fur or feathers (painted coat only).' },
-  shading: { type: 'choice', default: 'smooth', options: ['smooth', 'flat'], label: 'Shading', affects: 'geometry', describe: 'Smooth, rounded shading or flat low-poly facets.' },
-  mergeForProduction: { type: 'toggle', default: false, label: 'Merge for Production', affects: 'geometry', describe: 'One skinned mesh per material. Off keeps each anatomical part selectable.' },
-}, ZONE_LABELS, BASE);
-export const rig = {
-  Head: { axis: 'y', range: [-90, 90], describe: 'Head turn' }, Neck1: { axis: 'x', range: [-30, 60], describe: 'Neck bend' }, Jaw: { axis: 'x', range: [0, 35], describe: 'Open beak' },
-  HumerusL: { axis: 'z', range: [-45, 60], describe: 'Left wing stroke' }, HumerusR: { axis: 'z', range: [-60, 45], describe: 'Right wing stroke' }, Tail: { axis: 'x', range: [-30, 30], describe: 'Tail cock' },
-  ThighL: { axis: 'x', range: [-40, 40], describe: 'Left leg' }, ThighR: { axis: 'x', range: [-40, 40], describe: 'Right leg' },
-};
-export const detach = ['crest', 'wings', 'wings-folded', 'tail', 'beak', 'eyes', 'legs', 'feet'];
-export const night = { eyes: { color: '#ffd77a', intensity: 0.2, distance: 1, describe: 'Eyeshine (owls and nightjars)' } };
-export const ANIMATIONS = Object.entries(BIRD_CLIPS).map(([name, c]) => ({ name, label: c.label, loop: c.loop, duration: name === 'perch' ? 4.2 : name === 'glide' ? 3.5 : 0.6 }));
-
-function resolveSpec(p) {
-  // Digital Diorama extension: `specOverride` merges anatomy/pattern/palette changes onto the preset
-  // (one level deep), so related species can share one rig.
-  const sp0 = SPECIES[p.species] || SPECIES[DEFAULT_SPECIES], ov = p.specOverride && typeof p.specOverride === 'object' ? p.specOverride : null;
-  const sp = ov ? { ...sp0, ...Object.fromEntries(Object.entries(ov).map(([k, v]) => [k, v && typeof v === 'object' && !Array.isArray(v) && sp0[k] && typeof sp0[k] === 'object' ? { ...sp0[k], ...v } : v])) } : sp0, S = {};
-  for (const [k, v] of Object.entries({ ...BDEF, ...sp })) S[k] = v && typeof v === 'object' && !Array.isArray(v) ? { ...(BDEF[k] || {}), ...v } : v;
-  if (p.bodyForm !== 'auto') S.bodyForm = p.bodyForm;
-  S.palette = { ...BASE, ...sp.palette };
-  const rnd = mulberry(p.seed * 4111 + 9), vr = () => 1 + (rnd() * 2 - 1) * 0.08 * p.variation, juv = 1 - sstep(0.3, 1, p.age);
-  S.L *= p.size * p.bodyLength * vr() * lerp(1, 0.45, juv);
-  S.bodyH *= lerp(1, p.girth, 0.7) * vr() * lerp(1, 1.12, juv); S.bodyW *= p.girth * vr() * lerp(1, 1.12, juv);
-  S.legLen *= p.legLength * vr(); S.neckLen *= p.neckLength * vr() * lerp(1, 0.7, juv);
-  // Authored neck shapes are amplified/flattened by the slider; derived shapes add to the species curve.
-  S.neckCurveAdj = S.neckShape ? p.neckCurve : 0; S.neckCurve = (S.neckCurve || 0) + (S.neckShape ? 0 : p.neckCurve);
-  S.headR *= p.headSize * lerp(1, 1.45, juv); S.eye *= p.eyeSize * lerp(1, 1.2, juv); S.fluff = (S.fluff || 0) + juv * 0.08;
-  S.beak = { ...S.beak, len: S.beak.len * p.beakLength * lerp(1, 0.55, juv), w: S.beak.w * p.beakDepth, h: S.beak.h * p.beakDepth, hook: (S.beak.hook || 0) + p.beakHook };
-  S.wing = { ...S.wing, span: S.wing.span * p.wingspan * lerp(1, 0.45, juv), chord: S.wing.chord * p.wingChord * lerp(1, 0.7, juv) };
-  if (p.wingTip !== 'auto') S.wing.tip = p.wingTip;
-  S.tail = { ...S.tail, len: S.tail.len * p.tailLength * lerp(1, 0.3, juv), fan: S.tail.fan * p.tailSpread };
-  if (p.tailStyle !== 'auto') { S.tail.style = p.tailStyle; if (p.tailStyle === 'train') { S.tail.n = Math.max(S.tail.n, 16); S.tail.eyespots = true; } }
-  if (S.crest) S.crest = { ...S.crest, h: S.crest.h * p.crestSize * lerp(1, 0.2, juv) };
-  S.crestRaise = p.crestRaise;
-  if (S.wattle) S.wattle *= p.crestSize * lerp(1, 0.2, juv);
-  if (p.feet !== 'auto') S.feet = p.feet;
-  S.talons = (S.talons ?? 0.5) * p.talons;
-  S.pattern = { ...(S.pattern || {}) };
-  return S;
+/** A rest point carried by one bone in a sample (model space). */
+const posed = (info, fk, bone, P) => { const b = fk(bone); return P.clone().sub(info.headV[bone]).applyQuaternion(b.q).add(b.p); };
+/** Sets a bone's local rotation in a sample so that its world rotation becomes qW. */
+function setWorld(info, s, fk, bone, qW) {
+  const par = info.parent[bone], qP = par ? fk(par).q : new THREE.Quaternion();
+  const v = s[bone], loc = qP.clone().invert().multiply(qW), r = qDeg(loc);
+  if (v && !Array.isArray(v)) v.r = r; else s[bone] = r;
 }
-/**
- * Plumage markings (Digital Diorama revision). Now that plumage is painted into a texture, fine feather
- * patterns are possible. S.marks = { belly: 'bars' | 'streaks' | 'spots' | 'chevrons', back: 'scaled' |
- * 'streaks' | 'spots' | 'bars', wing: 'edged' | 'spots' | 'bars', tail: 'bars', breast: 'spots', freq, zone }.
- * Coordinates are surface (u, a) plus world position scaled by body length, so marks scale with the bird.
- */
-function birdMarks(S, base) {
-  const M = S.marks;
-  if (!M) return base;
-  const k = 1 / Math.max(1e-6, S.L), f = M.freq ?? 1, seed = 7 + (S.seed ?? 1);
-  const dark = M.zone ?? 'accent', lightZ = M.light ?? 'face';
-  const bars = (t, n, w) => Math.cos(TAU * t * n) > 1 - 2 * w;
-  return (c) => {
-    const z0 = base(c), { part, u = 0, a = 0, P } = c, sa = typeof a === 'number' ? Math.sin(a) : 0;
-    if (!P) return z0;
-    // (Digital Diorama revision 8: the wobble noise is only worked out where a mark asks for it; the same marks, a
-    // third of the painter's time saved on heavily marked birds)
-    const x = P.x * k, y = P.y * k, zz = P.z * k;
-    let n0 = null;
-    const nz = () => (n0 === null ? (n0 = fbm(x * 4, y * 4, zz * 4, seed) - 0.5) : n0);
-    const under = (part === 'body' && sa < 0.05) || (part === 'neck' && sa < -0.15);
-    const upper = (part === 'body' || part === 'neck') && !under;
-    if (under && (z0 === 'belly' || z0 === S.pattern.breast || z0 === 'body')) {
-      if (part === 'neck' && M.throatPlain) return z0;
-      switch (M.belly) {
-        case 'bars': return bars(y * 7 * f + nz() * 0.5, 1, (M.barW ?? 0.22) + 0.1 * nz()) ? dark : z0;
-        case 'chevrons': return bars(y * 7 * f + Math.abs(x) * 2.2 + nz() * 0.4, 1, 0.2) ? dark : z0;
-        case 'streaks': { const [d] = worley(x * 9 * f, y * 3 * f, zz * 9 * f, seed); return d < 0.17 + 0.05 * nz() ? dark : z0; }
-        case 'spots': { const [d] = worley(x * 11 * f, y * 11 * f, zz * 11 * f, seed); return d < 0.2 ? dark : z0; }
+const addRot = (s, b, r) => { const v = s[b]; if (!v) s[b] = r.slice(); else if (Array.isArray(v)) { v[0] += r[0]; v[1] += r[1]; v[2] += r[2]; } else { v.r = v.r || [0, 0, 0]; v.r[0] += r[0]; v.r[1] += r[1]; v.r[2] += r[2]; } };
+const setPos = (s, b, p) => { const v = s[b]; if (!v) s[b] = { r: [0, 0, 0], p }; else if (Array.isArray(v)) s[b] = { r: v, p }; else v.p = p; };
+
+/** Deep merge of plain objects (arrays and functions are replaced, not merged). */
+function mergeDeep(a, b) {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b || {})) out[k] = v && typeof v === 'object' && !Array.isArray(v) && a[k] && typeof a[k] === 'object' && !Array.isArray(a[k]) ? mergeDeep(a[k], v) : v;
+  return out;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ *  PLUMAGE — the surface is divided into the regions a field guide names (crown, forehead, nape, mantle, rump, throat,
+ *  breast, belly, flank, vent, cheek, lores, the mask through the eye, collar), the folded wing into its feather tracts
+ *  (scapulars, coverts with their wing bars, the speculum, secondaries and tertials, primaries) and the tail into its
+ *  rectrices; each species says which zone colours each region and adds marks (streaks, bars, spots, scaling, edging).
+ * ════════════════════════════════════════════════════════════════════════════ */
+function makeBirdPainter(S, L) {
+  const Pl = S.plume || {}, seed = (S.seed ?? 7) + 11;
+  const R = { crown: 'head', forehead: null, nape: 'head', mantle: 'body', rump: 'body', throat: 'face', foreneck: null, breast: 'belly', belly: 'belly', flank: null, vent: null, cheek: 'head', lores: null, neckSide: null, thigh: null, uppertail: null, undertail: null, ...(Pl.regions || {}) };
+  const reg = (k) => R[k] ?? (k === 'forehead' ? R.crown : k === 'foreneck' ? R.throat : k === 'flank' ? R.belly : k === 'vent' ? R.belly : k === 'lores' ? R.cheek : k === 'neckSide' ? R.nape : k === 'thigh' ? R.belly : 'body');
+  const marks = Pl.marks || [];
+  const mark = (region, z0, P) => {
+    if (!P || !marks.length) return z0;
+    const q = P.clone().divideScalar(L.Lt);
+    for (const m of marks) {
+      if (m.on && !m.on.includes(region)) continue;
+      const f = m.f ?? 8, w = m.w ?? 0.2;
+      let hit = false;
+      switch (m.type) {
+        case 'streaks': { const [d] = worley(q.x * f, q.y * f * 1.6, q.z * f * 0.35, seed + 1); hit = d < w; break; }
+        case 'bars': { const n = vnoise(q.x * 3, q.y * 3, q.z * 3, seed + 2) - 0.5; hit = Math.cos(TAU * (q.y * f + n * 0.4 + (m.slant ?? 0) * q.z * f)) > 1 - 2 * w; break; }
+        case 'spots': { const [d] = worley(q.x * f, q.y * f, q.z * f, seed + 3); hit = d < w; break; }
+        case 'scaled': { const [d1, d2] = worley(q.x * f, q.y * f * 1.4, q.z * f, seed + 4); hit = d2 - d1 < w; break; }
+        case 'speckle': hit = hash3(Math.floor(q.x * f), Math.floor(q.y * f), Math.floor(q.z * f), seed + 5) < w; break;
+        case 'mottle': hit = fbm(q.x * f, q.y * f, q.z * f, seed + 6, 3) > 1 - w; break;
+        default: break;
       }
+      if (hit) return m.zone;
     }
-    if (upper && z0 === 'body') {
-      switch (M.back) {
-        case 'scaled': { const [d1, d2] = worley(x * 10 * f, y * 6 * f, zz * 10 * f, seed + 3); return d2 - d1 < 0.1 ? lightZ : d1 < 0.18 ? dark : z0; }
-        case 'streaks': { const [d] = worley(x * 12 * f, y * 9 * f, zz * 3.2 * f, seed + 3); return d < 0.22 + 0.06 * nz() ? dark : z0; }
-        case 'spots': { const [d] = worley(x * 12 * f, y * 12 * f, zz * 12 * f, seed + 3); return d < 0.17 ? lightZ : z0; }
-        case 'bars': return bars(zz * 8 * f + nz() * 0.4, 1, 0.2) ? dark : z0;
-        case 'stripe': return Math.abs(Math.cos(a)) < 0.2 && sa > 0.75 ? lightZ : z0;
-      }
-    }
-    if (part === 'fold' || part === 'wing') {
-      const v = a;
-      switch (M.wing) {
-        case 'edged': return Math.abs(fract(v * (part === 'fold' ? 5 : 9) + nz() * 0.2) - 0.5) > 0.38 && z0 !== 'flight' ? lightZ : z0;
-        case 'spots': return Math.cos(TAU * u * 9 * f) > 0.5 && Math.cos(TAU * v * 6) > 0.55 ? (M.spotZone ?? lightZ) : z0;
-        case 'bars': return bars(u * 8 * f + v * 0.6 + nz() * 0.3, 1, 0.2) ? dark : z0;
-      }
-    }
-    if (part === 'tail' && M.tail === 'bars') return bars(u * 6 * f + nz() * 0.2, 1, 0.22) ? dark : z0;
-    if (part === 'body' && M.breast === 'spots' && sa < 0.2 && u > 0.55) { const [d] = worley(x * 13 * f, y * 13 * f, zz * 13 * f, seed + 5); return d < 0.2 ? dark : z0; }
     return z0;
   };
-}
-
-/** Plumage painter: back/belly countershading, caps, masks, collars, wing bars and speculum. */
-function birdPaint(S) {
-  return birdMarks(S, birdPaintBase(S));
-}
-function birdPaintBase(S) {
-  const P = S.pattern;
-  const angDist = (x, y) => Math.abs(Math.atan2(Math.sin(x - y), Math.cos(x - y)));
+  // head coordinates: u along the head (occiput 0 → bill base 1), r up and x out (× head width)
+  const eye = L.eyes && L.eyes[0];
   return (c) => {
-    const { part, u, a } = c, sa = typeof a === 'number' ? Math.sin(a) : 0;
+    const part = c.part, P = c.P;
     switch (part) {
-      case 'body': if (P.bellyFront && sa < 0.15 && Math.cos(a) * 0 === 0 && (Math.abs(Math.cos(a)) < 0.8 || sa < -0.3)) return 'belly'; if (P.breast && u > 0.62 && sa < 0.2) return P.breast; if (P.barred && sa < 0 && fract(u * 9) < 0.3) return 'body'; return sa < -0.25 ? 'belly' : 'body';
-      case 'neck':
-        if (P.collar && u > 0.08 && u < 0.2) return 'face';
-        if (P.neck) return u > (S.neckLen < 0.3 ? 0 : 0.15) ? P.neck : (sa < -0.2 ? 'belly' : 'body');
-        // For songbirds and compact perching birds, carry the breast colour up the neck instead
-        // of inserting a contrasting collar between two already-continuous surfaces.
-        if (S.neckLen < .35 && P.breast && sa < .2) return P.breast;
-        return sa < -0.2 ? (P.throat || 'belly') : 'body';
       case 'head': {
-        const hrr = S.headR * S.L;
-        if (P.mask && c.eyes) {
-          // stripe masks are bands in the skull's (u, angle) space from just behind each eye to the bill base,
-          // widening onto the lores; their edges follow the mesh grid instead of zigzagging across it.
-          const inMask = P.maskShape === 'stripe'
-            ? c.eyes.some(e => u > e.u - (S.maskBack ?? 0.05) && angDist(a, e.a) < lerp(S.maskW ?? 0.3, S.maskWBill ?? 0.7, sstep(e.u, 1, u)))
-            : c.eyes.some(e => e.c.distanceTo(c.P) < hrr * (S.maskR ?? 0.62));
-          if (inMask) return P.mask === true ? 'face' : P.mask;
+        const d = P.clone().sub(L.O), hu = d.dot(L.hd) / L.Hl, r = d.dot(L.hu) / L.Hw, x = Math.abs(d.dot(L.hside)) / L.Hw;
+        const up = Math.sin(c.a);
+        const eR = eye ? eye.c.clone().sub(L.O).dot(L.hu) / L.Hw : 0.1, eU = eye ? eye.c.clone().sub(L.O).dot(L.hd) / L.Hl : 0.55;
+        // the facial disc (owls): the flat front of the face seen head-on, an ellipse round both eyes edged by a dark rim
+        if (Pl.disc && hu > (Pl.disc.u0 ?? 0.6)) {
+          const dd = Math.hypot(x / (Pl.disc.wx ?? 0.5), (r - (Pl.disc.cy ?? -0.02)) / (Pl.disc.ry ?? 0.5) * (r > (Pl.disc.cy ?? -0.02) ? 1 + (Pl.disc.heart ?? 0) * (1 - x / (Pl.disc.wx ?? 0.5)) : 1));
+          if (dd < 1) return dd > (Pl.disc.rimAt ?? 0.86) ? (Pl.disc.rim ?? 'accent') : (Pl.disc.zone ?? 'face');
         }
-        // faceSlope moves the face boundary forward as it climbs, giving a forehead patch instead of a vertical line
-        if (P.face && sa > -0.6 && sa < (P.faceTop ?? 0.35) && u > (P.faceU ?? 0.55) + (P.faceSlope ?? 0) * Math.max(0, sa)) return P.face;
-        if (P.chin && u > (P.chinU ?? 0.6) && sa < -0.55) return P.chin;
-        if (P.forehead && u > (P.foreheadU ?? 0.7) && sa >= 0.35) return P.forehead;
-        if (P.cap && sa > 0.55) return P.cap;
-        const eu = c.eyes ? c.eyes[0].u : 0.5;
-        if (P.cheek && sa > -0.55 && sa < 0.15 && u > eu - 0.14) return P.cheek;
-        if (P.throat && sa < -0.4) return P.throat;
-        if (P.nape && sa > -0.25 && u < eu - 0.08) return P.nape;
-        return P.headAll ? 'head' : sa < -0.5 ? 'belly' : 'head';
+        if (Pl.mask && Math.abs(r - eR - (Pl.mask.dy ?? 0)) < (Pl.mask.w ?? 0.12) && hu > (Pl.mask.from ?? 0.15) && x > 0.15) return Pl.mask.zone;
+        if (Pl.eyebrow && r > eR + 0.08 && r < eR + 0.08 + Pl.eyebrow.w && x > 0.2 && hu > 0.15) return Pl.eyebrow.zone;
+        let z;
+        if (up < -(Pl.throatUp ?? 0.4)) z = reg('throat');
+        else if (up > 0.5) z = hu > 0.82 ? reg('forehead') : reg('crown');
+        else if (hu > eU + 0.05 && Math.abs(r - eR) < 0.12) z = reg('lores');
+        else if (r < eR - 0.04) z = reg('cheek');
+        else z = Pl.headSide ?? reg('crown');
+        if (Pl.malar && r < eR - 0.12 && r > eR - 0.12 - Pl.malar.w && x > 0.2 && hu > 0.3) z = Pl.malar.zone;
+        return mark('head', z, P);
       }
-      case 'wing': { const v = a; if (P.wingTips && u > 0.82) return 'flight'; if (P.speculum && v > 0.42 && v < 0.62 && u > 0.25 && u < 0.6) return 'accent'; if (P.wingBar && v > 0.3 && v < 0.38) return 'face'; if (P.wingBands) return u < 0.35 ? 'wing' : u < 0.65 && v < 0.5 ? 'accent' : 'flight'; return v < 0.42 && u < 0.78 ? 'wing' : 'flight'; }
-      case 'fold': { const v = a; if (P.wingTips && u > 0.75) return 'flight'; if (P.speculum && u > 0.45 && u < 0.65 && v > 0.6) return 'accent'; if (P.wingBar && Math.abs(u - 0.32) < 0.04) return 'face'; if (P.wingBands) return u < 0.3 ? 'wing' : u < 0.55 ? 'accent' : 'flight'; return u < 0.55 ? 'wing' : 'flight'; }
-      case 'tail': return P.tail || 'flight';
-      case 'thigh': return P.thigh || 'belly';
+      case 'neck': {
+        const up = Math.sin(c.a);
+        if (Pl.collar && Math.abs(c.s - Pl.collar.at) < Pl.collar.w && (Pl.collar.full || up > -0.3)) return Pl.collar.zone;
+        const rg = up > 0.15 ? 'nape' : up < -0.15 ? 'foreneck' : 'neckSide';
+        return mark(rg, reg(rg), P);
+      }
+      case 'torso': {
+        const up = Math.sin(c.a), s = c.s;
+        let rg;
+        if (up > (Pl.backUp ?? 0.15)) rg = s < 0.25 ? 'rump' : 'mantle';
+        else if (up < -0.25) rg = s > 0.62 ? 'breast' : s < 0.18 ? 'vent' : 'belly';
+        else rg = s > 0.66 && Pl.breastWide !== false ? 'breast' : 'flank';
+        if (Pl.bib && rg === 'breast' && s > 1 - Pl.bib.len) return Pl.bib.zone;
+        return mark(rg, reg(rg), P);
+      }
+      case 'coverts': {
+        // the tail coverts: the rump's colour above and the vent's below unless the species says otherwise
+        const rg = Math.sin(c.a) > -0.1 ? 'uppertail' : 'undertail';
+        return mark(rg, R[rg] ?? reg(rg === 'uppertail' ? 'rump' : 'vent'), P);
+      }
+      case 'thigh': return mark('thigh', reg('thigh'), P);
+      case 'fold': {
+        const u = c.u, v = c.v;
+        if (c.face === -1) return Pl.underwing ?? 'wing';
+        if (u < 0.5 && v < 0.2) return Pl.scapulars ?? reg('mantle');
+        for (const b of Pl.wingbars || []) if (Math.abs(u - b.at) < (b.w ?? 0.035) && v < 0.85) return b.zone;
+        if (Pl.speculum && u > Pl.speculum.from && u < Pl.speculum.to && v > 0.4) return Pl.speculum.zone;
+        let z = u < 0.42 ? (Pl.coverts ?? 'wing') : u < 0.62 ? (Pl.secondaries ?? 'flight') : (Pl.primaries ?? 'flight');
+        if (Pl.wingTip && u > Pl.wingTip.from) z = Pl.wingTip.zone;
+        if (Pl.edged && u > 0.2 && fract(u * (u < 0.42 ? 9 : 13) + v * 0.3) < 0.16) z = Pl.edged;
+        if (Pl.wingSpots && u < 0.6 && Math.cos(TAU * u * 10) > 0.55 && Math.cos(TAU * v * 5) > 0.5) z = Pl.wingSpots;
+        return z;
+      }
+      case 'wing': {
+        const u = c.u, v = c.v;
+        if (c.face < 0) return v < 0.4 ? (Pl.underwing ?? reg('belly')) : (Pl.underFlight ?? 'flight');
+        if (Pl.wingTip && u > Pl.wingTip.spread) return Pl.wingTip.zone;
+        if (Pl.speculum && u > 0.25 && u < 0.5 && v > 0.55) return Pl.speculum.zone;
+        return v < 0.36 ? (Pl.coverts ?? 'wing') : u > 0.62 ? (Pl.primaries ?? 'flight') : (Pl.secondaries ?? 'flight');
+      }
+      case 'tail': {
+        const u = c.u, at = Math.abs(c.t ?? 0) * 2;
+        if (c.face === -1 && Pl.underTail) return Pl.underTail;
+        if (Pl.tailTip && u > 1 - Pl.tailTip.w) return Pl.tailTip.zone;
+        if (Pl.tailOuter && at > Pl.tailOuter.from) return Pl.tailOuter.zone;
+        if (Pl.tailBars && Math.cos(TAU * u * Pl.tailBars.n) > 1 - 2 * (Pl.tailBars.w ?? 0.2)) return Pl.tailBars.zone;
+        return Pl.tail ?? 'flight';
+      }
       default: return 'body';
     }
   };
 }
 
-export function createAsset(userParams = {}) {
-  const p = normalize(userParams);
-  const S = resolveSpec(p);
-  const coatOn = p.coat !== false;
-  const parts = [], B = { rig: new Rig(), parts, det: DETAIL[p.detail] ?? 1, part: (n, o) => { const pt = new Part(n, o); pt.coat = coatOn && !pt.glass; parts.push(pt); return pt; }, paint: birdPaint(S) };
-  const G = birdBuild(B, S);
-  const C = zonesFor(p.colorway, p, S.palette);
-  const span = S.wing.span * S.L;
-  const A = { L: S.L, pitch: S.pitch, T: { walk: clamp(0.55 * Math.sqrt(S.legLen * S.L / 0.03), 0.25, 1.6), hop: clamp(0.5 * Math.sqrt(S.L / 0.1), 0.3, 1.2), flap: clamp(0.38 * Math.sqrt(span / 0.5), 0.12, 1.4) } };
-  // Digital Diorama revision 8: the walk plants its feet; its duration follows from the stride and a Froude-scaled pace
-  A.gait = birdGaitSetup(B.rig, S, p.species, parts); A.T.walk = A.gait.T;
-  if (S.flightless ?? FLIGHTLESS.has(p.species)) A.flightless = true;
-  const clip = BIRD_CLIPS[p.pose] || BIRD_CLIPS.perch, pose = clip.build(clip.loop ? p.posePhase % 1 : p.posePhase, A);
-  // Flight clips always use spread wings regardless of instantaneous stroke phase; the bone-scale
-  // keys handle the fold/swap for skinned playback, so static mode only needs the clip name.
-  const flying = p.pose === 'flap' || p.pose === 'glide' || (pose.WingL && pose.WingL.s > 0.5);
-  if (p.rigMode === 'static') B.parts = parts.filter(pt => pt.group !== (flying ? 'wingFold' : 'wingSpread'));
-  const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, ref: S.L * 1.5, grain: p.coatGrain, grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat' };
-  const { root } = finish(B, { name: `bird-${p.species}`, merge: p.mergeForProduction, skinned: p.rigMode !== 'static', zones: C, pose, coat: coatOn || coat.smooth ? coat : null });
-  root.userData = {
-    asset: 'bird-rig', species: p.species, label: SPECIES[p.species].label, scientific: SPECIES[p.species].sci, dimensions: measure(root),
-    bodyForm: S.bodyForm,
-    ...(p.debug ? { debug: { body: G.body, neck: G.neck, head: G.head } } : {}),
-    zones: Object.fromEntries(Object.entries(C).map(([k, v]) => [k, hexStr(v)])),
-    rig: { mode: p.rigMode !== 'static' ? 'skinned' : 'static', bones: B.rig.list.map(e => e.name), rest: Object.fromEntries(B.rig.list.map(e => [e.name, (e.parent ? e.head.clone().sub(e.parent.head) : e.head.clone()).toArray()])), moving: ['Hips'], scaled: ['WingL', 'WingR', 'WingFoldL', 'WingFoldR'] },
-    anim: A, params: Object.fromEntries(Object.entries(p).filter(([k]) => params[k] && params[k].type !== 'color')), units: 'meters', forward: '+Z', up: '+Y', wingspan: +(2 * span + S.bodyW * S.L * 0.6).toFixed(3),
+/* ════════════════════════════════════════════════════════════════════════════
+ *  BIRD BODY PLAN
+ *  One surface runs from the tail base along the torso, up the neck and out to the bill base, through sections taken
+ *  from the family's measured outline (torso as fractions of its length L, neck and skull as fractions of the head's
+ *  width), so the body, neck and head are one skin with no seams; the bill grows from the face. The folded wing lies on
+ *  the flank as a feathered blade whose primaries reach back over the tail; the spread wing (shown only in flight) is
+ *  a planform of coverts, secondaries and primaries on the arm and hand bones; the tail is a fan of rectrices; the
+ *  legs are the feathered drumstick, the scaly tarsus and toes arranged by foot type.
+ *  Skeleton: Root > Hips > Chest > Neck1 > Neck2 > Head > Jaw; Chest > WingL/R > Humerus > Forearm > Hand;
+ *  Chest > WingFoldL/R; Hips > Tail; Hips > Thigh > Shin > Tarsus > Toe (L/R).
+ * ════════════════════════════════════════════════════════════════════════════ */
+const SIDES = [[1, 'L'], [-1, 'R']];
+
+/** Bill shapes: depth d(u) and width w(u) along the bill (0 base → 1 tip, × its base depth / width), the culmen's drop
+ *  curve(u) (× bill length), the lower mandible's share of the depth (lowK) and length (lowLen), and the tip. */
+const BILLS = {
+  cone: { d: (u) => (1 - u) ** 0.85, w: (u) => (1 - u) ** 0.9, curve: (u) => 0.04 * u * u, lowK: 0.46, lowLen: 0.97, tip: 'point' },
+  thin: { d: (u) => (1 - u) ** 0.7 * (1 - 0.25 * u), w: (u) => (1 - u) ** 0.75, curve: (u) => 0.05 * u ** 3, lowK: 0.42, lowLen: 0.97, tip: 'point' },
+  corvid: { d: (u) => (1 - u) ** 0.8, w: (u) => (1 - u) ** 0.85, curve: (u) => 0.08 * u * u, lowK: 0.42, lowLen: 0.95, tip: 'point' },
+  dagger: { d: (u) => (1 - u) ** 0.85, w: (u) => (1 - u) ** 0.9, curve: () => 0, lowK: 0.48, lowLen: 1.0, tip: 'point' },
+  chisel: { d: (u) => (1 - u * 0.9) ** 1.1, w: (u) => (1 - u * 0.8) ** 1.2, curve: () => 0, lowK: 0.45, lowLen: 0.98, tip: 'point' },
+  probe: { d: (u) => 0.32 + 0.68 * (1 - u) ** 3, w: (u) => 0.32 + 0.68 * (1 - u) ** 3, curve: (u) => 0.06 * u * u, lowK: 0.46, lowLen: 0.99, tip: 'round' },
+  needle: { d: (u) => 0.25 + 0.75 * (1 - u) ** 4, w: (u) => 0.25 + 0.75 * (1 - u) ** 4, curve: (u) => 0.02 * u * u, lowK: 0.46, lowLen: 0.99, tip: 'point' },
+  hook: { d: (u) => lerp(1, 0.45, u ** 1.4), w: (u) => lerp(1, 0.4, u), curve: (u) => 0.42 * u ** 3.2, lowK: 0.3, lowLen: 0.72, tip: 'point', cere: 0.28 },
+  owl: { d: (u) => lerp(1, 0.4, u ** 1.3), w: (u) => lerp(1, 0.35, u), curve: (u) => 0.42 * u ** 2.2, lowK: 0.3, lowLen: 0.6, tip: 'point', cere: 0.3 },
+  parrot: { d: (u) => lerp(1, 0.32, u ** 1.1), w: (u) => lerp(1, 0.38, u), curve: (u) => 0.62 * u ** 2.1, lowK: 0.55, lowLen: 0.55, tip: 'point', scoop: true, cere: 0.12 },
+  chicken: { d: (u) => (1 - u) ** 0.65, w: (u) => (1 - u) ** 0.75, curve: (u) => 0.14 * u * u, lowK: 0.4, lowLen: 0.9, tip: 'point' },
+  pigeon: { d: (u) => lerp(0.9, 0.42, u) * (u > 0.85 ? 1 - (u - 0.85) * 2.5 : 1), w: (u) => lerp(1, 0.4, u), curve: (u) => 0.06 * u ** 3, lowK: 0.4, lowLen: 0.95, tip: 'round', cere: 0.35 },
+  flat: { d: (u) => lerp(1, 0.32, u), w: (u) => 1 - 0.12 * u - (u > 0.86 ? ((u - 0.86) / 0.14) ** 2 * 0.45 : 0), curve: (u) => -0.03 * u + (u > 0.9 ? 0.06 * (u - 0.9) / 0.1 : 0), lowK: 0.38, lowLen: 1.0, tip: 'round', nail: true },
+  spoon: { d: (u) => lerp(0.8, 0.18, u), w: (u) => (u < 0.55 ? lerp(1, 0.7, u / 0.55) : lerp(0.7, 2.2, sstep(0.55, 0.85, u)) * (u > 0.85 ? Math.sqrt(1 - ((u - 0.85) / 0.15) ** 2 * 0.9) : 1)), curve: (u) => 0.02 * u, lowK: 0.42, lowLen: 0.99, tip: 'round' },
+  pouch: { d: (u) => lerp(0.9, 0.3, u), w: (u) => lerp(1, 0.62, u), curve: (u) => (u > 0.94 ? 0.12 * ((u - 0.94) / 0.06) ** 2 : 0), lowK: 0.3, lowLen: 0.96, tip: 'round', pouch: 1.6 },
+  toucan: { d: (u) => lerp(1, 0.28, u ** 1.25), w: (u) => lerp(1, 0.3, u), curve: (u) => 0.14 * u * u, lowK: 0.42, lowLen: 0.98, tip: 'point' },
+  hornbill: { d: (u) => lerp(1, 0.25, u ** 1.1), w: (u) => lerp(1, 0.3, u), curve: (u) => 0.24 * u * u, lowK: 0.4, lowLen: 0.98, tip: 'point', casque: true },
+  bent: { d: (u) => lerp(1, 0.5, u), w: (u) => lerp(1, 0.55, u), curve: (u) => (u < 0.42 ? 0.02 * u : 0.0084 + 0.7 * (u - 0.42) ** 1.3), lowK: 0.6, lowLen: 0.98, tip: 'round' },
+  gull: { d: (u) => lerp(1, 0.8, u) * (u > 0.92 ? 1 - (u - 0.92) * 6 : 1), w: (u) => lerp(1, 0.42, u), curve: (u) => 0.16 * u ** 6, lowK: 0.42, lowLen: 0.9, tip: 'point', gonys: 0.28 },
+  albatross: { d: (u) => lerp(1, 0.72, u) + 0.22 * sstep(0.84, 0.95, u) * (1 - sstep(0.95, 1, u)), w: (u) => lerp(1, 0.5, u), curve: (u) => 0.16 * Math.max(0, (u - 0.86) / 0.14) ** 2, lowK: 0.42, lowLen: 0.94, tip: 'point' },
+  penguin: { d: (u) => lerp(1, 0.28, u), w: (u) => lerp(1, 0.3, u), curve: (u) => 0.08 * u * u, lowK: 0.45, lowLen: 0.97, tip: 'point' },
+  puffin: { d: (u) => lerp(1, 0.18, u ** 0.9), w: (u) => lerp(1, 0.4, u), curve: (u) => 0.12 * u * u, lowK: 0.5, lowLen: 0.98, tip: 'point' },
+  ostrich: { d: (u) => lerp(1, 0.55, u), w: (u) => 1 - 0.2 * u - (u > 0.8 ? ((u - 0.8) / 0.2) ** 2 * 0.5 : 0), curve: (u) => 0.03 * u * u, lowK: 0.42, lowLen: 0.98, tip: 'round' },
+};
+
+/** Feathers that would pass through the ground rest on it instead (a loft's rings and tips flattened at y0). */
+function restOnGround(g, y0 = 0.002) {
+  for (const row of g.rows) for (const P of row) if (P.y < y0) P.y = y0;
+  for (const q of [g.tip0, g.tip1]) if (q && q.y < y0) q.y = y0;
+  return g;
+}
+
+function birdBuild(B, S, L) {
+  const rig = B.rig, det = B.det, M = S.M, paint = B.paint;
+  const Lt = S.L, Hw = M.Hw, Hl = S.headLen, fam = S.fam;
+  Object.assign(L, { Lt, Hw, Hl });
+  /* ── posture: legs set the hip height, the torso hangs from the hips at its pitch ── */
+  const Ts = M.Ts, Tib = Ts * (S.tibK ?? fam.tibK ?? 1.1), Fem = Ts * 0.45;
+  const depth = Lt * (S.depth ?? fam.depth), width = Lt * (S.width ?? fam.width);
+  const sHip = fam.sHip ?? 0.4;
+  // posture: the hips at the legs' height; if the torso's lowest point (its rear on an upright bird) would reach the
+  // ground, the legs straighten to lift it, and failing that the body tilts less until it clears
+  let hipH = (Tib + Ts) * (S.crouch ?? fam.crouch ?? 0.72) + Fem * 0.3, pitch = S.pitch;
+  const hipMax = (Tib + Ts) * 0.97 + Fem * 0.3, clear = 0.02 * Lt;
+  const lowY = (pd, h) => {
+    const p = pd * DEG, f = V3(0, Math.sin(p), Math.cos(p)), ub = V3(0, Math.cos(p), -Math.sin(p));
+    let low = Infinity;
+    for (const [s0, , , hb] of fam.torso) low = Math.min(low, h + 0.12 * depth * ub.y + f.y * (s0 - sHip) * Lt - hb * depth * ub.y);
+    return Math.min(low, h + 0.12 * depth * ub.y + f.y * (0 - sHip) * Lt - 0.55 * fam.torso[0][3] * depth * Math.abs(f.y) - fam.torso[0][3] * depth * ub.y * 0.6);
   };
+  let low = lowY(pitch, hipH);
+  // (a penguin rests its weight on its tail and feet: its legs stay flexed, the body's underside meets the ground)
+  if (low < clear && !S.restsOnTail) { hipH = Math.min(hipMax, hipH + (clear - low)); low = lowY(pitch, hipH); }
+  while (low < clear && pitch > 4 && !S.restsOnTail) { pitch -= 2; low = lowY(pitch, hipH); }
+  S.pitch = pitch;
+  const P = pitch * DEG, fwd = V3(0, Math.sin(P), Math.cos(P)), upb = V3(0, Math.cos(P), -Math.sin(P));
+  // torso centre-line: s = 0 at the tail base, 1 at the neck root; the hip joint sits at sHip, below the centre
+  const C0 = V3(0, 0, 0);
+  const tp = (s) => C0.clone().addScaledVector(fwd, (s - sHip) * Lt);
+  const hipOff = upb.clone().multiplyScalar(-0.12 * depth);
+  C0.y = hipH - hipOff.y;
+  /* ── one loft: torso → neck → head ── */
+  const T = (fam.torso).map(([s, w, ht, hb]) => [s, w * width, ht * depth, hb * depth]);
+  const neckLen = S.neckLen, hr = Hw / 2;
+  // the neck's centre-line, integrated from the torso's direction to the neck's carriage (and an S for long necks)
+  const N0 = tp(1), nkShape = S.neckShape || [[0, S.neckAng], [1, S.neckAng]];
+  const thAt = prof(nkShape.map(([u, d]) => [u, d]));
+  const NSEG = 24, npts = [N0.clone()];
+  const th0 = S.pitch;
+  for (let i = 0; i < NSEG; i++) {
+    const uu = (i + 0.5) / NSEG, th = lerp(th0, thAt(uu), sstep(0, 0.35, uu)) * DEG;
+    npts.push(npts[i].clone().add(V3(0, Math.sin(th), Math.cos(th)).multiplyScalar(neckLen / NSEG)));
+  }
+  const O = npts[NSEG].clone();
+  const hA = S.headAng * DEG, hd = V3(0, -Math.sin(hA), Math.cos(hA)), hu = V3(0, Math.cos(hA), Math.sin(hA));
+  const hside = new THREE.Vector3().crossVectors(hu, hd).normalize();
+  // the face ends on the bill's own base: a big bill (toucan, hornbill, macaw) widens and deepens the face to meet it
+  const sk0 = (S.skull || fam.skull), Bi0 = S.bill, st0 = BILLS[Bi0.style] || BILLS.cone, lowK0 = Bi0.lowK ?? st0.lowK;
+  const Wb0 = (Bi0.w ?? 0.62) * M.Bd * (Bi0.wK ?? 1) + (Bi0.wAdd ?? 0) * Hw;
+  const sk = sk0.map((r, i) => (i < sk0.length - 1 ? r : [r[0], Math.max(r[1], (Wb0 / 2 / Hw) * 1.08), Math.max(r[2], (M.Bd * (1 - lowK0) / Hw) * 1.02), Math.max(r[3], (M.Bd * lowK0 / Hw) * 1.1), r[4]]));
+  // (and the stations before it blend toward it, so the face doesn't pinch behind a big bill)
+  for (let i = sk.length - 2; i >= 0 && i >= sk.length - 3; i--) { const t = i === sk.length - 2 ? 0.55 : 0.25, e = sk[sk.length - 1]; sk[i] = [sk[i][0], Math.max(sk[i][1], lerp(sk[i][1], e[1], t)), Math.max(sk[i][2], lerp(sk[i][2], e[2], t)), Math.max(sk[i][3], lerp(sk[i][3], e[3], t)), sk[i][4]]; }
+  const keysP = [], keysW = [], keysT = [], keysB = [];
+  const push = (p, w, t, b) => { if (keysP.length && keysP[keysP.length - 1].distanceTo(p) < 1e-5) return; keysP.push(p); keysW.push(w); keysT.push(t); keysB.push(b); };
+  for (const [s, w, ht, hb] of T) push(tp(s), w, ht, hb);
+  const nr0 = Math.min(T[T.length - 1][1], T[T.length - 1][2]), nrN = hr * (S.neckR ?? fam.neckR ?? 0.78), nrTop = hr * (S.napeR ?? 0.9);
+  for (let i = 2; i <= NSEG; i += 2) {
+    const uu = i / NSEG, r = uu < 0.5 ? lerp(nr0, nrN, sstep(0, 0.5, uu)) : lerp(nrN, nrTop, sstep(0.55, 1, uu));
+    push(npts[i], r * 0.95, r, r * 1.02);
+  }
+  const head0 = keysP.length;
+  for (const [u, w, top, bot, rise] of sk) if (u > 0) push(O.clone().addScaledVector(hd, u * Hl).addScaledVector(hu, (rise || 0) * Hw), w * Hw, top * Hw, bot * Hw);
+  const curve = makePath(keysP), ku = knotUs(curve, keysP.length);
+  const uNeck = ku[T.length - 1], uHead = ku[head0 - 1];
+  const g = loft({ curve, seg: Math.round(det * (34 + 24 * Math.min(1, neckLen / Lt))), rad: 2 * Math.round(9 * det + 3), up: upb,
+    w: prof(keysW.map((v, i) => [ku[i], v])), ht: prof(keysT.map((v, i) => [ku[i], v])), hb: prof(keysB.map((v, i) => [ku[i], v])),
+    nt: (u) => (u < uNeck ? 2.2 : u < uHead ? 2 : 2.25), nb: (u) => (u < uNeck ? 2.0 : u < uHead ? 2 : 2.6),
+    cap0: { type: 'round', len: 0.55, n: 3 }, cap1: 'flat', bend: 0.35, bump: S.fluff ? (u, a) => S.fluff * (vnoise(u * 30, a * 4, 0, 5) - 0.5) : null });
+  if (S.restsOnTail) restOnGround(g, 0.002);
+  Object.assign(L, { g, uNeck, uHead, hd, hu, hside, O, headO: O, fwd, upb, tp, depth, width, C0, torsoRear: [T[1][1], T[1][2], T[1][3]] });
+
+  /* ── skeleton ── */
+  rig.add('Root', null, V3(0, 0, 0));
+  rig.add('Hips', 'Root', tp(sHip).add(hipOff));
+  rig.add('Chest', 'Hips', tp(0.72));
+  const nc = makePath(npts);
+  rig.add('Neck1', 'Chest', nc.getPointAt(0.12)); rig.add('Neck2', 'Neck1', nc.getPointAt(0.6));
+  rig.add('Head', 'Neck2', O.clone().addScaledVector(hd, -0.05 * Hl), O.clone().addScaledVector(hd, Hl));
+  const uN1 = lerp(uNeck, uHead, 0.12), uN2 = lerp(uNeck, uHead, 0.6), uH = lerp(uNeck, uHead, 0.97);
+  const spec = rig.spec(['Hips', 'Chest', 'Neck1', 'Neck2', 'Head'], [0, uNeck * 0.6, uN1, uN2, uH], 0.35);
+  const skin = (u) => rig.chain(spec, u);
+  L.skin = skin;
+  const sOf = (u) => (u <= uNeck ? (u / uNeck) : u <= uHead ? 1 + (u - uNeck) / (uHead - uNeck) : 2 + (u - uHead) / (1 - uHead));
+  emit(B.part('body', { group: 'body' }), g, (u, a, P) => { const s = sOf(u); return paint({ part: s < 1 ? 'torso' : s < 2 ? 'neck' : 'head', s: s % 1 + (s >= 3 ? 1 : 0), u, a, P }); }, skin);
+  L.torsoAt = (s, a) => g.at(clamp(s, 0, 1) * uNeck, a);
+  L.headAt = (u, a) => g.at(lerp(uHead, 1, clamp(u, 0, 1)), a);
+
+  /* ── bill ── */
+  const HWt = rig.W('Head');
+  billBuild(B, S, L, HWt);
+  /* ── eyes (set on the skull: [across, up] as fractions of its half-width and crown height) ── */
+  const E = S.eye, er = E.r * Hw, eyes = [];
+  const skW = prof(sk.map(k => [k[0], k[1]])), skT = prof(sk.map(k => [k[0], k[2]])), skR = prof(sk.map(k => [k[0], k[4] || 0]));
+  for (const [sd] of SIDES) {
+    const eu = E.u, c = O.clone().addScaledVector(hd, eu * Hl).addScaledVector(hu, (skR(eu) + E.at[1] * skT(eu)) * Hw).addScaledVector(hside, sd * E.at[0] * skW(eu) * Hw);
+    const look = hside.clone().multiplyScalar(sd * Math.sin((E.yaw ?? 80) * DEG)).addScaledVector(hd, Math.cos((E.yaw ?? 80) * DEG)).addScaledVector(hu, E.up ?? 0.05).normalize();
+    const eb = ellipsoid(c, er, er, er * 0.85, look, hu, Math.round(6 * det + 2), 2 * Math.round(5 * det + 2));
+    const bas = basisFrom(look, hu);
+    emit(B.part('eyes', { group: 'head' }), eb, (u, a, P) => { if (u < 0.7) return 'eye'; const q = P.clone().sub(c); return Math.hypot(q.dot(bas.s), q.dot(bas.u)) < er * (E.pupil ?? 0.45) ? 'pupil' : 'eye'; }, HWt);
+    if (E.ring) {
+      const ring = [];
+      for (let i = 0; i < 14; i++) { const t = (i / 14) * TAU; ring.push(c.clone().addScaledVector(look, er * 0.42).addScaledVector(bas.s, Math.cos(t) * er * 1.04).addScaledVector(bas.u, Math.sin(t) * er * 1.04)); }
+      emit(B.part('eyes', { group: 'head' }), loft({ pts: ring, closed: true, seg: 14, rad: 5, w: er * E.ring, ht: er * E.ring * 0.5, hb: er * E.ring * 0.5, up: look }), E.ringZone ?? 'face', HWt);
+    }
+    eyes.push({ c, r: er, look, sd });
+  }
+  L.eyes = eyes;
+  /* ── crest, comb, wattles, tufts, casque, knob ── */
+  birdExtras(B, S, L, HWt);
+  /* ── tail, wings, legs ── */
+  tailBuild(B, S, L);
+  foldedWings(B, S, L);
+  spreadWings(B, S, L);
+  legsBuild(B, S, L, hipOff);
+  return L;
+}
+
+/** The bill: an upper mandible continuing the face, a lower one on the Jaw bone, shaped by the style table. */
+function billBuild(B, S, L, HWt) {
+  const rig = B.rig, det = B.det, Bi = S.bill, st = BILLS[Bi.style] || BILLS.cone;
+  const Lb = S.M.C, Db = S.M.Bd, Wb = (Bi.w ?? 0.62) * Db * (Bi.wK ?? 1) + (Bi.wAdd ?? 0) * L.Hw;
+  // the bill base: the loft's front ring, a little inside the face
+  const base = L.headAt(1, 0).p.clone().lerp(L.headAt(1, Math.PI).p, 0.5).addScaledVector(L.hu, -(Bi.drop ?? 0.08) * L.Hw).addScaledVector(L.hd, -0.03 * Lb);
+  const bd = L.hd.clone().applyAxisAngle(L.hside, -(Bi.tilt ?? 0) * DEG).normalize(), bu = new THREE.Vector3().crossVectors(bd, L.hside).normalize();
+  const cl = (u, k = 0) => base.clone().addScaledVector(bd, u * Lb).addScaledVector(bu, -st.curve(u) * Lb + k);
+  const lowK = Bi.lowK ?? st.lowK, upH = (u) => Db * (1 - lowK) * st.d(u), loH = (u) => Db * lowK * st.d(u);
+  const wU = (u) => Math.max(Wb * 0.5 * st.w(u), Lb * 0.01);
+  const N = Math.round((Bi.seg ?? 14) * det), up = [];
+  for (let i = 0; i <= 8; i++) up.push(cl(i / 8));
+  const tipCap = st.tip === 'round' ? { type: 'round', len: 0.5, n: 2 } : { type: 'point', len: 0.35 };
+  const upper = loft({ pts: up, seg: N, rad: 2 * Math.round(6 * det + 2), up: bu, w: (u) => wU(u), ht: (u) => Math.max(upH(u), Lb * 0.008), hb: (u) => Math.max(upH(u) * 0.18, Lb * 0.004), nt: (u) => lerp(1.7, 2.2, u), nb: 3, cap0: 'flat', cap1: tipCap, bend: 0 });
+  const bz = (u) => (Bi.tipZone && Bi.tipUpper !== false && u > (Bi.tipFrom ?? 0.75) ? Bi.tipZone : st.cere && u < st.cere * (Bi.cereK ?? 1) && Bi.cereZone ? Bi.cereZone : 'beak');
+  emit(B.part('beak', { group: 'head' }), upper, (u) => bz(u), HWt);
+  // lower mandible, hinged at the gape just inside the face
+  const hingeP = base.clone().addScaledVector(bu, -upH(0) * 0.15).addScaledVector(bd, -0.06 * Lb);
+  rig.add('Jaw', 'Head', hingeP, cl(st.lowLen));
+  const lowLen = Bi.lowLen ?? st.lowLen, lo = [];
+  for (let i = 0; i <= 8; i++) { const u = (i / 8) * lowLen; lo.push(cl(u).addScaledVector(bu, -upH(u) * 0.12 - (st.scoop ? -Db * 0.25 * u * u : 0))); }
+  const pouch = st.pouch ? (u) => st.pouch * Db * sstep(0.04, 0.2, u) * (1 - sstep(0.55, 0.95, u)) : () => 0;
+  const gonys = st.gonys ? (u) => Db * 0.35 * Math.max(0, 1 - Math.abs(u - 0.82) / 0.12) : () => 0;
+  const lower = loft({ pts: lo, seg: Math.round(N * 0.8), rad: 2 * Math.round(5 * det + 2), up: bu, w: (u) => wU(u * lowLen) * (st.scoop ? 1.05 : 0.94),
+    ht: (u) => Math.max(loH(u * lowLen) * 0.25, Lb * 0.004), hb: (u) => Math.max(loH(u * lowLen) * (st.scoop ? 1.2 : 1) + pouch(u) + gonys(u * lowLen), Lb * 0.006), nt: 3, nb: 2, cap0: { type: 'round', len: 0.4 }, cap1: st.scoop ? { type: 'round', len: 0.6, n: 2 } : tipCap, bend: 0 });
+  emit(B.part('beak', { group: 'head' }), lower, (u) => (st.pouch && u > 0.05 && u < 0.9 ? Bi.pouchZone ?? 'jaw' : Bi.tipZone && u * lowLen > (Bi.tipFrom ?? 0.75) && Bi.tipLower !== false ? Bi.tipZone : 'jaw'), rig.W('Jaw'));
+  // duck's nail, swan's knob, hornbill's casque
+  if (st.nail) emit(B.part('beak', { group: 'head' }), ellipsoid(cl(0.95, upH(0.95) * 0.8), wU(0.95) * 0.55, upH(0.95) * 0.35, Lb * 0.05, bd, bu, 3, 8), Bi.nailZone ?? 'jaw', HWt);
+  if (Bi.knob) emit(B.part('beak', { group: 'head' }), ellipsoid(cl(0.02, upH(0) * 1.1), wU(0) * 0.6, Db * Bi.knob, Lb * 0.12, bd, bu, 4, 10), Bi.knobZone ?? 'jaw', HWt);
+  if (st.casque || Bi.casque) {
+    const cq = Bi.casque || {}, cl0 = cq.len ?? 0.65, cH = Db * (cq.h ?? 0.7);
+    const pts = [0, 0.2, 0.45, 0.7, 0.9, 1].map(f => cl(f * cl0, upH(f * cl0) + cH * 0.45 * Math.sin(Math.PI * clamp(f * 0.85 + 0.12, 0, 1))));
+    emit(B.part('beak', { group: 'head' }), loft({ pts, seg: Math.round(10 * det), rad: 12, up: bu, w: (u) => wU(u * cl0) * 0.85, ht: (u) => cH * 0.5 * Math.sin(Math.PI * clamp(u * 0.9 + 0.08, 0, 1)) ** 0.6, hb: (u) => upH(u * cl0) * 0.4, nt: 2.6, cap0: 'round', cap1: { type: 'round', len: 0.6 }, bend: 0.2 }), cq.zone ?? 'accent', HWt);
+  }
+  L.bill = { base, bd, bu, Lb, Db, cl };
+}
+
+/** Crests, combs, wattles, ear tufts and the like. */
+function birdExtras(B, S, L, HWt) {
+  const rig = B.rig, det = B.det, Hw = L.Hw, Hl = L.Hl, hd = L.hd, hu = L.hu, part = B.part('crest', { group: 'head' });
+  const X = S.extras || {};
+  if (X.crest) {
+    const C = X.crest, n = C.n ?? 7, h = C.h * Hw;
+    for (let i = 0; i < n; i++) {
+      const t = n === 1 ? 0.5 : i / (n - 1);
+      if (C.style === 'peak') {
+        // one laterally flattened tuft swept up and back from the crown (cardinal)
+        if (i) break;
+        const root = L.headAt(C.at ?? 0.45, Math.PI / 2), dir = hu.clone().multiplyScalar(Math.cos((C.sweep ?? 40) * DEG)).addScaledVector(hd, -Math.sin((C.sweep ?? 40) * DEG)).normalize();
+        emit(part, loft({ pts: [root.p.clone().addScaledVector(root.n, -Hw * 0.2), root.p, root.p.clone().addScaledVector(dir, h * 0.5), root.p.clone().addScaledVector(dir, h)], seg: 8, rad: 10, up: hd,
+          w: (u) => Hw * (C.thk ?? 0.12) * (1 - u) ** 0.7, ht: (u) => Hw * (C.base ?? 0.3) * (1 - u) ** 1.1, hb: (u) => Hw * (C.base ?? 0.3) * 0.8 * (1 - u) ** 0.85, cap0: 'round', cap1: 'point', bend: 0.3 }), C.zone ?? 'head', HWt);
+        continue;
+      }
+      // feathers rooted along the crown (fan: cockatoo; plumes: peacock's wire crest; lay: heron's nape plumes)
+      const uR = C.style === 'lay' ? lerp(0.2, 0.05, t) : lerp(C.from ?? 0.62, C.to ?? 0.2, t), aR = Math.PI / 2 + ((i % 2 ? 1 : -1) * (C.spread ?? 0.15) * t);
+      const q = L.headAt(uR, aR);
+      const back = hd.clone().multiplyScalar(-1);
+      let dir = C.style === 'lay' ? back.clone().addScaledVector(hu, 0.15) : q.n.clone().lerp(back, C.lean ?? 0.6).normalize();
+      if (C.style === 'fan') dir = hu.clone().multiplyScalar(Math.cos(lerp(-0.3, 1.1, t))).addScaledVector(hd, Math.sin(lerp(-0.3, 1.1, t)) * -1).normalize();
+      if (C.style === 'recurve') {
+        // a cockatoo's crest at rest: broad feathers rooted from the forehead back over the crown, lying back along it
+        // and curling up at the tips, the forward ones longest
+        const ur = lerp(C.from ?? 0.85, C.to ?? 0.3, t), qa = L.headAt(ur, Math.PI / 2 + (i % 2 ? 1 : -1) * 0.12 * (1 - t)), L0 = h * lerp(1, 0.45, t);
+        const b0 = qa.p.clone().addScaledVector(qa.n, -Hw * 0.04), bk = hd.clone().multiplyScalar(-1);
+        const pts = [b0, b0.clone().addScaledVector(bk, L0 * 0.4).addScaledVector(hu, L0 * 0.08), b0.clone().addScaledVector(bk, L0 * 0.72).addScaledVector(hu, L0 * 0.28), b0.clone().addScaledVector(bk, L0 * 0.86).addScaledVector(hu, L0 * (C.curl ?? 0.62))];
+        const path = makePath(pts);
+        sheet(part, { nu: 6, nv: 2, f: (u, v) => path.getPointAt(u).addScaledVector(L.hside, (v - 0.5) * Hw * (C.vane ?? 0.24) * Math.sin(Math.PI * clamp(u * 0.85 + 0.15, 0, 1)) ** 0.5), th: Hw * 0.02, zone: (u) => (C.baseZone && u < 0.25 ? C.baseZone : C.zone ?? 'accent'), skin: HWt });
+        continue;
+      }
+      const len = h * (C.style === 'lay' ? 1 - 0.3 * t : 0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, 0.15 + t)));
+      const p0 = q.p.clone().addScaledVector(q.n, -Hw * 0.05), p1 = p0.clone().addScaledVector(dir, len * 0.55).addScaledVector(hu, len * (C.curl ?? 0.1)), p2 = p0.clone().addScaledVector(dir, len).addScaledVector(hu, len * (C.curl ?? 0.1) * 2.2);
+      if (C.style === 'plumes') emit(part, tube([p0, p1, p2], Hw * 0.012, 4, 4, { cap1: 'point' }), 'accent', HWt), emit(part, ellipsoid(p2, Hw * 0.05, Hw * 0.08, Hw * 0.035, dir, hd, 3, 8), C.tipZone ?? 'accent', HWt);
+      else sheet(part, { nu: 4, nv: 2, f: (u, v) => { const b = makePath([p0, p1, p2]).getPointAt(u); return b.addScaledVector(L.hside, (v - 0.5) * Hw * (C.vane ?? 0.14) * Math.sin(Math.PI * clamp(u * 0.9 + 0.1, 0, 1)) ** 0.6); }, th: Hw * 0.015, zone: (u) => (C.tipZone && u > 0.75 ? C.tipZone : C.zone ?? 'accent'), skin: HWt });
+    }
+  }
+  if (X.tufts) for (const [sd] of SIDES) {
+    // ear tufts (great horned owl): feather horns at the brow's corners
+    // (a fan of soft feathers, flattened front to back and leaning back a little, not a horn)
+    const q = L.headAt(X.tufts.u ?? 0.7, Math.PI / 2 - sd * 0.62), dir = q.n.clone().addScaledVector(hd, -0.45).addScaledVector(L.hside, sd * 0.3).normalize(), h = X.tufts.h * Hw;
+    sheet(part, { nu: 4, nv: 2, f: (u, v) => q.p.clone().addScaledVector(q.n, -Hw * 0.05).addScaledVector(dir, u * h).addScaledVector(L.hside, (v - 0.5) * Hw * 0.22 * (1 - u * 0.75)).addScaledVector(hd, -u * u * h * 0.2), th: Hw * 0.05, zone: (u) => (u > 0.5 ? 'flight' : X.tufts.zone ?? 'head'), skin: HWt });
+  }
+  if (X.comb) {
+    // rooster's comb: a serrated blade along the crown and forehead
+    const C = X.comb;
+    sheet(part, { nu: 12, nv: 2, f: (u, v) => { const q = L.headAt(lerp(C.from ?? 0.25, C.to ?? 0.95, u), Math.PI / 2).p; return q.addScaledVector(hu, v * C.h * Hw * (0.55 + 0.45 * Math.abs(Math.sin(u * Math.PI * (C.points ?? 4.5)))) * Math.sin(Math.PI * clamp(u * 0.9 + 0.1, 0, 1)) ** 0.4 - Hw * 0.05); }, th: Hw * 0.08, zone: C.zone ?? 'accent', skin: HWt });
+  }
+  if (X.wattle) for (const [sd] of SIDES) {
+    // wattles hang from the throat at the gape; turkeys' snood droops over the bill
+    const W0 = X.wattle, p = L.bill.base.clone().addScaledVector(L.bill.bu, -L.bill.Db * 0.5).addScaledVector(L.hside, sd * L.bill.Db * 0.25).addScaledVector(L.bill.bd, L.bill.Lb * 0.05), l = W0.len * Hw;
+    emit(part, loft({ pts: [p, p.clone().add(V3(0, -l * 0.5, 0)), p.clone().add(V3(0, -l, -l * 0.15))], seg: 6, rad: 10, up: hd, w: (u) => l * 0.2 * (0.6 + Math.sin(Math.PI * u)), ht: (u) => l * 0.14 * (0.6 + Math.sin(Math.PI * u)), hb: (u) => l * 0.14 * (0.6 + Math.sin(Math.PI * u)), cap1: 'round' }), W0.zone ?? 'accent', rig.W('Jaw'));
+  }
+  if (X.snood) {
+    const p = L.bill.base.clone().addScaledVector(L.bill.bu, L.bill.Db * 0.6), l = X.snood * Hw;
+    emit(part, tube([p, p.clone().addScaledVector(L.bill.bd, l * 0.4).addScaledVector(L.bill.bu, l * 0.1), p.clone().addScaledVector(L.bill.bd, l * 0.5).addScaledVector(L.bill.bu, -l * 0.6)], (u) => Hw * 0.05 * (1 - 0.3 * u), 6, 6, { cap1: 'round' }), 'accent', HWt);
+  }
+}
+
+/** The tail: a fan of rectrices from the tail base along the line of the back (raised by `lift`). */
+function tailBuild(B, S, L) {
+  const rig = B.rig, det = B.det, Tl = S.M.T, Ts = S.tail, part = B.part('tail', { group: 'tail', coatK: 1.4 });
+  const base = L.tp(0.04).addScaledVector(L.upb, 0.12 * L.depth);
+  let tdir = L.fwd.clone().multiplyScalar(-1).addScaledVector(L.upb, Math.tan((Ts.lift ?? 8) * DEG)).normalize();
+  // (an upright bird on the ground rests its tail tip just above it rather than through it)
+  const floor = 0.015 * L.Lt + Tl * 0.03;
+  if (base.y + tdir.y * Tl < floor) { const y = clamp((floor - base.y) / Tl, -0.999, 0.999), h = Math.sqrt(1 - y * y), hz = V3(tdir.x, 0, tdir.z).normalize(); tdir = hz.multiplyScalar(h).add(V3(0, y, 0)).normalize(); }
+  rig.add('Tail', 'Hips', base, base.clone().addScaledVector(tdir, Tl));
+  L.tail = { base, tdir };
+  if (Ts.hidden) return;
+  const n = Ts.n ?? 12, width = Tl * (Ts.w ?? 0.32), fan = (Ts.fan ?? 14) * DEG, Wt = rig.W('Tail');
+  const shape = Ts.shape ?? 'square';
+  // the tail's two halves fold down from the midline like a roof: nearly flat on most birds, nearly vertical on a
+  // rooster or a hen (roof ≈ 60-70°), whose sickles then arch over in that plane
+  const tu = L.upb.clone().addScaledVector(tdir, -L.upb.dot(tdir)).normalize(), roof = (Ts.roof ?? 6) * DEG, down = V3(0, -1, 0);
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0 : i / (n - 1) - 0.5, at = Math.abs(t) * 2;
+    const len = Tl * (shape === 'fork' ? 0.72 + 0.4 * at : shape === 'wedge' ? 1 - 0.55 * at : shape === 'round' ? 1 - 0.18 * at * at : shape === 'graduated' ? 1 - 0.75 * at ** 1.2 : shape === 'train' ? 0.85 + 0.15 * Math.cos(at * 2) : 1);
+    const ax = tu.clone().applyAxisAngle(tdir, -(t < 0 ? -1 : 1) * roof * sstep(0, 0.3, at));
+    const d = tdir.clone().applyAxisAngle(ax, t * fan * 2), sd = new THREE.Vector3().crossVectors(ax, d).normalize();
+    const fw = Math.min(width * 2.2 / n, len * 0.35) * (Ts.featherW ?? 1), droop = (Ts.droop ?? 0) * len;
+    // the outer feathers lie under the central ones (stacked a little lower)
+    const stack = -at * fw * 0.08;
+    sheet(part, { nu: Math.round(5 * det + 1), nv: 2,
+      f: (u, v) => { const p = base.clone().addScaledVector(d, u * len).addScaledVector(sd, (v - 0.5) * fw * Math.sin(Math.PI * clamp(0.1 + u * 0.95, 0, 1)) ** 0.45).addScaledVector(ax, stack).addScaledVector(down, droop * u * u); p.y = Math.max(p.y, 0.004 + at * 0.002); return p; },
+      th: (u) => fw * 0.07 * (1 - 0.5 * u), zone: (u, v, face) => B.paint({ part: 'tail', u, v, face, t, P: base }), skin: (u) => (u < 0.08 ? rig.W2('Hips', 'Tail', u / 0.08) : Wt) });
+  }
+  // the tail coverts: the rump's and the vent's feathers run on over the tail's root, so the tail grows out of the
+  // body as one tapering mass instead of a fan stuck on at a seam
+  if ((Ts.coverts ?? 1) > 0) {
+    const T0 = L.torsoRear, cl = Tl * 0.42 * (Ts.coverts ?? 1), root = L.tp(0.12).addScaledVector(L.upb, 0.1 * L.depth);
+    const pts = [root, base, base.clone().addScaledVector(tdir, cl * 0.5), base.clone().addScaledVector(tdir, cl)];
+    for (const q of pts) q.y = Math.max(q.y, 0.004 + T0[2] * 0.25);
+    const wE = Math.min(width * 0.45, T0[0] * 0.8), steep = roof > 30 * DEG;
+    emit(part, restOnGround(loft({ pts, seg: Math.round(8 * det + 2), rad: 2 * Math.round(6 * det + 3), up: tu,
+      w: (u) => lerp(T0[0] * (steep ? 0.7 : 0.92), wE * (steep ? 0.35 : 0.7), sstep(0.1, 1, u)), ht: (u) => lerp(T0[1] * 0.85, T0[1] * 0.12, sstep(0.15, 1, u)), hb: (u) => lerp(T0[2] * 0.9, T0[2] * 0.15, sstep(0.25, 1, u) ** 0.8),
+      nt: steep ? 1.5 : 2.2, nb: 2, cap0: 'flat', cap1: { type: 'round', len: 0.4, n: 2 }, bend: 0.3 }), 0.003),
+    (u, a, P) => B.paint({ part: 'coverts', s: 0.02, a, P }), (u) => (u < 0.35 ? rig.W2('Hips', 'Tail', u / 0.35) : Wt));
+  }
+  // the train (peafowl): long upper-tail coverts lying back over the tail and along the ground, in tiers of graded
+  // length, each feather ending in an eyespot, so the eyes cover the whole train
+  if (Ts.train) {
+    const tr = Ts.train, m = tr.n ?? 24, len0 = tr.len, tiers = tr.tiers ?? [1, 0.8, 0.6, 0.42];
+    for (let i = 0; i < m; i++) {
+      const t = i / (m - 1) - 0.5, tier = tiers[i % tiers.length], d = tdir.clone().applyAxisAngle(L.upb, t * (tr.fan ?? 10) * DEG * 2), sd = new THREE.Vector3().crossVectors(L.upb, d).normalize();
+      const len = len0 * tier * (1 - 0.18 * Math.abs(t) * 2), b0 = base.clone().addScaledVector(L.upb, (0.03 + 0.02 * (1 - tier)) * L.depth), fwT = len0 * (tr.w ?? 0.05);
+      const sag = (u) => -Math.max(0, (b0.y + d.y * u * len) - 0.01) * sstep(0.15, 1, u) * 0.95;
+      sheet(part, { nu: Math.round(8 * det + 2), nv: 2,
+        f: (u, v) => { const p = b0.clone().addScaledVector(d, u * len).addScaledVector(sd, (v - 0.5) * fwT * Math.sin(Math.PI * clamp(0.1 + u, 0, 1)) ** 0.4); p.y = Math.max(p.y + sag(u), 0.004 + 0.002 * u + (1 - tier) * 0.006 + i * 0.0002); return p; },
+        th: len0 * 0.004, zone: (u, v) => { const e = Math.hypot((u - 0.93) * len / fwT, (v - 0.5) * 1.2); return e < 0.18 ? (tr.heart ?? 'body') : e < 0.32 ? (tr.ring ?? 'accent') : e < 0.42 ? (tr.zone ?? 'flight') : u > 0.8 && e < 0.5 ? (tr.rim ?? 'wing') : (tr.zone ?? 'flight'); },
+        skin: (u) => (u < 0.06 ? rig.W2('Hips', 'Tail', u / 0.06) : Wt) });
+    }
+  }
+  L.tail = { base, tdir };
+}
+
+/**
+ * The folded wing: a feathered blade lying on the flank from the wrist (at the front of the breast) back to the
+ * primary tips, which reach past the tail base and rest on the tail. Over the body it follows the flank just outside
+ * the feathers; past the body it carries on as a tapering blade toward the midline.
+ */
+function foldedWings(B, S, L) {
+  const rig = B.rig, det = B.det, Wg = S.wing, Lt = L.Lt, part = B.part('wings-folded', { group: 'wingFold' });
+  const sW = Wg.wrist ?? 0.82, fl = S.M.W * (Wg.foldK ?? 1.0), s1 = sW - fl / Lt;
+  const aTop = Wg.top ?? 1.15, aBot = Wg.bot ?? -0.25;
+  for (const [sd, sx] of SIDES) {
+    const shoulder = L.torsoAt(sW, sd > 0 ? 0.6 : Math.PI - 0.6).p;
+    rig.add('WingFold' + sx, 'Chest', shoulder);
+    if (Wg.hidden) continue;     // (kiwis: the vestigial wing is lost in the plumage)
+    const Wf = rig.W('WingFold' + sx);
+    const lastS = 0.03, edge = (s, a) => { const q = L.torsoAt(s, sd > 0 ? a : Math.PI - a); return q.p.addScaledVector(q.n, (Wg.loft ?? 0.03) * L.depth); };
+    sheet(part, {
+      nu: Math.round(14 * det + 4), nv: Math.round(5 * det + 2),
+      f: (u, v) => {
+        const s = lerp(sW, s1, u);
+        // the outline: round at the wrist, deepest a third of the way back, tapering to the primaries' tip
+        const env = Math.sin(Math.PI * clamp(u * 0.92 + 0.05, 0, 1)) ** 0.55 * (u > 0.6 ? 1 - (u - 0.6) / 0.4 * (Wg.tip === 'round' ? 0.55 : 0.8) : 1);
+        const a = lerp(aTop, lerp(aTop, aBot, env), v);
+        if (s >= lastS) return edge(s, a);
+        // past the body: on from the last ring, converging over the tail
+        // (along the tail, just above it: on an upright bird straight back would run into the ground)
+        const p0 = edge(lastS, lerp(aTop, lerp(aTop, aBot, env), v)), back = (lastS - s) * Lt, td = L.tail ? L.tail.tdir : L.fwd.clone().multiplyScalar(-1);
+        const q = p0.addScaledVector(td, back).add(V3(-sd * back * (Wg.cross ?? 0.12), 0, 0)).addScaledVector(L.upb, back * 0.04);
+        q.y = Math.max(q.y, 0.02 * Lt + L.depth * 0.08);
+        return q;
+      },
+      th: (u, v) => L.depth * 0.05 * (1 - 0.65 * u) * (0.5 + 0.5 * Math.sin(Math.PI * clamp(v, 0, 1))), zone: (u, v, face) => B.paint({ part: 'fold', u, v, face, P: shoulder }), skin: Wf,
+    });
+  }
+}
+
+/** The spread wing (flight): coverts and secondaries on the arm, primaries on the hand; slotted tips separate. */
+function spreadWings(B, S, L) {
+  const rig = B.rig, det = B.det, Wg = S.wing, M = S.M, part = B.part('wings', { group: 'wingSpread', coatK: 2.5 });
+  const half = Math.max(M.W * 1.15, M.Sp / 2 - L.width * 0.45), chord = M.W * (Wg.chordK ?? 0.62);
+  const seg = Wg.segs ?? [0.25, 0.32, 0.43];
+  const wPt = (b, dx, dy, dz) => b.clone().add(V3(dx, 0, 0)).addScaledVector(L.upb, dy).addScaledVector(L.fwd, dz);
+  for (const [sd, sx] of SIDES) {
+    const sh = L.torsoAt(0.74, sd > 0 ? 0.55 : Math.PI - 0.55).p.addScaledVector(L.upb, -0.05 * L.depth);
+    const el = wPt(sh, sd * half * seg[0], half * 0.02, -half * 0.03), wr = wPt(el, sd * half * seg[1], half * 0.01, half * 0.03), tip = wPt(wr, sd * half * seg[2], -half * 0.01, -half * (Wg.sweep ?? 0.12));
+    rig.add('Wing' + sx, 'Chest', sh); rig.add('Humerus' + sx, 'Wing' + sx, sh, el); rig.add('Forearm' + sx, 'Humerus' + sx, el, wr); rig.add('Hand' + sx, 'Forearm' + sx, wr, tip);
+    if (Wg.hidden) continue;
+    const le = makePath([sh.clone().add(V3(-sd * L.width * 0.2, 0, 0)), sh, el, wr, tip]), ku = knotUs(le, 5);
+    const spec = rig.spec(['Wing' + sx, 'Humerus' + sx, 'Forearm' + sx, 'Hand' + sx], [0, ku[1], ku[2], ku[3]], 0.22);
+    const slotted = Wg.tip === 'slotted', pointed = Wg.tip === 'pointed';
+    const cP = prof([[0, 0.7], [ku[1], 0.95], [ku[2], 1], [ku[3], 0.95], [0.88, slotted ? 0.75 : pointed ? 0.45 : 0.7], [1, slotted ? 0.55 : pointed ? 0.08 : 0.35]]);
+    sheet(part, { nu: Math.round(20 * det), nv: Math.round(4 * det),
+      f: (u, v) => { const p = le.getPointAt(u), c = chord * cP(u); return wPt(p, 0, Math.sin(Math.PI * v) * c * 0.06 * (1 - u * 0.5), -v * c + (u > 0.85 ? -(u - 0.85) * c * 0.6 * v : 0)); },
+      th: (u, v) => chord * 0.04 * (1 - 0.55 * u) * (1 - 0.7 * v), zone: (u, v, face) => B.paint({ part: 'wing', u, v, face, P: sh }), skin: (u) => rig.chain(spec, u) });
+    if (slotted) for (let i = 0; i < 6; i++) {
+      // the "fingers": emarginated outer primaries standing apart
+      const t = i / 5, b0 = le.getPointAt(lerp(0.82, 0.99, t)), d = wPt(V3(), sd * (0.55 + 0.45 * t), 0, -(1 - t) * 0.75).normalize(), fl = chord * (0.62 - 0.12 * Math.abs(t - 0.5));
+      sheet(part, { nu: 4, nv: 2, f: (u, v) => wPt(b0, 0, u * u * fl * 0.06, -chord * 0.12 + (v - 0.5) * chord * 0.11 * Math.sin(Math.PI * clamp(u * 0.9 + 0.1, 0, 1))).addScaledVector(d, u * fl), th: chord * 0.018, zone: 'flight', skin: rig.W('Hand' + sx) });
+    }
+  }
+  L.span = half;
+}
+
+/** Legs: the feathered drumstick, the bare or feathered tarsus, toes by foot type (perching, zygodactyl, webbed, ...). */
+function legsBuild(B, S, L, hipOff) {
+  const rig = B.rig, det = B.det, M = S.M, Ts = M.Ts, Tib = Ts * (S.tibK ?? S.fam.tibK ?? 1.1), lr = Ts * (S.legThk ?? 0.075);
+  const lp = B.part('legs', { group: 'legs' }), fp = B.part('feet', { group: 'feet' }), F = S.feet;
+  for (const [sd, sx] of SIDES) {
+    const hip = L.tp(S.fam.sHip ?? 0.4).add(hipOff).add(V3(sd * L.width * 0.28, 0, 0));
+    const knee = hip.clone().addScaledVector(L.fwd, Ts * 0.32).add(V3(sd * L.width * 0.04, -Ts * 0.22, 0));
+    const foot = V3(hip.x + sd * L.width * 0.03, 0, hip.z + (S.footFwd ?? 0.02) * L.Lt);
+    foot.y = lr * 0.9;
+    const ankle = twoBone(knee, foot, Tib, Ts, L.fwd.clone().multiplyScalar(-1).setY(0).normalize());
+    const toeDir = V3(0, 0, 1);
+    rig.add('Thigh' + sx, 'Hips', hip, knee); rig.add('Shin' + sx, 'Thigh' + sx, knee, ankle); rig.add('Tarsus' + sx, 'Shin' + sx, ankle, foot); rig.add('Toe' + sx, 'Tarsus' + sx, foot, foot.clone().addScaledVector(toeDir, Ts * 0.4));
+    // drumstick: from inside the belly to the heel, feathered (bare below `bare` on waders)
+    const top = knee.clone().addScaledVector(L.upb, L.depth * 0.25), bare = S.bareTibia ?? 0;
+    const rTop = Math.min(L.width * 0.16, L.depth * 0.2) * (S.thighK ?? 1), rLow = lr * (S.feathered ? 2.1 : 1.35);
+    const tib = loft({ pts: [top, knee, knee.clone().lerp(ankle, 0.5), ankle], seg: Math.round(12 * det), rad: 2 * Math.round(4 * det + 2), up: [1, 0, 0],
+      w: (u) => lerp(rTop, rLow, sstep(0.15, bare > 0 ? 1 - bare : 0.9, u)), ht: (u) => lerp(rTop, rLow, sstep(0.15, bare > 0 ? 1 - bare : 0.9, u)), hb: (u) => lerp(rTop, rLow, sstep(0.15, bare > 0 ? 1 - bare : 0.9, u)), cap0: 'round', cap1: { type: 'round', len: 0.4 }, bend: 0.3 });
+    emit(lp, tib, (u, a, P) => (bare > 0 && u > 1 - bare * 0.9 ? 'leg' : B.paint({ part: 'thigh', u, a, P })), (u) => rig.W2('Thigh' + sx, 'Shin' + sx, sstep(0.1, 0.45, u)));
+    if (!S.feathered) emit(lp, ellipsoid(ankle, lr * 1.25, lr * 1.25, lr * 1.35, ankle.clone().sub(knee).normalize(), [0, 0, 1], 4, 8), 'leg', rig.W2('Shin' + sx, 'Tarsus' + sx, 0.5));
+    const tr = loft({ pts: [ankle, ankle.clone().lerp(foot, 0.5), foot], seg: Math.round(7 * det), rad: 2 * Math.round(3 * det + 2), up: [0, 0, 1], w: (u) => lr * (S.feathered && u < 0.7 ? 1.9 : 0.88), ht: (u) => lr * (S.feathered && u < 0.7 ? 2.0 : 1.02), hb: (u) => lr * (S.feathered && u < 0.7 ? 2.0 : 1.02), cap0: 'round', cap1: 'round', bend: 0.3 });
+    emit(lp, tr, (u, a, P) => (S.feathered && u < 0.65 ? B.paint({ part: 'thigh', u: 1, a, P }) : 'leg'), rig.W('Tarsus' + sx));
+    // toes: [angle from forward (deg, + outward), length × tarsus, thickness × leg radius]
+    const toes = F === 'zygo' ? [[-12, 0.42, 1], [14, 0.5, 1], [170, 0.38, 0.95], [-160, 0.36, 0.95]]
+      : F === 'ratite' ? [[6, 0.42, 1.6], [34, 0.26, 1.2]]
+      : F === 'webbed' ? [[-28, 0.62, 0.9], [0, 0.7, 0.9], [28, 0.64, 0.9], [175, 0.14, 0.7]]
+      : F === 'raptor' ? [[-26, 0.42, 1.25], [0, 0.48, 1.25], [24, 0.4, 1.25], [180, 0.36, 1.3]]
+      : F === 'galliform' ? [[-28, 0.48, 1.1], [0, 0.58, 1.1], [28, 0.48, 1.1], [180, 0.2, 0.9]]
+      : F === 'wader' ? [[-30, 0.5, 0.75], [0, 0.6, 0.75], [30, 0.5, 0.75], [180, 0.18, 0.6]]
+      : F === 'tiny' ? [[-22, 0.4, 0.8], [0, 0.48, 0.8], [22, 0.4, 0.8], [180, 0.3, 0.8]]
+      : [[-26, 0.48, 0.9], [0, 0.6, 0.9], [26, 0.48, 0.9], [180, 0.48, 0.9]];
+    const tips = [], k = S.toeK ?? 1, Wt = rig.W('Toe' + sx);
+    // (the longest toe with its claw: the walk lifts the foot clear of the ground by more than its curled toes hang)
+    L.toeLen = Math.max(...toes.map(([, len, thk]) => len * Ts * k + lr * 0.72 * thk * (S.talons ?? 1.4)));
+    const pad = foot.clone(); pad.y = lr * 0.85;
+    emit(fp, ellipsoid(pad, lr * 1.35, lr * 0.9, lr * 1.5, [0, 0, 1], [0, 1, 0], 4, 8), 'leg', Wt);
+    for (const [ang, len, thk] of toes) {
+      const a = ang * DEG, d = V3(sd * Math.sin(a), 0, Math.cos(a)), tl = len * Ts * k, t = lr * 0.72 * thk;
+      const e = pad.clone().addScaledVector(d, tl); e.y = t * 0.95;
+      const m = pad.clone().lerp(e, 0.5); m.y = Math.max(e.y, pad.y) + t * 0.6;
+      emit(fp, tube([pad, m, e], (u) => t * (1 - 0.3 * u), Math.round(4 * det + 2), 6, { cap1: { type: 'round', len: 0.7 } }), 'leg', Wt);
+      const cl = t * (S.talons ?? 1.4), cs = e.clone().addScaledVector(d, t * 0.5);
+      emit(fp, tube([cs, cs.clone().addScaledVector(d, cl * 0.65).add(V3(0, cl * 0.15, 0)), cs.clone().addScaledVector(d, cl).add(V3(0, -Math.min(cl * 0.5, cs.y - t * 0.08), 0))], (u) => t * 0.45 * (1 - 0.9 * u), 4, 4, { cap1: 'point' }), 'beak', Wt);
+      tips.push({ e, d, t });
+    }
+    if (F === 'webbed') sheet(fp, { nu: 2, nv: 4, f: (u, v) => { const i = Math.min(1, Math.floor(v * 2)), f = v * 2 - i, A = tips[i].e, Bp = tips[i + 1].e; const q = pad.clone().lerp(A.clone().lerp(Bp, f), u * (1 - 0.18 * Math.sin(Math.PI * f) * u)); q.y = Math.max(q.y, lr * 0.25); return q; }, th: lr * 0.22, zone: 'leg', skin: Wt });
+    if (S.spur) emit(fp, tube([foot.clone().lerp(ankle, 0.22), foot.clone().lerp(ankle, 0.22).addScaledVector(V3(0, 0.2, -1).normalize(), lr * 2.4)], (u) => lr * 0.5 * (1 - 0.9 * u), 3, 4, { cap1: 'point' }), 'beak', rig.W('Tarsus' + sx));
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ *  FAMILIES — the torso's outline at stations s (0 tail base → 1 neck root) as [s, half-width, half-height above,
+ *  half-height below], normalised (× width and depth, which are fractions of the torso length L); the skull's at u
+ *  (0 occiput → 1 bill base) as [u, half-width, crown, chin, rise] × head width; the legs' tibia (× tarsus) and how far
+ *  they are straightened (crouch), and where the hip sits along the torso.
+ * ════════════════════════════════════════════════════════════════════════════ */
+const SKULL_SONG = [[0, 0.4, 0.4, 0.38, 0], [0.22, 0.5, 0.5, 0.44, 0.02], [0.5, 0.5, 0.5, 0.42, 0.03], [0.74, 0.43, 0.44, 0.36, 0.01], [0.9, 0.32, 0.32, 0.28, -0.02], [1, 0.25, 0.25, 0.22, -0.04]];
+const FAMILIES = {
+  passerine: { torso: [[0, 0.32, 0.3, 0.32], [0.15, 0.68, 0.7, 0.78], [0.4, 0.95, 0.92, 1.0], [0.62, 1.0, 0.95, 1.05], [0.82, 0.86, 0.82, 0.9], [1, 0.56, 0.58, 0.6]], depth: 0.27, width: 0.26, tibK: 1.25, crouch: 0.72, sHip: 0.42, neckR: 0.82, skull: SKULL_SONG },
+  corvid: { torso: [[0, 0.3, 0.28, 0.3], [0.15, 0.66, 0.68, 0.74], [0.4, 0.94, 0.9, 0.98], [0.62, 1.0, 0.94, 1.04], [0.82, 0.86, 0.82, 0.9], [1, 0.56, 0.56, 0.6]], depth: 0.26, width: 0.25, tibK: 1.25, crouch: 0.78, sHip: 0.42, neckR: 0.8,
+    skull: [[0, 0.4, 0.4, 0.38, 0], [0.22, 0.5, 0.48, 0.44, 0.02], [0.5, 0.48, 0.44, 0.4, 0.01], [0.75, 0.4, 0.36, 0.33, -0.01], [0.92, 0.32, 0.3, 0.27, -0.03], [1, 0.28, 0.27, 0.24, -0.04]] },
+  columbid: { torso: [[0, 0.3, 0.28, 0.3], [0.15, 0.66, 0.66, 0.74], [0.4, 0.95, 0.9, 1.02], [0.64, 1.0, 0.95, 1.12], [0.84, 0.86, 0.85, 1.0], [1, 0.52, 0.55, 0.6]], depth: 0.3, width: 0.27, tibK: 1.45, crouch: 0.8, sHip: 0.42, neckR: 0.72, skull: SKULL_SONG },
+  raptor: { torso: [[0, 0.32, 0.3, 0.3], [0.15, 0.66, 0.7, 0.74], [0.4, 0.94, 0.94, 1.0], [0.64, 1.0, 0.98, 1.12], [0.84, 0.88, 0.86, 1.0], [1, 0.6, 0.6, 0.65]], depth: 0.28, width: 0.27, tibK: 1.2, crouch: 0.78, sHip: 0.42, neckR: 0.84,
+    skull: [[0, 0.4, 0.38, 0.4, 0], [0.22, 0.5, 0.46, 0.44, 0.02], [0.5, 0.5, 0.46, 0.42, 0.02], [0.72, 0.44, 0.42, 0.36, 0], [0.88, 0.36, 0.34, 0.3, -0.02], [1, 0.3, 0.3, 0.26, -0.03]] },
+  owl: { torso: [[0, 0.4, 0.35, 0.38], [0.15, 0.75, 0.72, 0.8], [0.4, 0.98, 0.95, 1.02], [0.65, 1.0, 0.98, 1.05], [0.85, 0.92, 0.9, 0.95], [1, 0.75, 0.72, 0.75]], depth: 0.32, width: 0.33, tibK: 1.0, crouch: 0.75, sHip: 0.4, neckR: 0.9,
+    skull: [[0, 0.44, 0.44, 0.42, 0], [0.3, 0.5, 0.52, 0.48, 0.02], [0.6, 0.5, 0.5, 0.47, 0], [0.85, 0.47, 0.46, 0.44, -0.01], [1, 0.42, 0.4, 0.38, -0.02]] },
+  parrot: { torso: [[0, 0.32, 0.3, 0.3], [0.15, 0.66, 0.7, 0.74], [0.4, 0.94, 0.94, 1.0], [0.64, 1.0, 0.98, 1.1], [0.84, 0.88, 0.86, 1.0], [1, 0.6, 0.6, 0.65]], depth: 0.28, width: 0.27, tibK: 2.0, crouch: 0.68, sHip: 0.42, neckR: 0.86,
+    skull: [[0, 0.42, 0.42, 0.4, 0], [0.25, 0.52, 0.54, 0.46, 0.03], [0.5, 0.52, 0.54, 0.44, 0.04], [0.75, 0.46, 0.5, 0.4, 0.03], [0.9, 0.4, 0.46, 0.36, 0.02], [1, 0.36, 0.44, 0.33, 0.01]] },
+  wader: { torso: [[0, 0.3, 0.26, 0.26], [0.15, 0.62, 0.62, 0.62], [0.4, 0.92, 0.9, 0.9], [0.65, 1.0, 0.92, 0.98], [0.85, 0.85, 0.8, 0.86], [1, 0.5, 0.5, 0.52]], depth: 0.22, width: 0.22, tibK: 1.25, crouch: 0.93, sHip: 0.42, neckR: 0.72,
+    skull: [[0, 0.38, 0.38, 0.36, 0], [0.25, 0.46, 0.44, 0.4, 0.01], [0.55, 0.44, 0.4, 0.36, 0], [0.8, 0.36, 0.32, 0.28, -0.02], [1, 0.28, 0.24, 0.22, -0.03]] },
+  anatid: { torso: [[0, 0.36, 0.32, 0.34], [0.15, 0.75, 0.66, 0.78], [0.4, 0.97, 0.86, 1.0], [0.65, 1.0, 0.88, 1.02], [0.85, 0.88, 0.8, 0.92], [1, 0.55, 0.55, 0.58]], depth: 0.25, width: 0.3, tibK: 1.0, crouch: 0.74, sHip: 0.36, neckR: 0.72,
+    skull: [[0, 0.4, 0.38, 0.38, 0], [0.25, 0.48, 0.46, 0.42, 0.02], [0.55, 0.46, 0.42, 0.38, 0.01], [0.8, 0.38, 0.32, 0.3, -0.02], [1, 0.32, 0.24, 0.22, -0.04]] },
+  seabird: { torso: [[0, 0.3, 0.28, 0.3], [0.15, 0.68, 0.66, 0.74], [0.4, 0.96, 0.9, 1.0], [0.64, 1.0, 0.92, 1.04], [0.84, 0.86, 0.8, 0.88], [1, 0.56, 0.55, 0.58]], depth: 0.24, width: 0.25, tibK: 1.1, crouch: 0.76, sHip: 0.4, neckR: 0.8,
+    skull: [[0, 0.4, 0.4, 0.38, 0], [0.25, 0.48, 0.47, 0.42, 0.02], [0.55, 0.46, 0.44, 0.38, 0.01], [0.8, 0.38, 0.34, 0.3, -0.02], [1, 0.3, 0.27, 0.24, -0.04]] },
+  penguin: { torso: [[0, 0.34, 0.3, 0.3], [0.15, 0.72, 0.74, 0.8], [0.4, 0.98, 0.96, 1.02], [0.62, 1.0, 0.96, 1.04], [0.82, 0.84, 0.82, 0.88], [1, 0.58, 0.56, 0.6]], depth: 0.2, width: 0.2, tibK: 0.6, crouch: 0.6, sHip: 0.22, neckR: 0.95,
+    skull: [[0, 0.42, 0.4, 0.4, 0], [0.3, 0.46, 0.44, 0.42, 0.01], [0.6, 0.42, 0.38, 0.36, 0], [0.85, 0.32, 0.28, 0.26, -0.02], [1, 0.24, 0.2, 0.19, -0.03]] },
+  ratite: { torso: [[0, 0.4, 0.38, 0.4], [0.15, 0.8, 0.8, 0.82], [0.4, 1.0, 1.0, 1.0], [0.65, 0.98, 0.98, 0.98], [0.85, 0.8, 0.8, 0.8], [1, 0.42, 0.42, 0.42]], depth: 0.3, width: 0.3, tibK: 1.05, crouch: 0.92, sHip: 0.45, neckR: 0.62,
+    skull: [[0, 0.38, 0.34, 0.34, 0], [0.3, 0.46, 0.4, 0.36, 0.01], [0.6, 0.44, 0.34, 0.3, 0], [0.85, 0.38, 0.24, 0.22, -0.02], [1, 0.34, 0.16, 0.16, -0.03]] },
+  kiwi: { torso: [[0, 0.45, 0.42, 0.46], [0.15, 0.8, 0.78, 0.84], [0.4, 1.0, 0.98, 1.02], [0.65, 0.95, 0.94, 0.98], [0.85, 0.72, 0.7, 0.74], [1, 0.45, 0.44, 0.46]], depth: 0.35, width: 0.33, tibK: 1.0, crouch: 0.7, sHip: 0.42, neckR: 0.85,
+    skull: [[0, 0.42, 0.4, 0.4, 0], [0.3, 0.48, 0.44, 0.42, 0], [0.6, 0.44, 0.38, 0.36, -0.01], [0.85, 0.3, 0.24, 0.22, -0.03], [1, 0.14, 0.12, 0.12, -0.04]] },
+  galliform: { torso: [[0, 0.36, 0.34, 0.34], [0.15, 0.72, 0.74, 0.8], [0.4, 0.97, 0.96, 1.04], [0.64, 1.0, 0.98, 1.12], [0.84, 0.86, 0.86, 1.0], [1, 0.52, 0.55, 0.6]], depth: 0.3, width: 0.27, tibK: 1.1, crouch: 0.86, sHip: 0.42, neckR: 0.76,
+    skull: [[0, 0.38, 0.38, 0.36, 0], [0.25, 0.46, 0.46, 0.4, 0.02], [0.55, 0.46, 0.44, 0.38, 0.01], [0.8, 0.38, 0.36, 0.3, -0.01], [1, 0.3, 0.3, 0.26, -0.03]] },
+  hummingbird: { torso: [[0, 0.3, 0.28, 0.28], [0.15, 0.64, 0.66, 0.7], [0.4, 0.94, 0.92, 0.98], [0.64, 1.0, 0.95, 1.04], [0.84, 0.86, 0.82, 0.88], [1, 0.58, 0.56, 0.6]], depth: 0.26, width: 0.25, tibK: 1.9, crouch: 0.55, sHip: 0.42, neckR: 0.82, skull: SKULL_SONG },
+  bigbill: { torso: [[0, 0.32, 0.3, 0.3], [0.15, 0.66, 0.7, 0.74], [0.4, 0.94, 0.94, 1.0], [0.64, 1.0, 0.97, 1.08], [0.84, 0.88, 0.86, 0.96], [1, 0.6, 0.6, 0.64]], depth: 0.27, width: 0.26, tibK: 1.1, crouch: 0.72, sHip: 0.42, neckR: 0.86,
+    skull: [[0, 0.42, 0.42, 0.4, 0], [0.25, 0.5, 0.5, 0.44, 0.02], [0.5, 0.5, 0.52, 0.44, 0.03], [0.75, 0.46, 0.54, 0.44, 0.04], [0.9, 0.42, 0.58, 0.44, 0.05], [1, 0.4, 0.62, 0.45, 0.06]] },
+};
+
+const BP = (body, belly, wing, flight, head, face, accent, beak, leg, eye = '#1a120a', extra = {}) => ({ body, belly, wing, flight, head, face, accent, beak, leg, eye, pupil: '#050505', jaw: beak, ...extra });
+const E = (o = {}) => ({ r: 0.14, u: 0.6, at: [0.88, 0.22], yaw: 82, up: 0.04, pupil: 0.48, ...o });
+
+/* ════════════════════════════════════════════════════════════════════════════
+ *  SPECIES — M: field measurements of an adult, cm: [total length, wingspan, wing chord, tail, tarsus, culmen, bill depth,
+ *  head width, carried neck]; pitch: the torso's tilt (°, front up); neckAng / neckShape: the neck's carriage (° above
+ *  level, or [u, °] keys along it); headAng: the bill's tilt below level.
+ * ════════════════════════════════════════════════════════════════════════════ */
+const SPECIES = {
+  sparrow: { label: 'House sparrow', sci: 'Passer domesticus', fam: 'passerine', M: [15.5, 23, 7.6, 5.8, 1.9, 1.15, 0.85, 1.65, 0.7], pitch: 28, neckAng: 62, headAng: 6,
+    eye: E(), bill: { style: 'cone', w: 0.78 }, wing: { tip: 'round' }, tail: { shape: 'square', lift: 6 }, feet: 'perch',
+    palette: BP('#8a6a48', '#c9c0b0', '#7a5432', '#4a3a2a', '#7d7d78', '#2a2420', '#e8e0d0', '#3a3530', '#c49a7a'),
+    plume: { regions: { crown: 'head', nape: 'wing', cheek: 'accent', throat: 'face', lores: 'face', breast: 'belly', flank: 'belly' }, headSide: 'wing', mask: { zone: 'face', w: 0.05, from: 0.62 }, bib: { zone: 'face', len: 0.14 },
+      wingbars: [{ at: 0.33, zone: 'accent' }], edged: 'body', marks: [{ type: 'streaks', on: ['mantle'], zone: 'flight', f: 26, w: 0.22 }] } },
+  robin: { label: 'European robin', sci: 'Erithacus rubecula', fam: 'passerine', M: [14, 21, 7.2, 5.9, 2.5, 1.1, 0.45, 1.55, 0.6], pitch: 30, neckAng: 65, headAng: 4,
+    eye: E({ r: 0.16 }), bill: { style: 'thin', w: 0.8 }, wing: { tip: 'round' }, tail: { shape: 'square', lift: 10 }, feet: 'perch', depth: 0.3, width: 0.28, fluff: 0.02,
+    palette: BP('#7a6a4a', '#e8e2d6', '#6e5e40', '#5a4a34', '#7a6a4a', '#d9762e', '#a8a8a0', '#2a2420', '#b08a6a'),
+    plume: { regions: { crown: 'head', cheek: 'face', throat: 'face', lores: 'face', forehead: 'face', breast: 'face', flank: 'body', belly: 'belly' }, eyebrow: { zone: 'accent', w: 0.06 } } },
+  'american-robin': { label: 'American robin', sci: 'Turdus migratorius', fam: 'passerine', M: [25, 36, 13, 10, 3.2, 2.0, 0.65, 2.3, 1.2], pitch: 26, neckAng: 62, headAng: 4,
+    eye: E({ r: 0.15, ring: 0.3, ringZone: 'belly' }), bill: { style: 'thin', w: 0.8 }, wing: { tip: 'round' }, tail: { shape: 'square', lift: 6 }, feet: 'perch',
+    palette: BP('#5a5650', '#f2efe8', '#55514a', '#3e3b37', '#232120', '#232120', '#c8622e', '#e2b13a', '#7a6a5a'),
+    plume: { regions: { crown: 'head', cheek: 'head', nape: 'head', throat: 'belly', breast: 'accent', flank: 'accent', belly: 'accent', vent: 'belly' }, marks: [{ type: 'streaks', on: ['throat', 'foreneck'], zone: 'head', f: 40, w: 0.18 }] } },
+  'blue-jay': { label: 'Blue jay', sci: 'Cyanocitta cristata', fam: 'corvid', M: [28, 40, 13, 12.5, 3.4, 2.5, 1.0, 2.6, 1.2], pitch: 25, neckAng: 62, headAng: 4,
+    eye: E({ r: 0.13 }), bill: { style: 'corvid', w: 0.8 }, wing: { tip: 'round' }, tail: { shape: 'round', lift: 6, n: 12 }, feet: 'perch',
+    extras: { crest: { style: 'peak', h: 0.75, at: 0.4, sweep: 48, thk: 0.15, base: 0.34, zone: 'head' } },
+    palette: BP('#5b86c4', '#eeeef0', '#3d6fbe', '#2f5cb0', '#6b97d4', '#f2f2f2', '#16181d', '#202226', '#2e3138'),
+    plume: { regions: { crown: 'head', nape: 'head', cheek: 'face', throat: 'face', breast: 'belly', flank: 'belly' }, collar: { zone: 'accent', at: 0.3, w: 0.14, full: true }, mask: { zone: 'accent', w: 0.04, from: 0.68 },
+      wingbars: [{ at: 0.34, zone: 'face', w: 0.025 }], tailBars: { zone: 'accent', n: 7, w: 0.12 }, tailTip: { zone: 'face', w: 0.1 }, marks: [{ type: 'bars', on: [], zone: 'accent' }] } },
+  crow: { label: 'Carrion crow', sci: 'Corvus corone', fam: 'corvid', M: [48, 98, 32, 18, 6, 5.2, 2.0, 4.2, 2.2], pitch: 22, neckAng: 58, headAng: 5,
+    eye: E({ r: 0.11 }), bill: { style: 'corvid', w: 0.78 }, wing: { tip: 'slotted' }, tail: { shape: 'round', lift: 4, n: 12 }, feet: 'perch', crouch: 0.72,
+    palette: BP('#1a1a1e', '#1d1d22', '#1e1e24', '#141418', '#16161a', '#16161a', '#2a2a36', '#111114', '#1d1d20', '#1a1208'),
+    plume: { marks: [{ type: 'scaled', on: ['mantle', 'breast'], zone: 'accent', f: 30, w: 0.05 }] } },
+  cardinal: { label: 'Northern cardinal', sci: 'Cardinalis cardinalis', fam: 'passerine', M: [22, 28, 9.0, 10.2, 2.5, 1.7, 1.45, 2.1, 0.8], pitch: 30, neckAng: 66, headAng: 5,
+    eye: E({ r: 0.13 }), bill: { style: 'cone', w: 0.85 }, wing: { tip: 'round' }, tail: { shape: 'round', lift: 8 }, feet: 'perch',
+    extras: { crest: { style: 'peak', h: 0.95, at: 0.42, sweep: 42, thk: 0.14, base: 0.36, zone: 'head' } },
+    palette: BP('#b82a24', '#d63a2c', '#a8221e', '#8a1c18', '#c8261f', '#141010', '#d8322a', '#e8742c', '#9a6a5a'),
+    plume: { regions: { crown: 'head', throat: 'face', lores: 'face', breast: 'belly', flank: 'belly' }, mask: { zone: 'face', w: 0.1, from: 0.55 }, bib: { zone: 'face', len: 0.06 } } },
+  pigeon: { label: 'Rock pigeon', sci: 'Columba livia', fam: 'columbid', M: [32, 66, 22, 11, 3.0, 1.8, 0.6, 2.7, 3.0], pitch: 14, neckAng: 60, headAng: 2,
+    eye: E({ r: 0.12 }), bill: { style: 'pigeon', w: 0.7, cereZone: 'face' }, wing: { tip: 'pointed' }, tail: { shape: 'round', lift: 2, n: 12 }, feet: 'perch',
+    palette: BP('#8d949c', '#b5b9bd', '#a5abb1', '#3d4148', '#7e858d', '#d8d5c8', '#5b7d72', '#4a4b50', '#c66f75', '#e86f44'),
+    plume: { regions: { crown: 'head', nape: 'accent', foreneck: 'accent', neckSide: 'accent', throat: 'head', breast: 'head', flank: 'belly', belly: 'belly', rump: 'belly' }, wingbars: [{ at: 0.38, zone: 'flight', w: 0.03 }, { at: 0.5, zone: 'flight', w: 0.03 }], tailTip: { zone: 'flight', w: 0.15 }, primaries: 'flight' } },
+  'mourning-dove': { label: 'Mourning dove', sci: 'Zenaida macroura', fam: 'columbid', M: [30, 45, 14.5, 14, 2.2, 1.4, 0.45, 2.0, 1.5], pitch: 14, neckAng: 58, headAng: 2,
+    eye: E({ r: 0.13, ring: 0.3, ringZone: 'accent' }), bill: { style: 'pigeon', w: 0.62 }, wing: { tip: 'pointed' }, tail: { shape: 'wedge', lift: 2, n: 14, w: 0.26 }, feet: 'perch',
+    palette: BP('#a28c72', '#d9c3a6', '#9c8a76', '#5b5550', '#b6a894', '#d5c0a6', '#7fa1b0', '#262426', '#c1756f', '#1f1a1a'),
+    plume: { regions: { crown: 'accent', breast: 'belly' }, wingSpots: 'flight', tailOuter: { zone: 'face', from: 0.7 } } },
+  woodpecker: { label: 'Great spotted woodpecker', sci: 'Dendrocopos major', fam: 'passerine', M: [23, 38, 13, 8.5, 2.4, 2.8, 0.9, 2.4, 1.2], pitch: 55, neckAng: 72, headAng: 4,
+    eye: E({ r: 0.12 }), bill: { style: 'chisel', w: 0.75 }, wing: { tip: 'round' }, tail: { shape: 'wedge', lift: -6, n: 12 }, feet: 'zygo', crouch: 0.55,
+    palette: BP('#171719', '#eeeae0', '#202024', '#202024', '#171719', '#eeeae0', '#d12b27', '#343338', '#65616a', '#a13b32'),
+    plume: { regions: { crown: 'head', nape: 'accent', cheek: 'face', throat: 'face', breast: 'belly', flank: 'belly', vent: 'accent' }, malar: { zone: 'head', w: 0.06 }, scapulars: 'face', wingSpots: 'face' } },
+  'downy-woodpecker': { label: 'Downy woodpecker', sci: 'Dryobates pubescens', fam: 'passerine', M: [16, 28, 9.5, 6, 1.5, 1.6, 0.55, 1.6, 0.6], pitch: 55, neckAng: 72, headAng: 4,
+    eye: E({ r: 0.13 }), bill: { style: 'chisel', w: 0.7 }, wing: { tip: 'round' }, tail: { shape: 'wedge', lift: -6, n: 12 }, feet: 'zygo', crouch: 0.55,
+    palette: BP('#1b1b1e', '#f3f1ec', '#1f1f23', '#1c1c20', '#1b1b1e', '#f3f1ec', '#d0332c', '#2a2a2e', '#55525a', '#2a1a14'),
+    plume: { regions: { crown: 'head', nape: 'accent', cheek: 'face', throat: 'face', breast: 'belly', flank: 'belly', mantle: 'face' }, mask: { zone: 'head', w: 0.07, from: 0.1 }, eyebrow: { zone: 'face', w: 0.05 }, wingSpots: 'face', tailOuter: { zone: 'face', from: 0.75 } } },
+  kingfisher: { label: 'Common kingfisher', sci: 'Alcedo atthis', fam: 'passerine', M: [16, 25, 7.7, 3.5, 1.0, 3.8, 1.0, 2.1, 0.6], pitch: 38, neckAng: 60, headAng: 5,
+    eye: E({ r: 0.12, u: 0.62 }), bill: { style: 'dagger', w: 0.85 }, wing: { tip: 'round' }, tail: { shape: 'round', lift: 0 }, feet: 'tiny', crouch: 0.45, depth: 0.3, width: 0.28,
+    palette: BP('#2a96c0', '#e8a14d', '#1678a0', '#205c79', '#147aa0', '#f0e5d0', '#d97f32', '#25292c', '#c56d52', '#2a1b12'),
+    plume: { regions: { crown: 'head', cheek: 'accent', throat: 'face', breast: 'belly', flank: 'belly', belly: 'belly' }, mask: { zone: 'accent', w: 0.07, from: 0.35 }, malar: { zone: 'head', w: 0.06 }, marks: [{ type: 'spots', on: ['crown'], zone: 'body', f: 60, w: 0.18 }] } },
+  macaw: { label: 'Scarlet macaw', sci: 'Ara macao', fam: 'parrot', M: [84, 100, 39, 50, 3.2, 7.0, 6.5, 6.0, 2.5], Lt: 21, pitch: 56, tibK: 2.2, crouch: 0.8, neckAng: 78, headAng: 8,
+    eye: E({ r: 0.1, u: 0.55, ring: 0.9, ringZone: 'face' }), bill: { style: 'parrot', w: 0.62, tipZone: null }, wing: { tip: 'pointed' }, tail: { shape: 'graduated', lift: 30, n: 12, w: 0.2 }, feet: 'zygo',
+    palette: BP('#d8241e', '#d8241e', '#f2c21a', '#2a5ad8', '#d8241e', '#f2ede6', '#2a8a3a', '#efe6d0', '#5a5a60', '#e8e0b0', { jaw: '#1d1a1a' }),
+    plume: { regions: { cheek: 'face', lores: 'face' }, coverts: 'wing', secondaries: 'flight', primaries: 'flight', wingbars: [{ at: 0.44, zone: 'accent', w: 0.05 }], tail: 'body', tailTip: { zone: 'flight', w: 0.25 } } },
+  cockatoo: { label: 'Sulphur-crested cockatoo', sci: 'Cacatua galerita', fam: 'parrot', M: [48, 100, 32, 20, 2.8, 4.0, 3.8, 5.0, 2.0], pitch: 58, neckAng: 76, headAng: 8,
+    eye: E({ r: 0.1, u: 0.56, ring: 0.5, ringZone: 'face' }), bill: { style: 'parrot', w: 0.62 }, wing: { tip: 'round' }, tail: { shape: 'round', lift: -8, n: 12 }, feet: 'zygo',
+    extras: { crest: { style: 'recurve', n: 9, h: 1.9, from: 0.9, to: 0.35, zone: 'accent', vane: 0.26, curl: 0.7 } },
+    palette: BP('#f3f2ec', '#f1f0ea', '#efeee8', '#f2ead0', '#f6f5f0', '#dfe8f0', '#f4cd2b', '#2b2c30', '#4f5054', '#1a1410'),
+    plume: {} },
+  owl: { label: 'Great horned owl', sci: 'Bubo virginianus', fam: 'owl', M: [55, 120, 36, 21, 6.5, 2.2, 2.2, 10, 1.5], Hl: 0.78, pitch: 72, neckAng: 85, headAng: 4,
+    eye: E({ r: 0.17, u: 0.86, at: [0.48, 0.2], yaw: 18, pupil: 0.6 }), bill: { style: 'owl', w: 0.7, drop: 0.12 }, wing: { tip: 'round', top: 1.0 }, tail: { shape: 'round', lift: -6 }, feet: 'raptor', feathered: true, talons: 2.2,
+    extras: { tufts: { h: 0.42, u: 0.72, zone: 'head' } },
+    palette: BP('#6e6252', '#bfae92', '#62584a', '#4a4034', '#6e6252', '#c8a878', '#3a2e22', '#3a3632', '#bfae92', '#f2a81a'),
+    plume: { disc: { wx: 0.5, ry: 0.46, cy: -0.04, zone: 'face', rim: 'accent' }, regions: { throat: 'belly' }, bib: { zone: 'belly', len: 0.08 }, marks: [{ type: 'bars', on: ['breast', 'belly', 'flank', 'thigh'], zone: 'accent', f: 34, w: 0.14 }, { type: 'mottle', on: ['mantle', 'crown', 'nape', 'rump'], zone: 'flight', f: 22, w: 0.45 }], tailBars: { zone: 'flight', n: 6, w: 0.2 } } },
+  'barn-owl': { label: 'Barn owl', sci: 'Tyto alba', fam: 'owl', M: [35, 95, 29, 12, 6.5, 1.3, 1.2, 7.0, 1.5], Hl: 0.75, pitch: 68, neckAng: 82, headAng: 8,
+    eye: E({ r: 0.135, u: 0.9, at: [0.42, 0.18], yaw: 14, pupil: 0.95 }), bill: { style: 'owl', w: 0.6, drop: 0.14 }, wing: { tip: 'round', top: 1.0 }, tail: { shape: 'square', lift: -4 }, feet: 'raptor', talons: 2.0, tibK: 1.25, crouch: 0.72,
+    palette: BP('#c79a58', '#f5f0e7', '#cfa263', '#dccaa6', '#c79a58', '#f8f5ee', '#8a6440', '#dccdb6', '#cfbba3', '#120c08'),
+    plume: { disc: { wx: 0.52, ry: 0.56, cy: -0.06, heart: 0.35, zone: 'face', rim: 'accent' }, regions: { throat: 'belly', breast: 'belly', flank: 'belly' }, marks: [{ type: 'spots', on: ['breast', 'belly', 'mantle', 'crown'], zone: 'accent', f: 40, w: 0.1 }] } },
+  eagle: { label: 'Bald eagle', sci: 'Haliaeetus leucocephalus', fam: 'raptor', M: [82, 200, 58, 29, 9.5, 5.6, 4.0, 7.0, 6], pitch: 60, neckAng: 74, headAng: 8,
+    eye: E({ r: 0.13, u: 0.6, at: [0.86, 0.32], yaw: 70 }), bill: { style: 'hook', w: 0.68 }, wing: { tip: 'slotted', foldK: 0.86 }, tail: { shape: 'wedge', lift: -8, n: 12, w: 0.36 }, feet: 'raptor', talons: 2.4, feathered: true,
+    palette: BP('#3a2a1c', '#3e2e20', '#3a2a1c', '#2a1e14', '#f4f2ec', '#f4f2ec', '#f4f2ec', '#f2c21a', '#f2c21a', '#f2d24a'),
+    plume: { regions: { crown: 'head', nape: 'head', throat: 'head', foreneck: 'head', neckSide: 'head', cheek: 'head', uppertail: 'accent', undertail: 'accent' }, tail: 'accent' } },
+  falcon: { label: 'Peregrine falcon', sci: 'Falco peregrinus', fam: 'raptor', M: [42, 105, 31, 15, 5.0, 2.3, 2.0, 4.8, 2.5], pitch: 60, neckAng: 76, headAng: 6,
+    eye: E({ r: 0.15, u: 0.6, at: [0.86, 0.28], yaw: 70, ring: 0.35, ringZone: 'leg' }), bill: { style: 'hook', w: 0.72, cereZone: 'leg' }, wing: { tip: 'pointed' }, tail: { shape: 'square', lift: -8 }, feet: 'raptor', talons: 1.8,
+    palette: BP('#5a6672', '#f0ebe0', '#4f5a66', '#2a3036', '#262b31', '#f0ebe0', '#4a5058', '#60636a', '#e3b52b', '#33251a'),
+    plume: { regions: { crown: 'head', nape: 'head', cheek: 'face', throat: 'face' }, malar: { zone: 'head', w: 0.16 }, marks: [{ type: 'bars', on: ['belly', 'flank', 'thigh'], zone: 'accent', f: 40, w: 0.16 }, { type: 'spots', on: ['breast'], zone: 'accent', f: 46, w: 0.1 }], tailBars: { zone: 'flight', n: 6, w: 0.18 } } },
+  flamingo: { label: 'Greater flamingo', sci: 'Phoenicopterus roseus', fam: 'wader', M: [130, 150, 40, 14, 32, 12, 4.5, 4.5, 55], pitch: 6, neckShape: [[0, 40], [0.38, 100], [0.75, 70], [1, 12]], headAng: 30,
+    eye: E({ r: 0.12 }), bill: { style: 'bent', w: 0.85, tipZone: 'flight', tipFrom: 0.62 }, wing: { tip: 'pointed', foldK: 0.95 }, tail: { shape: 'round', lift: 0 }, feet: 'webbed', bareTibia: 0.62, tibK: 1.15,
+    palette: BP('#f2a0a8', '#f4b0b6', '#e8707e', '#1d1a1a', '#f2a0a8', '#1d1a1a', '#e8707e', '#f2e6d6', '#e88a96', '#f2d24a'),
+    plume: { coverts: 'accent', secondaries: 'flight', primaries: 'flight' } },
+  heron: { label: 'Grey heron', sci: 'Ardea cinerea', fam: 'wader', M: [95, 175, 45, 18, 16, 12, 2.6, 4.4, 30], pitch: 24, neckShape: [[0, 30], [0.35, 100], [0.72, 62], [1, 18]], headAng: 6,
+    eye: E({ r: 0.11 }), bill: { style: 'dagger', w: 0.7 }, wing: { tip: 'round' }, tail: { shape: 'square', lift: -6 }, feet: 'wader', bareTibia: 0.45,
+    extras: { crest: { style: 'lay', n: 3, h: 1.6, zone: 'face', vane: 0.08 } },
+    palette: BP('#8a8e94', '#e8e8e4', '#7a7e84', '#2a2c30', '#f0f0ec', '#1d1d20', '#1d1d20', '#d8b03a', '#b8a060', '#f2d24a'),
+    plume: { regions: { crown: 'head', foreneck: 'head', breast: 'belly' }, eyebrow: { zone: 'face', w: 0.12 }, marks: [{ type: 'streaks', on: ['foreneck'], zone: 'face', f: 18, w: 0.16 }] } },
+  crane: { label: 'Sandhill crane', sci: 'Antigone canadensis', fam: 'wader', M: [110, 190, 52, 20, 23, 11, 2.8, 5.2, 34], pitch: 10, neckShape: [[0, 55], [0.6, 82], [1, 66]], headAng: 10,
+    eye: E({ r: 0.1 }), bill: { style: 'dagger', w: 0.7 }, wing: { tip: 'round', foldK: 1.05, droop: 0.2 }, tail: { shape: 'round', lift: -12 }, feet: 'wader', bareTibia: 0.5,
+    palette: BP('#97948c', '#b8b5ae', '#8f8c84', '#3a3b3d', '#9a9b96', '#e8e0d2', '#b92f2c', '#565453', '#333638', '#c9883b'),
+    plume: { regions: { crown: 'accent', forehead: 'accent', cheek: 'face', throat: 'face' } } },
+  spoonbill: { label: 'Roseate spoonbill', sci: 'Platalea ajaja', fam: 'wader', M: [80, 125, 36, 11, 12, 17, 2.4, 4.6, 18], pitch: 14, neckShape: [[0, 35], [0.5, 75], [1, 30]], headAng: 22,
+    eye: E({ r: 0.1 }), bill: { style: 'spoon', w: 0.9 }, wing: { tip: 'round' }, tail: { shape: 'round', lift: -6 }, feet: 'wader', bareTibia: 0.42,
+    palette: BP('#ef91a5', '#f6b6bd', '#dd6f91', '#bd496b', '#f19bad', '#f4a1b0', '#e56e88', '#8b8b82', '#d9959c', '#f6db81'),
+    plume: { regions: { crown: 'face', throat: 'face', foreneck: 'belly', neckSide: 'belly', nape: 'belly', mantle: 'belly' }, coverts: 'accent' } },
+  stilt: { label: 'Black-necked stilt', sci: 'Himantopus mexicanus', fam: 'wader', M: [36, 70, 22, 8, 10.5, 6.2, 0.6, 2.2, 4.5], pitch: 10, neckAng: 55, headAng: 4,
+    eye: E({ r: 0.12, u: 0.62 }), bill: { style: 'needle', w: 0.9 }, wing: { tip: 'pointed', foldK: 1.05 }, tail: { shape: 'square', lift: 0 }, feet: 'wader', bareTibia: 0.62, tibK: 1.4,
+    palette: BP('#17191c', '#f4f1ea', '#1c1d20', '#242529', '#17191c', '#f4f1ea', '#f4f1ea', '#1e2022', '#ee7f82', '#d94f54'),
+    plume: { regions: { crown: 'head', nape: 'head', cheek: 'head', throat: 'face', foreneck: 'face', breast: 'belly' }, eyebrow: { zone: 'face', w: 0.06 } } },
+  swan: { label: 'Mute swan', sci: 'Cygnus olor', fam: 'anatid', M: [150, 220, 59, 23, 11, 10, 4.0, 7.0, 52], pitch: 2, neckShape: [[0, 60], [0.35, 100], [0.75, 76], [1, 16]], headAng: 26,
+    eye: E({ r: 0.09 }), bill: { style: 'flat', w: 0.95, knob: 0.55, knobZone: 'face', nailZone: 'face' }, wing: { tip: 'round', top: 1.3, loft: 0.08 }, tail: { shape: 'wedge', lift: 12 }, feet: 'webbed', crouch: 0.62,
+    palette: BP('#f6f4ee', '#f2f0ea', '#f4f2ec', '#eceae4', '#f6f4ee', '#1d1d1d', '#f6f4ee', '#e8742c', '#2a2826'),
+    plume: { regions: { lores: 'face', throat: 'head', foreneck: 'head', neckSide: 'head' } } },
+  duck: { label: 'Mallard', sci: 'Anas platyrhynchos', fam: 'anatid', M: [58, 90, 27, 9, 4.4, 5.5, 2.2, 4.6, 9], pitch: 6, neckAng: 72, headAng: 6,
+    eye: E({ r: 0.1 }), bill: { style: 'flat', w: 1.05, nailZone: 'leg' }, wing: { tip: 'pointed', top: 1.25 }, tail: { shape: 'round', lift: 14 }, feet: 'webbed',
+    palette: BP('#8a8a86', '#d8d4cc', '#7a766e', '#5a5650', '#1e6a3a', '#f4f2ec', '#6a3a2a', '#e8c43a', '#e8823a'),
+    plume: { regions: { crown: 'head', nape: 'head', cheek: 'head', throat: 'head', foreneck: 'head', neckSide: 'head', breast: 'accent', mantle: 'wing', rump: 'flight' }, collar: { zone: 'face', at: 0.25, w: 0.07, full: true }, speculum: { zone: 'flight', from: 0.45, to: 0.62 }, wingbars: [{ at: 0.43, zone: 'face', w: 0.02 }, { at: 0.64, zone: 'face', w: 0.02 }], tail: 'belly' } },
+  puffin: { label: 'Atlantic puffin', sci: 'Fratercula arctica', fam: 'seabird', M: [30, 55, 16, 5, 2.6, 4.8, 3.8, 3.8, 2.0], pitch: 55, tibK: 2.2, neckAng: 70, headAng: 4,
+    eye: E({ r: 0.1, ring: 0.45, ringZone: 'accent' }), bill: { style: 'puffin', w: 0.42, tipZone: 'accent', tipFrom: 0.42, cereZone: 'beak' }, wing: { tip: 'pointed' }, tail: { shape: 'square', lift: 4 }, feet: 'webbed', depth: 0.3, width: 0.3,
+    palette: BP('#1b2024', '#f0eee5', '#22282d', '#31363b', '#171a1d', '#ded9ca', '#e46d35', '#8a9298', '#e36b3d', '#59402d'),
+    plume: { regions: { crown: 'head', nape: 'head', cheek: 'face', throat: 'head', lores: 'face', foreneck: 'head' }, collar: { zone: 'head', at: 0.4, w: 0.4, full: true } } },
+  penguin: { label: 'Emperor penguin', sci: 'Aptenodytes forsteri', fam: 'penguin', M: [115, 60, 33, 7, 5, 11, 2.8, 9.5, 10], pitch: 80, restsOnTail: true, sHip: 0.1, crouch: 0.92, neckAng: 86, headAng: 0,
+    eye: E({ r: 0.07, u: 0.62 }), bill: { style: 'penguin', w: 0.7, tipZone: null }, wing: { tip: 'round', flipper: true, top: 0.6, bot: -0.3, foldK: 0.95 }, tail: { shape: 'wedge', lift: -20, n: 10, w: 0.3 }, feet: 'webbed', crouch: 0.6,
+    palette: BP('#1d2228', '#f4f2ea', '#1d2228', '#1d2228', '#15181c', '#f2b23a', '#f2b23a', '#1d1d20', '#1d1d20', '#1a120a', { jaw: '#e8923a' }),
+    plume: { regions: { crown: 'head', nape: 'head', cheek: 'head', throat: 'face', foreneck: 'accent', breast: 'belly', flank: 'belly' }, backUp: 0.05, bib: { zone: 'face', len: 0.04 } } },
+  ostrich: { label: 'Ostrich', sci: 'Struthio camelus', fam: 'ratite', M: [210, 200, 80, 45, 48, 13, 4.5, 9.5, 85], Lt: 98, depth: 0.34, width: 0.3, pitch: 12, neckShape: [[0, 70], [0.5, 88], [1, 80]], headAng: 6,
+    eye: E({ r: 0.16, u: 0.6, at: [0.88, 0.3] }), bill: { style: 'ostrich', w: 1.6 }, wing: { tip: 'round', top: 0.8, bot: -0.5, foldK: 0.7 }, tail: { shape: 'round', lift: -28, n: 14, w: 0.6, roof: 35, featherW: 1.6, droop: 0.2 }, feet: 'ratite', bareTibia: 0.85, thighK: 0.8,
+    palette: BP('#1d1b1a', '#1d1b1a', '#1d1b1a', '#f2f0ea', '#c8a49a', '#d8b0a4', '#f2f0ea', '#c89a7a', '#d8a098'),
+    plume: { regions: { crown: 'head', nape: 'head', throat: 'head', foreneck: 'head', neckSide: 'head', thigh: 'head' }, primaries: 'flight', secondaries: 'flight', wingTip: { zone: 'flight', from: 0.5, spread: 0.6 }, tail: 'flight' } },
+  kiwi: { label: 'North Island brown kiwi', sci: 'Apteryx mantelli', fam: 'kiwi', M: [45, 8, 3, 0.5, 7.5, 13, 1.4, 4.6, 4], pitch: 12, neckAng: 30, headAng: 32,
+    eye: E({ r: 0.06 }), bill: { style: 'probe', w: 0.9 }, wing: { tip: 'round', hidden: true }, tail: { shape: 'round', n: 1, hidden: true }, feet: 'perch', toeK: 0.7, legThk: 0.2,
+    palette: BP('#65503c', '#755e47', '#594532', '#493929', '#6c5540', '#705944', '#8b7459', '#b79b79', '#8f7b64', '#2b2118'),
+    fluff: 0.04, plume: { marks: [{ type: 'streaks', on: ['mantle', 'flank', 'rump', 'nape'], zone: 'flight', f: 22, w: 0.16 }] } },
+  turkey: { label: 'Wild turkey', sci: 'Meleagris gallopavo', fam: 'galliform', M: [110, 140, 50, 42, 17, 3.5, 2.0, 5.0, 18], pitch: 18, neckAng: 74, headAng: 6,
+    eye: E({ r: 0.1 }), bill: { style: 'chicken', w: 0.8 }, wing: { tip: 'round' }, tail: { shape: 'round', lift: -22, n: 18, w: 0.5, roof: 18, fan: 12 }, feet: 'galliform', spur: true,
+    extras: { wattle: { len: 0.9, zone: 'face' }, snood: 0.9 },
+    palette: BP('#3b2b21', '#46352a', '#514031', '#2a2420', '#4c6e83', '#9c3c3c', '#c09a55', '#d6b45f', '#b66d63', '#2a1a12', { jaw: '#7a5a34' }),
+    plume: { regions: { crown: 'head', nape: 'head', cheek: 'head', throat: 'face', foreneck: 'face' }, marks: [{ type: 'scaled', on: ['mantle', 'breast', 'flank', 'belly'], zone: 'flight', f: 30, w: 0.08 }], wingbars: [{ at: 0.5, zone: 'belly', w: 0.04 }, { at: 0.58, zone: 'belly', w: 0.03 }], tailTip: { zone: 'accent', w: 0.12 } } },
+  rooster: { label: 'Rooster', sci: 'Gallus gallus domesticus', fam: 'galliform', M: [70, 80, 23, 30, 10, 3.0, 2.0, 4.2, 12], pitch: 24, neckAng: 78, headAng: 4,
+    eye: E({ r: 0.11 }), bill: { style: 'chicken', w: 0.78 }, wing: { tip: 'round' }, tail: { shape: 'graduated', lift: 42, n: 16, w: 0.55, fan: 20, roof: 66, droop: 0.62, featherW: 1.5 }, feet: 'galliform', spur: true,
+    extras: { comb: { h: 0.75, from: 0.25, to: 0.98, zone: 'face', points: 5.5 }, wattle: { len: 0.8, zone: 'face' } },
+    palette: BP('#a8381e', '#1d2a22', '#8a2a14', '#1d2a22', '#d8742a', '#d8241e', '#e88a2a', '#e8c43a', '#e8c43a', '#d8742a'),
+    plume: { regions: { crown: 'head', nape: 'accent', neckSide: 'accent', foreneck: 'belly', throat: 'face', cheek: 'face', breast: 'belly', flank: 'belly', rump: 'accent' }, coverts: 'body', tail: 'belly' } },
+  peacock: { label: 'Indian peafowl', sci: 'Pavo cristatus', fam: 'galliform', M: [110, 140, 46, 45, 13, 4.0, 1.8, 4.2, 20], pitch: 16, neckAng: 78, headAng: 5,
+    eye: E({ r: 0.1, ring: 0.6, ringZone: 'face' }), bill: { style: 'chicken', w: 0.7 }, wing: { tip: 'round' }, tail: { shape: 'square', lift: -4, n: 12, train: { n: 44, len: 1.45, fan: 9, w: 0.055, zone: 'flight', ring: 'accent', heart: 'body', rim: 'wing' } }, feet: 'galliform', spur: true,
+    extras: { crest: { style: 'plumes', n: 9, h: 1.3, from: 0.55, to: 0.25, spread: 0.3, lean: 0.1, tipZone: 'head' } },
+    palette: BP('#1e5ac8', '#1a3a7a', '#c8b48a', '#6a4a2a', '#1e5ac8', '#f2f0ea', '#e8c43a', '#d8c8b0', '#a8a098', '#1a120a', { flight: '#2a8a4a' }),
+    plume: { regions: { crown: 'head', nape: 'head', foreneck: 'head', neckSide: 'head', breast: 'head', mantle: 'flight', rump: 'flight' }, mask: { zone: 'face', w: 0.05, from: 0.2 }, coverts: 'wing', marks: [{ type: 'scaled', on: ['mantle', 'rump'], zone: 'belly', f: 40, w: 0.06 }] } },
+  hummingbird: { label: 'Ruby-throated hummingbird', sci: 'Archilochus colubris', fam: 'hummingbird', M: [8.5, 10.5, 4.4, 2.8, 0.5, 1.8, 0.2, 1.05, 0.3], pitch: 55, neckAng: 78, headAng: 0,
+    eye: E({ r: 0.15 }), bill: { style: 'needle', w: 0.9 }, wing: { tip: 'pointed', foldK: 1.0 }, tail: { shape: 'fork', lift: 16, n: 10 }, feet: 'tiny', legThk: 0.18, toeK: 1.2,
+    palette: BP('#2a8a4a', '#d8d8d0', '#2a6a3a', '#3a3a3a', '#2a8a4a', '#c8202a', '#d8241e', '#1d1d1d', '#2a2a2a'),
+    plume: { regions: { crown: 'head', throat: 'face', foreneck: 'face', breast: 'belly', flank: 'body' }, throatUp: 0.1 } },
+  pelican: { label: 'Brown pelican', sci: 'Pelecanus occidentalis', fam: 'anatid', M: [125, 220, 52, 15, 7.5, 31, 4.0, 7.0, 25], pitch: 12, neckShape: [[0, 78], [0.5, 100], [1, 108]], headAng: 30,
+    eye: E({ r: 0.07 }), bill: { style: 'pouch', w: 1.1, pouchZone: 'flight' }, wing: { tip: 'slotted', top: 1.2 }, tail: { shape: 'round', lift: 0 }, feet: 'webbed', depth: 0.3, width: 0.3,
+    palette: BP('#8a8884', '#7a7874', '#9a958c', '#3a3836', '#f2eed8', '#5a3a2a', '#e8d870', '#a89a8a', '#3a3a3a'),
+    plume: { regions: { crown: 'accent', cheek: 'head', throat: 'head', nape: 'face', neckSide: 'face', foreneck: 'head' }, marks: [{ type: 'scaled', on: ['mantle', 'flank'], zone: 'flight', f: 24, w: 0.06 }] } },
+  toucan: { label: 'Toco toucan', sci: 'Ramphastos toco', fam: 'bigbill', M: [60, 75, 24, 17, 5.0, 19, 7.0, 5.5, 2.5], pitch: 50, neckAng: 80, headAng: -2,
+    eye: E({ r: 0.1, u: 0.5, ring: 1.0, ringZone: 'accent' }), bill: { style: 'toucan', w: 0.55, tipZone: 'flight', tipFrom: 0.86 }, wing: { tip: 'round' }, tail: { shape: 'square', lift: -6 }, feet: 'zygo',
+    palette: BP('#141416', '#c8242a', '#141416', '#141416', '#141416', '#f4f2ea', '#3ab8e8', '#f28a1a', '#4a6ab8'),
+    plume: { regions: { throat: 'face', cheek: 'face', foreneck: 'face', breast: 'body', belly: 'body', flank: 'body', thigh: 'body', vent: 'belly', uppertail: 'face', undertail: 'belly' }, bib: { zone: 'face', len: 0.12 } } },
+  hornbill: { label: 'Great hornbill', sci: 'Buceros bicornis', fam: 'bigbill', M: [105, 165, 48, 38, 6.0, 28, 6.0, 7.0, 8], pitch: 36, neckAng: 70, headAng: 6,
+    eye: E({ r: 0.09, u: 0.5 }), bill: { style: 'hornbill', w: 0.55, casque: { len: 0.6, h: 0.9, zone: 'accent' } }, wing: { tip: 'slotted' }, tail: { shape: 'graduated', lift: -8, n: 10, w: 0.3 }, feet: 'perch',
+    palette: BP('#17181b', '#ece8dc', '#1b1c1f', '#efe9d6', '#1b1c1f', '#101012', '#ede0a2', '#f0c033', '#55524c', '#c8352a', { jaw: '#efd57c' }),
+    plume: { regions: { nape: 'accent', neckSide: 'accent', foreneck: 'accent', cheek: 'face', throat: 'face' }, wingbars: [{ at: 0.42, zone: 'accent', w: 0.04 }], tail: 'belly', tailBars: { zone: 'face', n: 1, w: 0.2 } } },
+  albatross: { label: 'Wandering albatross', sci: 'Diomedea exulans', fam: 'seabird', M: [115, 310, 66, 20, 12, 16.5, 4.5, 7.5, 8], pitch: 8, neckAng: 48, headAng: 10,
+    eye: E({ r: 0.08 }), bill: { style: 'albatross', w: 0.7 }, wing: { tip: 'pointed', segs: [0.3, 0.38, 0.32], chordK: 0.5 }, tail: { shape: 'wedge', lift: 4 }, feet: 'webbed',
+    palette: BP('#f4f2e9', '#f7f5ed', '#4a4b4e', '#24262a', '#f7f5ed', '#f5f1e6', '#d6c7ab', '#e1c7a8', '#c8b59c', '#3c2c20'),
+    plume: { scapulars: 'wing', marks: [{ type: 'bars', on: ['mantle', 'nape'], zone: 'beak', f: 90, w: 0.06 }] } },
+  seagull: { label: 'Herring gull', sci: 'Larus argentatus', fam: 'seabird', M: [60, 140, 42, 17, 6.5, 5.6, 2.0, 4.6, 6], pitch: 14, crouch: 0.86, neckAng: 62, headAng: 5,
+    eye: E({ r: 0.1, ring: 0.3, ringZone: 'accent' }), bill: { style: 'gull', w: 0.68, tipZone: 'accent', tipFrom: 0.72, tipUpper: false }, wing: { tip: 'pointed' }, tail: { shape: 'square', lift: 2 }, feet: 'webbed', bareTibia: 0.2,
+    palette: BP('#a8b0b8', '#f6f6f4', '#a8b0b8', '#1d1d20', '#f6f6f4', '#f6f6f4', '#d8241e', '#f2c21a', '#e8a8a0', '#f2e6a0'),
+    plume: { regions: { mantle: 'body', rump: 'belly' }, scapulars: 'body', coverts: 'body', secondaries: 'body', wingTip: { zone: 'flight', from: 0.72, spread: 0.85 }, tail: 'belly' } },
+};
+
+/* ════════════════════════════════════════════════════════════════════════════
+ *  CLIPS — perch (idle: the head turning in quick saccades, as birds look about), walk (feet planted, the knee-to-foot
+ *  chain solved to each foot's place, the body bobbing; pigeons, doves and fowl hold the head still in the world and
+ *  thrust it forward with each step), hop (both feet), peck, alert, flap (a downstroke with the wing spread and swept
+ *  forward, an upstroke with it folded and the hand flipped back) and glide. In flight the body levels, the legs tuck
+ *  and the spread wings replace the folded ones (bone scale keys). Walk clips carry userData { gait, stride, speed,
+ *  hipH } for ground-speed playback.
+ * ════════════════════════════════════════════════════════════════════════════ */
+function birdMotion(S, p, L, rig) {
+  const info = {
+    S, L, bones: rig.list.map(e => e.name), has: Object.fromEntries(rig.list.map(e => [e.name, true])),
+    rest: Object.fromEntries(rig.list.map(e => [e.name, (e.parent ? e.head.clone().sub(e.parent.head) : e.head.clone()).toArray()])),
+    parent: Object.fromEntries(rig.list.map(e => [e.name, e.parent ? e.parent.name : null])),
+    headV: Object.fromEntries(rig.list.map(e => [e.name, e.head.clone()])),
+    moving: ['Root', 'Hips', 'Head'], scaled: ['WingL', 'WingR', 'WingFoldL', 'WingFoldR'],
+  };
+  info.legs = SIDES.map(([sd, sx]) => {
+    const b = ['Thigh', 'Shin', 'Tarsus', 'Toe'].map(n => n + sx), J = b.map(n => info.headV[n].clone());
+    return { sd, sx, bones: b, knee: J[1], ankle: J[2], foot: J[3], lt: J[1].distanceTo(J[2]), ls: J[2].distanceTo(J[3]) };
+  });
+  info.hipH = info.headV.Hips.y;
+  const lg = info.legs[0], reach = 0.95 * (lg.lt + lg.ls), h = lg.knee.y - lg.foot.y;
+  const half = Math.sqrt(Math.max(0, reach * reach - h * h)) * 0.7;
+  const duty = 0.6, lambda = Math.max(0.05 * S.L, (2 * half) / duty * 0.9);
+  const speed = Math.sqrt(0.22 * 9.81 * info.hipH);
+  info.walk = { duty, stride: lambda, speed, dur: lambda / speed, bob: S.fam.bob ?? ['columbid', 'galliform'].includes(S.famKey) };
+  info.flightless = !!S.flightless;
+  return info;
+}
+
+/** Solves a leg: the knee rides with the body, the shin and tarsus reach the foot at F (the toes keep world rotation qT). */
+function birdLeg(info, s, lg, F, qT) {
+  let fk = fkOf(info, s);
+  const K = fk(lg.bones[1]).p;
+  const back = V3(0, 0, -1).applyQuaternion(fk('Hips').q).setY(0).normalize();
+  const A = twoBone(K, F, lg.lt, lg.ls, back);
+  const a0u = lg.ankle.clone().sub(lg.knee), a0l = lg.foot.clone().sub(lg.ankle), n0 = a0u.clone().cross(a0l);
+  const a1u = A.clone().sub(K), a1l = F.clone().sub(A), n1 = a1u.clone().cross(a1l);
+  setWorld(info, s, fk, lg.bones[1], frameRot(a0u, n0, a1u, n1));
+  fk = fkOf(info, s);
+  setWorld(info, s, fk, lg.bones[2], frameRot(a0l, n0, a1l, n1));
+  fk = fkOf(info, s);
+  setWorld(info, s, fk, lg.bones[3], qT || new THREE.Quaternion());
+}
+const plantLegs = (info, s) => { for (const lg of info.legs) birdLeg(info, s, lg, lg.foot.clone()); };
+const wingsFolded = (s) => { for (const x of ['L', 'R']) { s['Wing' + x] = { r: [0, 0, 0], s: 0.001 }; s['WingFold' + x] = { r: [0, 0, 0], s: 1 }; } };
+const wingsSpread = (s) => { for (const x of ['L', 'R']) { s['Wing' + x] = { r: [0, 0, 0], s: 1 }; s['WingFold' + x] = { r: [0, 0, 0], s: 0.001 }; } };
+
+/** The head's quick looks about: holds at a few headings with fast turns between (`seed` varies the sequence). */
+function saccade(u, n = 5, amp = 35, seed = 3) {
+  const k = Math.floor(u * n), f = u * n - k, a = (hash3(k, seed, 0, 9) - 0.5) * 2 * amp, b = (hash3(k + 1, seed, 0, 9) - 0.5) * 2 * amp;
+  const aa = k === 0 ? 0 : a, bb = k + 1 >= n ? 0 : b;
+  return lerp(aa, bb, sstep(0.78, 0.92, f));
+}
+
+function birdSample(info, name, u) {
+  const S = info.S, s = {}, P = S.pitch;
+  const tw = (a, t, b) => { const x = clamp((u - a) / (t - a), 0, 1), y = clamp((b - u) / (b - t), 0, 1); return smooth01(Math.min(x, y)); };
+  switch (name) {
+    case 'perch': default: {
+      wingsFolded(s);
+      setPos(s, 'Root', [0, 0, 0]);
+      addRot(s, 'Chest', [1.2 * Math.sin(TAU * u * 4), 0, 0]);
+      addRot(s, 'Head', [3 * Math.sin(TAU * u * 2), saccade(u, 6, S.famKey === 'owl' ? 70 : 32, 5), 0]);
+      addRot(s, 'Neck2', [0, saccade(u, 6, 10, 5) * 0.3, 0]);
+      addRot(s, 'Tail', [3 * Math.max(0, Math.sin(TAU * u * 3)) ** 8, 0, 0]);
+      plantLegs(info, s);
+      return s;
+    }
+    case 'alert': {
+      wingsFolded(s);
+      const k = tw(0, 0.25, 1);
+      addRot(s, 'Neck1', [-12 * k, 0, 0]); addRot(s, 'Neck2', [-8 * k, 0, 0]); addRot(s, 'Head', [10 * k, saccade(u, 4, 40, 11) * k, 0]);
+      setPos(s, 'Root', [0, 0.02 * S.L * k, 0]);
+      plantLegs(info, s);
+      return s;
+    }
+    case 'peck': {
+      // down to the ground and back, two quick strikes. Short-necked birds tip the whole body as far as the breast
+      // clears the ground and bend the neck for the rest (a penguin, propped on its tail, only bows its head); the
+      // neck's bend is scaled back wherever it would drive the bill into the ground.
+      const k0 = tw(0.05, 0.3, 0.9), strike0 = Math.max(0, Math.sin(TAU * clamp((u - 0.3) / 0.5, 0, 1) * 2)) * k0;
+      const longNeck = S.neckLen > 0.5 * S.L, tipBody = !longNeck && !S.restsOnTail;
+      const pose = (mb, mn) => {
+        const q = {}, k = k0 * mn, strike = strike0 * mn, more = 1 + (1 - mb) * (tipBody ? 0.8 : 0);
+        wingsFolded(q);
+        if (tipBody) addRot(q, 'Hips', [Math.min(40, 70 - P) * k0 * mb, 0, 0]);
+        addRot(q, 'Neck1', [(longNeck ? 45 : 25) * k * more, 0, 0]); addRot(q, 'Neck2', [((longNeck ? 35 : 20) * k + 10 * strike) * more, 0, 0]); addRot(q, 'Head', [25 * k + 12 * strike, 0, 0]);
+        if (info.has.Jaw) addRot(q, 'Jaw', [10 * Math.max(0, Math.sin(TAU * u * 4)) * k, 0, 0]);
+        plantLegs(info, q);
+        return q;
+      };
+      // (the bill tip rides on the Head bone, the underside of the breast on the Chest bone)
+      const Bl = info.L.bill, jawAt = (f) => Bl.cl(f).addScaledVector(Bl.bu, -0.5 * Bl.Db);
+      const bill = [[Bl.cl(1), 'Head', 0.3 * S.M.Bd], ...(info.has.Jaw ? [[jawAt(0.92), 'Jaw', 0.15 * S.M.Bd], [jawAt(0.6), 'Jaw', 0.1 * S.M.Bd]] : [])], breast = [0.6, 0.8, 0.95].map(sv => [info.L.torsoAt(sv, -Math.PI / 2).p, 'Chest', 0.02 * S.L]);
+      const clear = (q, probes) => { const fk = fkOf(info, q); return Math.min(...probes.map(([X, b, mg]) => { const T = fk(b); return T.p.y + X.clone().sub(info.headV[b]).applyQuaternion(T.q).y - mg; })); };
+      const solve = (f) => { if (f(1)) return 1; let lo = 0, hi = 1; for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; if (f(m)) lo = m; else hi = m; } return lo; };
+      const mb = tipBody ? solve((m) => clear(pose(m, 0), [...bill, ...breast]) >= 0) : 1;
+      const mn = solve((m) => clear(pose(mb, m), [...bill, ...breast]) >= 0);
+      return pose(mb, mn);
+    }
+    case 'walk': {
+      wingsFolded(s);
+      const G = info.walk, V = G.stride;
+      if (S.restsOnTail) {
+        // a penguin's waddle: the body rocks onto each foot in turn, lifting off its tail as it goes
+        const roll = 6 * Math.sin(TAU * u);
+        setPos(s, 'Root', [0.01 * S.L * Math.sin(TAU * u), 0.7 * info.L.width * Math.abs(Math.sin(roll * DEG)) + 0.006 * S.L, 0]);
+        addRot(s, 'Hips', [0, 5 * Math.sin(TAU * u), roll]);
+      } else {
+        const bob = Math.abs(Math.sin(TAU * u)) * 0.012 * S.L;
+        setPos(s, 'Root', [0.012 * S.L * Math.sin(TAU * u), -bob, 0]);
+        addRot(s, 'Hips', [0, 4 * Math.sin(TAU * u), 2 * Math.sin(TAU * u)]);
+      }
+      for (const lg of info.legs) {
+        const td = lg.sd > 0 ? 0 : 0.5, tau = fract(u - td), d = V * G.duty;
+        let z, y = 0, curl = 0;
+        if (tau < G.duty) z = lg.foot.z + d * (0.5 - tau / G.duty);
+        else {
+          // the swing: the foot lifted clear by more than its curled toes hang below it, carried forward, set down flat
+          const sg = (tau - G.duty) / (1 - G.duty), arc = Math.sin(Math.PI * sg);
+          z = lg.foot.z - d / 2 + d * smooth01(Math.min(1, sg / 0.9)); curl = arc;
+          y = Math.max(0.12 * info.hipH, (info.L.toeLen || 0) * Math.sin(35 * DEG) * 1.2 + 0.015 * info.hipH) * arc ** 0.7;
+        }
+        birdLeg(info, s, lg, V3(lg.foot.x, lg.foot.y + y, z), new THREE.Quaternion().setFromAxisAngle(V3(1, 0, 0), 35 * curl * DEG));
+      }
+      // pigeons, doves and fowl: the head held still while the body passes under it, then thrust forward
+      if (G.bob) {
+        const ph = fract(u * 2), hold = ph < 0.7 ? -V * 0.5 * (ph / 0.7 - 0.5) : -V * 0.5 * (0.5 - (ph - 0.7) / 0.3);
+        setPos(s, 'Head', info.L.hd.clone().multiplyScalar(hold * 0.6).toArray());
+      }
+      addRot(s, 'Tail', [0, 3 * Math.sin(TAU * u), 0]);
+      return s;
+    }
+    case 'hop': {
+      // both feet together: a crouch, a spring forward, a landing
+      wingsFolded(s);
+      const up = Math.sin(Math.PI * clamp((u - 0.25) / 0.5, 0, 1)), fw = sstep(0.25, 0.75, u);
+      setPos(s, 'Root', [0, up * 0.35 * info.hipH, fw * 0.6 * S.L]);
+      addRot(s, 'Hips', [-6 * up, 0, 0]);
+      addRot(s, 'Tail', [-10 * up, 0, 0]);
+      for (const lg of info.legs) {
+        const F = lg.foot.clone(); F.z += fw * 0.6 * S.L; F.y += up * 0.3 * info.hipH;
+        birdLeg(info, s, lg, F, new THREE.Quaternion().setFromAxisAngle(V3(1, 0, 0), 30 * up * DEG));
+      }
+      return s;
+    }
+    case 'flap': case 'glide': {
+      wingsSpread(s);
+      // level the body, tuck the legs, keep the head level
+      addRot(s, 'Hips', [P - 4, 0, 0]);
+      addRot(s, 'Neck1', [-(P - 4) * 0.5, 0, 0]); addRot(s, 'Head', [-(P - 4) * 0.4, 0, 0]);
+      // (long-legged waders and storks trail their legs straight out behind instead of folding them up)
+      const trail = S.M.Ts > 0.3 * S.L;
+      for (const lg of info.legs) {
+        if (trail) { s[lg.bones[0]] = [60, 0, 0]; s[lg.bones[1]] = [22, 0, 0]; s[lg.bones[2]] = [4, 0, 0]; s[lg.bones[3]] = [40, 0, 0]; }
+        else { s[lg.bones[0]] = [55, 0, 0]; s[lg.bones[1]] = [-80, 0, 0]; s[lg.bones[2]] = [70, 0, 0]; s[lg.bones[3]] = [60, 0, 0]; }
+      }
+      const flap = name === 'flap';
+      for (const [sd, sx] of SIDES) {
+        if (flap) {
+          // the downstroke: spread wide, swept a little forward; the upstroke: folded at the wrist, the hand flipped back
+          const ph = TAU * u, down = Math.cos(ph), fold = Math.max(0, Math.sin(ph));
+          // (from about 48° above level at the top of the stroke to about 32° below it at the bottom)
+          s['Humerus' + sx] = [-6 * down, sd * (8 * down - 6), sd * (40 * down + 8)];
+          s['Forearm' + sx] = [0, sd * 32 * fold, -sd * 10 * fold];
+          s['Hand' + sx] = [-12 * fold, sd * 40 * fold, sd * 14 * Math.cos(ph + 0.6)];
+        } else {
+          const bank = 4 * Math.sin(TAU * u);
+          s['Humerus' + sx] = [0, -sd * 3, sd * (6 + bank * sd)];
+          s['Forearm' + sx] = [0, 0, 0];
+          s['Hand' + sx] = [0, sd * 4, -sd * 2];
+        }
+      }
+      addRot(s, 'Tail', [-4, 0, 0]);
+      setPos(s, 'Hips', [0, flap ? 0.02 * S.L * Math.sin(TAU * u + 1) : 0, 0]);
+      return s;
+    }
+  }
+}
+
+const BIRD_CLIPS = {
+  perch: { label: 'Perch', loop: true, dur: () => 4.2, frames: 61 },
+  walk: { label: 'Walk', loop: true, dur: (I) => I.walk.dur, frames: 41 },
+  hop: { label: 'Hop', loop: false, dur: (I) => clamp(0.5 * Math.sqrt(I.S.L / 0.1), 0.3, 1.0), frames: 25 },
+  peck: { label: 'Peck', loop: false, dur: () => 1.4, frames: 31 },
+  alert: { label: 'Alert', loop: false, dur: () => 3, frames: 37 },
+  flap: { label: 'Flap', loop: true, dur: (I) => clamp(0.32 * Math.sqrt(I.L.span / 0.4), 0.08, 1.4), frames: 25 },
+  glide: { label: 'Glide', loop: true, dur: () => 3.5, frames: 25 },
+};
+function birdClips(info) {
+  const out = [];
+  for (const [name, c] of Object.entries(BIRD_CLIPS)) {
+    if (info.flightless && (name === 'flap' || name === 'glide')) continue;
+    const dur = c.dur(info), clip = bakeClip(info, name, dur, c.frames, (u) => birdSample(info, name, u), c.loop, name === 'walk');
+    if (name === 'walk') clip.userData = { loop: true, gait: 'walk', stride: info.walk.stride, speed: info.walk.stride / dur, hipH: info.hipH };
+    out.push(clip);
+  }
+  return out;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ *  EXPORTED METADATA & ASSET
+ * ════════════════════════════════════════════════════════════════════════════ */
+const SPECIES_KEYS = Object.keys(SPECIES), DEFAULT_SPECIES = 'eagle';
+export const COLORWAYS = colorwaysFor(BASE);
+export const presets = COLORWAYS;
+export const species = Object.fromEntries(SPECIES_KEYS.map(k => [k, { label: SPECIES[k].label, scientific: SPECIES[k].sci }]));
+export const POSES = ['perch', 'walk', 'hop', 'peck', 'alert', 'flap', 'glide'];
+const R_ = (label, def, min, max, step, describe, affects = 'geometry') => ({ type: 'range', default: def, min, max, step, label, affects, describe });
+export const params = withZones({
+  species: { type: 'choice', default: DEFAULT_SPECIES, options: SPECIES_KEYS, label: 'Species', affects: 'geometry', describe: `Species preset (${SPECIES_KEYS.length} birds, each from field measurements).` },
+  colorway: { type: 'choice', default: 'natural', options: COLORWAY_KEYS, label: 'Colourway', affects: 'colors', describe: 'Role-aware transform of the species palette.' },
+  detail: { type: 'choice', default: 'standard', options: Object.keys(DETAIL), label: 'Detail', affects: 'geometry', describe: 'Loft resolution (draft / standard / high).' },
+  rigMode: { type: 'choice', default: 'skinned', options: ['skinned', 'static'], label: 'Rig mode', affects: 'geometry', describe: 'Skinned meshes with a skeleton, or pose baked into static geometry.' },
+  pose: { type: 'choice', default: 'perch', options: POSES, label: 'Pose', affects: 'geometry', describe: 'A frozen frame of a clip (perch folds the wings).' },
+  posePhase: R_('Pose phase', 0.25, 0, 1, 0.01, 'Clip phase used for the frozen pose.'),
+  size: R_('Size', 1, 0.4, 1.6, 0.01, 'Scale of the species\' measured adult.'),
+  legLength: R_('Leg length', 1, 0.6, 1.5, 0.01, 'Tarsus and tibia length multiplier.'),
+  neckLength: R_('Neck length', 1, 0.5, 1.6, 0.01, 'Neck length multiplier.'),
+  headSize: R_('Head size', 1, 0.75, 1.35, 0.01, 'Head width multiplier.'),
+  beakLength: R_('Bill length', 1, 0.5, 1.6, 0.01, 'Bill length multiplier.'),
+  tailLength: R_('Tail length', 1, 0.3, 1.8, 0.01, 'Tail length multiplier.'),
+  wingspan: R_('Wingspan', 1, 0.6, 1.4, 0.01, 'Wingspan multiplier (spread wings).'),
+  seed: R_('Variation seed', 7, 1, 999, 1, 'Seed for streaks, spots and bars.', 'colors'),
+  coat: { type: 'toggle', default: true, label: 'Painted plumage', affects: 'colors', describe: 'Paint the plumage regions and marks into a texture; off: one colour per mesh face.' },
+  coatGrain: R_('Feather grain', 0.06, 0, 0.25, 0.01, 'Faint tonal variation in the feathers (painted plumage only).', 'colors'),
+  shading: { type: 'choice', default: 'smooth', options: ['smooth', 'flat'], label: 'Shading', affects: 'geometry', describe: 'Smooth, rounded shading or flat low-poly facets.' },
+  hide: { type: 'text', default: '', label: 'Hide parts', affects: 'geometry', describe: 'Comma list of detachable parts to omit (see `detach`).' },
+  mergeForProduction: { type: 'toggle', default: false, label: 'Merge for Production', affects: 'geometry', describe: 'One mesh per material (1-2 draw calls) instead of one selectable mesh per anatomical part.' },
+}, ZONE_LABELS, BASE);
+export const rig = {
+  Hips: { axis: 'x', range: [-20, 40], describe: 'body pitch' }, Neck1: { axis: 'x', range: [-30, 45], describe: 'neck' }, Neck2: { axis: 'x', range: [-30, 45] },
+  Head: { axis: 'y', range: [-70, 70], describe: 'head turn' }, Jaw: { axis: 'x', range: [0, 35], describe: 'bill open' }, Tail: { axis: 'x', range: [-20, 25], describe: 'tail' },
+  HumerusL: { axis: 'z', range: [-40, 60], describe: 'wing beat' }, HumerusR: { axis: 'z', range: [-60, 40] },
+};
+export const detach = ['crest', 'wings', 'wings-folded', 'tail', 'beak', 'eyes', 'legs', 'feet'];
+export const night = { eyes: { color: '#ffd77a', intensity: 0.2, distance: 1, describe: 'Eyeshine (owls and nightjars)' } };
+export const ANIMATIONS = Object.entries(BIRD_CLIPS).map(([name, c]) => ({ name, label: c.label, loop: c.loop, duration: name === 'perch' ? 4.2 : name === 'glide' ? 3.5 : 0.6 }));
+
+/** The builder's spec from the species' measurements (metres) and the user's options. */
+function specFor(base, p) {
+  const k = p.size, [TL, Sp, W, T, Ts, C, Bd, Hw, Nk] = base.M.map(v => (v * k) / 100);
+  const hw = Hw * p.headSize, Hl = (base.Hl ?? 1.15) * hw;
+  // (the torso: what the total length leaves after tail, bill, head and neck, unless the species gives it, e.g. the ostrich)
+  const Lt = base.Lt ? (base.Lt * k) / 100 : Math.max(0.3 * TL, TL - T - C - Hl * 0.85 - Nk * 0.85);
+  const fam = { ...FAMILIES[base.fam] };
+  for (const key of ['tibK', 'crouch', 'sHip', 'neckR', 'bob']) if (base[key] !== undefined) fam[key] = base[key];
+  // (the posture search may tilt the body less; the spec keeps its own copy)
+  if (base.depth) fam.depth = base.depth;
+  if (base.width) fam.width = base.width;
+  const S = {
+    ...base, famKey: base.fam, fam, L: Lt, headLen: Hl, neckLen: Nk * p.neckLength,
+    M: { TL, Sp: Sp * p.wingspan, W, T: T * p.tailLength, Ts: Ts * p.legLength, C: C * p.beakLength, Bd, Hw: hw, Nk },
+    neckAng: base.neckAng ?? 60, headAng: base.headAng ?? 4, seed: p.seed, flightless: ['penguin', 'ratite', 'kiwi'].includes(base.fam),
+    eye: { ...base.eye }, bill: { ...base.bill }, wing: { ...(base.wing || {}) }, tail: { ...(base.tail || {}) }, extras: base.extras || {}, plume: base.plume || {},
+  };
+  if (S.tail.train) S.tail.train = { ...S.tail.train, len: S.tail.train.len * k };
+  return S;
+}
+
+const RIGS = new WeakMap();
+
+export function createAsset(input = {}) {
+  const p = normalize(input);
+  // Digital Diorama extension: `specOverride` deep-merges measurement, anatomy and colour changes onto the preset
+  // (e.g. { M: [...], palette: { head: '#...' }, plume: { ... } }), so related species can share one rig
+  const base0 = SPECIES[p.species] || SPECIES[DEFAULT_SPECIES];
+  const base = p.specOverride && typeof p.specOverride === 'object' ? mergeDeep(base0, p.specOverride) : base0;
+  // (an override from the old bird rig, e.g. `eye: 0.34`, can't replace a part's settings with a bare number)
+  for (const k of ['eye', 'bill', 'wing', 'tail', 'extras', 'plume', 'palette']) if (base[k] !== undefined && (typeof base[k] !== 'object' || base[k] === null || Array.isArray(base[k]))) base[k] = base0[k];
+  if (!Array.isArray(base.M) || base.M.length !== 9 || !base.M.every(v => Number.isFinite(v) && v >= 0)) base.M = base0.M;
+  const S = specFor(base, p);
+  const det = DETAIL[p.detail] ?? 1;
+  const rigB = new Rig(), parts = [], byName = new Map();
+  const coatOn = p.coat !== false;
+  const B = { det, rig: rigB, parts, paint: null,
+    part(name, opt = {}) { if (!byName.has(name)) { const pt = new Part(name, opt); pt.coat = coatOn && !pt.glass; byName.set(name, pt); parts.push(pt); } return byName.get(name); } };
+  const L = {};
+  B.paint = makeBirdPainter(S, L);
+  birdBuild(B, S, L);
+  const info = birdMotion(S, p, L, rigB);
+  const poseName = POSES.includes(p.pose) ? p.pose : 'perch', flying = poseName === 'flap' || poseName === 'glide';
+  const pose = birdSample(info, info.flightless && flying ? 'perch' : poseName, p.posePhase);
+  const hidden = new Set(String(p.hide || '').split(',').map(s => s.trim()).filter(Boolean));
+  // (a static model keeps only the wings its pose shows)
+  const keep = (pt) => !hidden.has(pt.name) && !hidden.has(pt.group) && !(p.rigMode === 'static' && pt.group === (flying && !info.flightless ? 'wingFold' : 'wingSpread'));
+  const build = { rig: rigB, parts: parts.filter(keep) };
+  const zones = zonesFor(p.colorway, p, S.palette);
+  const coat = { res: COAT_RES[p.detail] ?? COAT_RES.standard, ref: S.L * 1.6, grain: p.coatGrain, grainOf: (z) => ZONE_ROLES[z] === 'body', smooth: p.shading !== 'flat' };
+  const { root, skeleton } = finish(build, { name: `bird-${p.species}`, merge: p.mergeForProduction, skinned: p.rigMode !== 'static', zones, pose, coat: coatOn || coat.smooth ? coat : null, seamRadius: 0.04 * S.L });
+  let tris = 0; root.traverse(m => { if (m.isMesh) tris += m.geometry.attributes.position.count / 3; });
+  root.userData = {
+    asset: 'bird-rig', species: p.species, label: base.label, scientific: base.sci, params: p, dimensions: measure(root), triangles: tris,
+    zones: Object.fromEntries(Object.entries(zones).map(([k, v]) => [k, hexStr(v)])), bones: info.bones, parts: build.parts.map(pt => pt.name),
+    units: 'meters', forward: '+Z', up: '+Y', pitch: S.pitch, hipHeight: +info.hipH.toFixed(4), wingspan: +(2 * L.span + S.L * (S.fam.width ?? 0.25) * 2).toFixed(3),
+  };
+  RIGS.set(root, { rig: rigB, info, skeleton });
   return root;
 }
-/** AnimationClips (perch, walk, hop, peck, flap, glide); flight clips scale the spread wings in and the folded wings out. */
-export function createClips(asset, extra = null) {
-  const ud = asset && asset.userData;
-  if (!ud || !ud.rig || ud.rig.mode !== 'skinned' || !ud.anim) return [];
-  const specs = Object.entries(BIRD_CLIPS).map(([name, c]) => ({ name, ...c }));
-  if (Array.isArray(extra)) for (const e of extra) if (e && typeof e.build === 'function' && e.name && !BIRD_CLIPS[e.name]) specs.push({ loop: true, frames: 31, dur: () => e.duration || 2, ...e });
-  return specs.map((c) => {
-    const dur = typeof c.dur === 'function' ? c.dur(ud.anim) : c.dur, clip = bakeClip(ud.rig, c.name, dur, c.frames || 31, (u) => c.build(u, ud.anim), c.loop !== false);
-    // Digital Diorama revision 8: stride metadata (distance per cycle, the hip height it was timed for), so the app
-    // plays the walk at the rate that keeps the planted feet still, as it does the mammals' gaits
-    const G = ud.anim.gait;
-    if (c.name === 'walk' && G) clip.userData = { loop: true, gait: 'walk', stride: G.stride, speed: +(G.stride / dur).toFixed(4), hipH: G.hipH };
-    return clip;
-  });
+/** AnimationClips (perch, walk, hop, peck, alert, flap, glide); flight clips scale the spread wings in and the folded ones out. */
+export function createClips(asset) {
+  const R = RIGS.get(asset); if (!R) return [];
+  return birdClips(R.info);
 }
+/** Poses a skinned asset at a clip phase (no mixer needed). */
 export function setPose(asset, name = 'perch', phase = 0.25) {
-  const ud = asset && asset.userData, c = BIRD_CLIPS[name];
-  if (!ud || !ud.rig || ud.rig.mode !== 'skinned' || !c) return false;
-  const sample = c.build(c.loop ? phase % 1 : phase, ud.anim);
-  for (const b of ud.rig.bones) {
-    const bone = asset.getObjectByName(b); if (!bone || !bone.isBone) continue;
-    const v = sample[b], r = !v ? null : Array.isArray(v) ? v : v.r, pp = v && !Array.isArray(v) ? v.p : null, rest = ud.rig.rest[b], sc = v && !Array.isArray(v) && v.s !== undefined ? v.s : 1;
-    bone.quaternion.setFromEuler(new THREE.Euler((r ? r[0] : 0) * DEG, (r ? r[1] : 0) * DEG, (r ? r[2] : 0) * DEG, 'YXZ'));
-    bone.position.set(rest[0] + (pp ? pp[0] : 0), rest[1] + (pp ? pp[1] : 0), rest[2] + (pp ? pp[2] : 0)); bone.scale.setScalar(sc);
-  }
+  const R = RIGS.get(asset); if (!R || !BIRD_CLIPS[name]) return false;
+  applySample(R.rig, birdSample(R.info, name, clamp(phase, 0, 1)));
+  asset.updateMatrixWorld(true);
   return true;
 }
 export default createAsset;

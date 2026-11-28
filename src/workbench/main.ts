@@ -735,7 +735,7 @@ function snapshot(label?: string) {
   return url;
 }
 /** A composite image: the reference photo and the model from several views. */
-type AnyView = ViewName | 'head' | 'headside';
+type AnyView = ViewName | 'head' | 'headside' | 'body' | 'bodyside';
 async function sheet(views: AnyView[] = ['front34', 'side', 'front', 'top'], w = 420, hgt = 320): Promise<string> {
   await building;
   const cam = vp.cameraState();

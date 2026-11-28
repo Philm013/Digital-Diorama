@@ -12,6 +12,8 @@
  *         osteoderm scute rows, double→single extruded caudal crest, webbed hind feet.
  * PARTS   animate: jaw, head, tail, legFL, legFR, legHL, legHR
  *         detach:  tail
+ * REVISION (Digital Diorama revision 10): a deeper, broader body (a 4.5 m crocodile is about 0.7 m across and
+ *          0.48 m deep; it was a 0.36 m plank).
  * LICENSE CC0 1.0 — public domain, free for any use.
  */
 
@@ -587,7 +589,8 @@ export function createAsset(userParams = {}) {
   };
   const S = buildSaurian(R, {
     L: p.length, tailFrac: 0.46, headL: 0.62 * k, neckL: 0.26 * k,
-    bodyW: 0.3 * k, bodyH: 0.18 * k, hipY, chestY: hipY + 0.01 * k, headY: hipY - 0.015 * k, headW: 0.175 * k, headH: 0.1 * k, neckRise: 0.2,
+    // (Digital Diorama revision 10: a 4.5 m Nile crocodile is about 0.7 m across and 0.48 m deep; it was a 0.36 m plank)
+    bodyW: 0.35 * k, bodyH: 0.24 * k, hipY, chestY: hipY + 0.01 * k, headY: hipY - 0.015 * k, headW: 0.175 * k, headH: 0.1 * k, neckRise: 0.2,
     foreL: 0.44 * k, hindL: 0.52 * k, foreR: 0.055 * k, hindR: 0.078 * k, erect: st * 0.8, toeL: 0.3, claw: C.claw,
     foreToes: 5, hindToes: 4, web: C.web, hindLens: [0.8, 1, 1.1, 0.9],
     tailSway: p.tailSway, walk: p.walk, tailHR: 1.5, tailR: 0.62, tailTaper: 1.0, tailTipY: 0.03 * k, trunkN: 2.6, bellyFlat: 0.5,

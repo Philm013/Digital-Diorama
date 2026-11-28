@@ -12,6 +12,9 @@
  *         marginal scute map; hydrofoil flippers are flat swept sections along curved spines.
  * PARTS   animate: flipperFL, flipperFR, flipperHL, flipperHR, head, jaw
  *         detach:  flipperFL, flipperFR, flipperHL, flipperHR
+ * REVISION (Digital Diorama revision 10): the scutes are laid out as on a real carapace (five hexagonal vertebrals,
+ *          four costals a side set between them, the nuchal and marginals round the rim) instead of a grid of
+ *          rectangles in alternating colours; seams are grooves and each scute has growth rings.
  * LICENSE CC0 1.0 — public domain, free for any use.
  */
 
@@ -494,8 +497,9 @@ function buildHead(R, s) {
 
 
 // ── testudine shell: exact-vertex carapace grid with anatomical scute map + plastron ──
+const fract = (x) => x - Math.floor(x);
 function shellGeo(o) {
-  const segs = o.segs || 88, rows = o.rows || 18, mRows = o.mRows ?? 2;
+  const segs = o.segs || 120, rows = o.rows || 24, mRows = o.mRows ?? 2;
   const V = [];
   for (let i = 0; i <= segs; i++) {
     V.push([]);
@@ -513,29 +517,60 @@ function shellGeo(o) {
       V[i].push([x, y, z]);
     }
   }
+  // Digital Diorama revision 10: the scutes were cut along x and z into a grid of rectangles, coloured alternately, so the
+  // shell read as a checkerboard. They are now laid out as on a real carapace and found as the nearest of their centres
+  // seen from above (a Voronoi partition, which makes the vertebrals hexagons and the costals pentagons): five vertebrals
+  // along the midline, four costals on each side set between them, and the marginals (with the nuchal at the front) round
+  // the rim. Seams are pressed in as grooves, each scute carries concentric growth rings about its centre, and the shell is
+  // one colour that varies only a little from scute to scute.
+  const hx = o.W / 2, hz = o.L / 2, nV = o.nV || 5, nC = o.nC || 4, nM = o.nM || 24;
+  const cx = (o.vW ?? 0.15) * 4.1;
+  const cells = [];
+  for (let k = 0; k < nV; k++) cells.push({ id: 'v' + k, x: 0, z: 0.68 - (1.34 * k) / (nV - 1), sx: 0.82 });
+  for (const sd of [1, -1]) for (let k = 0; k < nC; k++) cells.push({ id: 'c' + sd + k, x: sd * cx, z: 0.52 - (1.0 * k) / (nC - 1) - (k === nC - 1 ? 0.03 : 0), sx: 1 });
+  const nearest = (x, z) => {
+    let d1 = Infinity, d2 = Infinity, c1 = null;
+    for (const c of cells) { const dx = (x - c.x) * c.sx, dz = (z - c.z) * 1.12, d = Math.sqrt(dx * dx + dz * dz); if (d < d1) { d2 = d1; d1 = d; c1 = c; } else if (d < d2) d2 = d; }
+    return { c: c1, d1, d2 };
+  };
+  // the rim band of marginals: the lowest rows, split round the shell (the nuchal over the neck at the front)
+  const margId = (i) => { const f = ((i + 0.5) / segs) % 1, k = Math.floor(f * nM + 0.5) % nM; return k === 0 ? 'nuchal' : 'm' + k; };
   const idOf = (i, j) => {
-    const ic = (i + 0.5) / segs, jc = j + 0.5;
+    if (j + 0.5 < mRows) return margId(i);
     const P = V[i][j], Q = V[(i + 1)][Math.min(j + 1, rows)];
-    const x = (P[0] + Q[0]) / 2, z = (P[2] + Q[2]) / 2;
-    if (jc < mRows) return 'm' + Math.floor(ic * (o.nM || 24) + 0.5) % (o.nM || 24);
-    const zn = clamp(z / (o.L / 2), -0.999, 0.999);
-    if (Math.abs(x) < o.W * (o.vW ?? 0.15)) return 'v' + Math.floor(((zn + 1) / 2) * (o.nV || 5));
-    return 'c' + Math.sign(x) + Math.floor(((zn * 0.95 + 1) / 2) * (o.nC || 4));
+    return nearest((P[0] + Q[0]) / 2 / hx, (P[2] + Q[2]) / 2 / hz).c.id;
   };
   const ids = [];
   for (let i = 0; i < segs; i++) { ids.push([]); for (let j = 0; j < rows; j++) ids[i].push(idOf(i, j)); }
+  // grooves: vertices on a seam sink a little toward the shell's axis
+  const gd = (o.groove ?? 0.012) * o.H;
+  for (let i = 0; i <= segs; i++) for (let j = mRows; j <= rows; j++) {
+    const P = V[i][j], n = nearest(P[0] / hx, P[2] / hz), sm = n.d2 - n.d1, rimS = j - mRows;
+    const g = Math.max(Math.exp(-((sm / 0.045) ** 2)), rimS === 0 ? 1 : 0);
+    if (g < 0.02) continue;
+    const r = Math.hypot(P[0], P[1] - o.y0, P[2]) || 1, k = 1 - (gd * g) / r;
+    P[0] *= k; P[2] *= k; P[1] = o.y0 + (P[1] - o.y0) * k;
+  }
   const pos = [], col = [];
   const cA = new THREE.Color(o.a), cB = new THREE.Color(o.b), cS = new THREE.Color(o.seam), cL = new THREE.Color(o.light ?? o.a), cR = new THREE.Color(o.rim ?? o.seam);
   const push = (p, c) => { pos.push(p[0], p[1], p[2]); col.push(c.r, c.g, c.b); };
   for (let i = 0; i < segs; i++) for (let j = 0; j < rows; j++) {
     const id = ids[i][j];
-    const nb = [ids[(i + 1) % segs][j], j + 1 < rows ? ids[i][j + 1] : id];
+    const nb = [ids[(i + 1) % segs][j], j + 1 < rows ? ids[i][j + 1] : id, ids[(i - 1 + segs) % segs][j], j > 0 ? ids[i][j - 1] : id];
     const seam = nb.some((n) => n !== id);
     let hv = 0; for (let k = 0; k < id.length; k++) hv += id.charCodeAt(k) * (k + 3);
-    const P = V[i][j];
-    const base = (hv % 2 ? cA : cB).clone();
+    const P = V[i][j], Q = V[i + 1][j + 1];
+    // one shell colour, each scute a shade lighter or darker than its neighbours
+    const base = cA.clone().lerp(cB, 0.25 + 0.5 * ((hv * 0.618) % 1));
     const grain = fbm([P[0] * 9, P[1] * 9, P[2] * 9], 3.4, 2);
-    const c = seam ? cS.clone().lerp(base, 0.5) : base.lerp(cL, 0.12 + grain * 0.42 + 0.18 * Math.cos(j * 1.1));
+    let c = base.lerp(cL, 0.06 + grain * 0.14);
+    if (seam) c = cS.clone().lerp(c, 0.35);
+    else if (j + 0.5 >= mRows) {
+      // growth rings: the scute's own centre (the areola) is lightest, rings darken toward its seams
+      const n = nearest((P[0] + Q[0]) / 2 / hx, (P[2] + Q[2]) / 2 / hz), rr = (2 * n.d1) / Math.max(1e-6, n.d1 + n.d2);
+      if (rr < 0.28) c.lerp(cL, 0.14);
+      else if (rr > 0.5 && Math.abs(fract(rr * 2.6 + 0.2) - 0.5) > 0.42) c.lerp(cS, 0.18);
+    }
     const a = V[i][j], b = V[i + 1][j], cc = V[i + 1][j + 1], d = V[i][j + 1];
     push(a, c); push(b, c); push(cc, c); push(a, c); push(cc, c); push(d, c);
   }
