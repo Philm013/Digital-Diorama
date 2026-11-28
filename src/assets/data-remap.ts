@@ -77,7 +77,7 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   'arctic-fox': mammal('fox', {
     // (Digital Diorama revision 9: compact and short-legged under a deep winter coat, with a short muzzle and a round face)
     size: 0.95, earSize: 0.5, muzzleLen: 0.68, legLen: 0.78, bodyLen: 0.85, tailLen: 0.95,
-    specOverride: { snoutW: 0.44, headD: 0.28, dome: 1.22, cheekLow: 1.2, depth: 0.5, neckThk: 1.0, points: 0, tailTip: 0,
+    specOverride: { snoutW: 0.44, headD: 0.28, dome: 1.22, cheekLow: 1.2, depth: 0.5, points: 0, tailTip: 0,
       // (Digital Diorama revision 10: on the measured canid body, a deeper, broader body and thicker legs under the winter coat)
       refDepth: 1.18, refW: 1.25, foreBulkR: 1.15, hindBulkR: 1.1, palette: { body: '#f3f1ec', belly: '#fbfaf7', marking: '#e7e4dd', eye: '#ae8a3c', nose: '#1c1a19' } },
   }),
