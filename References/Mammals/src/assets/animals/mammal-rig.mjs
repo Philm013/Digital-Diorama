@@ -178,6 +178,11 @@
  *     the giraffe 23; now under 1.3), and tails lie along the ground instead of through it (tailOnGround; a sitting lion's
  *     tail went 65 cm under). Gaits are within a few millimetres of before, and the deepest foot in any gait is 0.9 cm.
  *   - The panda's saddle sits over its shoulder blades; the hair of a low-set tail sweeps back along the ground.
+ *
+ * REVISION 11 (Digital Diorama)
+ *   - The mouse and hedgehog, the last two on the generic layout, are laid out from measured references too (REF.mouse:
+ *     a crouched rodent on high, round haunches, a short low neck and big ears; REF.hedgehog: a dome of spines 1.34 U
+ *     high on short plantigrade legs, the head carried low).
  */
 
 import * as THREE from 'three';
@@ -4270,6 +4275,26 @@ const REF = {
     hind: soleHind([[0.14, 0.74, -0.55, 0.1, 0.12], [0.17, 0.42, -0.4, 0.065, 0.075], [0.14, 0.09, -0.6, 0.05, 0.05], [0.14, 0.035, -0.45, 0.05, 0.03], [0.14, 0.012, -0.36, 0.04, 0.012]], 0.9),
   },
 };
+// Digital Diorama revision 11: a 0.032 m house mouse, crouched like the rabbit (haunches high and round, long hind feet
+// flat) but with a short, low neck carrying the head forward at shoulder height; and a 0.1 m hedgehog, a dome of spines
+// 1.34 U high over the loins dropping to a skirt near the ground, on short plantigrade legs half hidden under it, the
+// head carried low and forward.
+REF.mouse = { ...REF.rabbit, len: 1.7, croup: 1.3,
+  neck: [['neckRoot', 0.66, 0.64, 0.27, 0.27, 0.23, 0.92, 0.86], ['neck1', 0.77, 0.67, 0.24, 0.23, 0.21], ['neck2', 0.86, 0.69, 0.22, 0.21, 0.195], ['neckTop', 0.93, 0.7, 0.2, 0.19, 0.18]] };
+REF.hedgehog = {
+  belly: 0.3, len: 1.5, zF: 0.7, zB: -0.82, croup: 1.22, rumpBot: 0.3, fillet: 0.05,
+  body: [
+    ['rump', -0.72, 0.95, 0.3, 0.45, 0.9, 0.9],
+    ['haunch', -0.5, 1.22, 0.24, 0.6, 0.95, 0.88],
+    ['flank', -0.2, 1.34, 0.24, 0.66, 0.95, 0.88],
+    ['loin', 0.05, 1.34, 0.26, 0.66, 0.95, 0.88],
+    ['barrel', 0.3, 1.22, 0.28, 0.6, 0.93, 0.86],
+    ['chest', 0.52, 1.0, 0.3, 0.45, 0.88, 0.8],
+  ],
+  neck: [['neckRoot', 0.7, 0.62, 0.22, 0.22, 0.2, 0.92, 0.86], ['neck1', 0.82, 0.58, 0.2, 0.19, 0.17], ['neck2', 0.92, 0.55, 0.18, 0.17, 0.155], ['neckTop', 1.0, 0.52, 0.16, 0.15, 0.14]],
+  fore: soleFore([[0.14, 0.8, 0.5, 0.05, 0.07], [0.24, 0.5, 0.62, 0.07, 0.08], [0.26, 0.32, 0.55, 0.075, 0.08], [0.25, 0.09, 0.6, 0.055, 0.05], [0.25, 0.03, 0.68, 0.055, 0.028], [0.25, 0.012, 0.76, 0.04, 0.012]], 0.85),
+  hind: soleHind([[0.24, 0.8, -0.5, 0.11, 0.13], [0.3, 0.45, -0.32, 0.08, 0.085], [0.28, 0.1, -0.55, 0.07, 0.06], [0.28, 0.035, -0.32, 0.075, 0.032], [0.28, 0.012, -0.14, 0.055, 0.012]], 1.0),
+};
 
 const SPECIES_DEFS = {
   horse: { label: 'Horse', fam: UNGULATE, ref: REF.equid, withers: 0, marks: { hooks: 0.022, fossa: 0.03, ribs: 0.015, girth: 0.025, breast: 0.05, withers: 0.01 }, H: 1.6,
@@ -4473,7 +4498,10 @@ const SPECIES_DEFS = {
   hedgehog: { label: 'Hedgehog', fam: { stance: 'plantigrade', nose: 'pad', claws: 0.5 }, hind: { kY: 0.42, kZ: 0.1, foot: 0.46 }, H: 0.115, len: 1.35, depth: 0.86, width: 1.2, rump: 1.0, tuck: 0, neckAng: 15, neckLen: 0.12, neckThk: 0.95,
     headAng: 25, headLen: 0.45, headD: 0.32, headW: 0.38, snout: 0.42, snoutW: 0.32, snoutD: 0.36, stop: 0.15, eye: 0.065, legThk: 1.4, quills: { len: 0.2, count: 560, lay: 1.35 }, spinyBack: true,
     ear: { style: 'round', len: 0.2, w: 1.0, s: 0.25, a: 0.95 }, tail: { style: 'thin', len: 0.12, thk: 0.06, set: -30 }, countershade: 0.6,
-    palette: pal({ body: '#7d6a55', belly: '#cbb59a', marking: '#c9b996', pattern: '#4f3e2d', nose: '#121010', skin: '#d4a090' }) },
+    palette: pal({ body: '#7d6a55', belly: '#cbb59a', marking: '#c9b996', pattern: '#4f3e2d', nose: '#121010', skin: '#d4a090' }),
+    // Digital Diorama revision 11: laid out from the measured low, humped body of the beaver's reference (the back rising
+    // to round haunches, short plantigrade legs half hidden under it); it stood on long legs like a small bear
+    ref: REF.hedgehog, H: 0.1, headLen: 0.5 },
   // Digital Diorama revision: a compact, crouched body low on short legs (it stood on stilts like a cat) and a
   // tail as bushy as the body is deep, arching up behind the back
   squirrel: { label: 'Red Squirrel', fam: RODENT, hind: { kZ: 0.34, aZ: -0.16, foot: 0.68 }, H: 0.095, len: 1.9, depth: 0.74, width: 0.85, rump: 1.12, rumpDepth: 1.15, tuck: 0.15, neckAng: 40, neckLen: 0.18, neckThk: 0.9,
@@ -4609,7 +4637,10 @@ const SPECIES_DEFS = {
   mouse: { label: 'House Mouse', fam: RODENT, hind: { kZ: 0.3, aZ: -0.15, foot: 0.66 }, H: 0.03, len: 2.1, depth: 0.86, width: 0.85, rump: 1.25, rumpDepth: 1.1, tuck: 0.1, neckAng: 30, neckLen: 0.16, neckThk: 0.9, legThk: 1.15,
     headAng: 20, headLen: 0.55, headD: 0.32, headW: 0.38, snout: 0.45, snoutW: 0.35, snoutD: 0.38, stop: 0.15, eye: 0.09,
     ear: { style: 'round', len: 0.48, w: 0.95, s: 0.22, a: 0.6, spread: 30, tilt: 8, cup: 0.35 }, tail: { style: 'thin', len: 2.0, thk: 0.012, set: -10, curl: 18 },
-    countershade: 0.4, palette: pal({ body: '#8d8478', belly: '#c9c0b2', skin: '#e2a8a0', nose: '#e2a8a0', eye: '#0c0a09' }) },
+    countershade: 0.4, palette: pal({ body: '#8d8478', belly: '#c9c0b2', skin: '#e2a8a0', nose: '#e2a8a0', eye: '#0c0a09' }),
+    // Digital Diorama revision 11: laid out from the measured crouching rodent (the rabbit's reference: haunches high and
+    // round, forelegs short under the chest, long hind feet flat on the ground); it was a long, low slug of a body
+    ref: REF.mouse, H: 0.032, headLen: 0.6, ear: { style: 'round', len: 0.62, w: 1.05, s: 0.22, a: 0.6, spread: 30, tilt: 8, cup: 0.35 } },
 };
 const SPECIES = Object.fromEntries(Object.entries(SPECIES_DEFS).map(([k, v]) => {
   const { fam, ...own } = v;

@@ -58,6 +58,14 @@
  *     over a small bill.
  *   - The albatross has a short thick neck (it was a goose's), the pelican's neck is drawn into an S over a bigger body, and
  *     the ostrich's body is a big plumed mass instead of a small bag on long legs.
+ *
+ * REVISION 11 (Digital Diorama: every bird re-proportioned from measurements)
+ *   - MEASURED: each species' anatomy now comes from field-guide measurements of an adult (total length, wingspan,
+ *     wing chord, tail, tarsus, culmen, bill depth, head width, carried neck), from which the torso, head, bill, legs,
+ *     tail, folded and spread wings are all derived (measuredSpec). The hand-tuned presets had heads 1.5-2 times
+ *     too large and guessed tails and legs; the presets now keep only shape, posture and plumage.
+ *   - A closed tail is a quarter as wide as it is long and carries on the line of the back; a peacock's train is
+ *     its true 1.5 m. Spans follow the real wingspans (an albatross 3.1 m, an eagle 2 m).
  */
 
 import * as THREE from 'three';
@@ -1421,15 +1429,18 @@ function birdBuild(B, S) {
     emit(B.part('crest', { group: 'head' }), loft({ pts: [p, p.clone().addScaledVector(hu, -l * 0.5), p.clone().addScaledVector(hu, -l).addScaledVector(hd, -l * 0.15)], seg: 5, rad: 8, w: (u) => l * 0.22 * (0.6 + Math.sin(Math.PI * u)), ht: (u) => l * 0.12 * (0.6 + Math.sin(Math.PI * u)), up: hd }), S.wattleZone ?? 'accent', rig.W('Jaw'));
   }
   // tail fan
-  const T = S.tail, tb = bp(0, 0.12), defLift = Math.max(0, S.pitch * 0.8 + 2);
+  // (Digital Diorama revision 11: a perched bird's tail carries on the line of its back, a little raised: at 0.8 ×
+  // the body's pitch it stuck out level behind every upright bird)
+  const T = S.tail, tb = bp(0, 0.12), defLift = Math.max(0, S.pitch * 0.3 + 2);
   const tdir = fwd.clone().multiplyScalar(-1).addScaledVector(upb, Math.tan((T.lift ?? defLift) * DEG)).normalize();
   rig.add('Tail', 'Hips', tb);
   const tl = T.len * L, nT = T.n ?? 10, tpart = B.part('tail', { group: 'tail', coatK: 1.6 });
   const side = new THREE.Vector3().crossVectors(upb, tdir).normalize();
   for (let i = 0; i < nT; i++) {
-    const t = nT === 1 ? 0 : i / (nT - 1) - 0.5, ang = t * (T.fan ?? 40) * DEG, d = tdir.clone().applyAxisAngle(upb, ang);
+    const t = nT === 1 ? 0 : i / (nT - 1) - 0.5, ang = t * (T.fan ?? 40) * 0.6 * DEG, d = tdir.clone().applyAxisAngle(upb, ang);
     let fl = tl * (T.style === 'fork' ? 0.7 + 1.2 * Math.abs(t) : T.style === 'wedge' ? 1 - 0.7 * Math.abs(t) : T.style === 'long' ? (Math.abs(t) < 0.12 ? 1 : 0.45) : 1) * (0.94 + 0.06 * Math.cos(i * 2.1));
-    const fw = Math.min(tl * 0.16, L * 0.09) * (T.style === 'train' ? 1.6 : 1) * (T.wide ?? 1), sd = new THREE.Vector3().crossVectors(upb, d).normalize();
+    // (a closed tail is about a quarter as wide as long: its feathers overlap, each about that wide)
+    const fw = Math.min(tl * 0.24, L * (T.style === 'train' ? 0.7 : 0.3)) * (T.wide ?? 1), sd = new THREE.Vector3().crossVectors(upb, d).normalize();
     const droop = (T.droop || 0) * fl;
     sheet(tpart, { nu: Math.round(5 * det), nv: 2,
       f: (u, v) => tb.clone().addScaledVector(d, u * fl).addScaledVector(sd, (v - 0.5) * fw * Math.sin(Math.PI * clamp(0.12 + u * 0.95, 0, 1)) ** 0.5 * (T.style === 'train' ? 0.6 + 0.8 * u : 1)).addScaledVector(upb, i * 0.0015 * L - droop * u * u + (v - 0.5) * 0.0 * fw),
@@ -1582,10 +1593,11 @@ const SPECIES = {
     tail: { len: 2.8, fan: 16, n: 8, style: 'long', lift: 53 }, },
   // Digital Diorama revision: eyes set into the facial disc (huge bulging black eyes), barred underparts, mottled back
   owl: { label: 'Great Horned Owl', sci: 'Bubo virginianus', bodyForm: 'owl', L: 0.32, pitch: 72, bodyH: 0.85, bodyW: 0.8, neckLen: 0.08, headR: 0.44, headW: 1.0, headAng: -4, eye: 0.22, eyeYaw: 16, eyeInset: 0.55, eyeRing: 0.4,
-    marks: { belly: 'bars', back: 'streaks', wing: 'bars', tail: 'bars', freq: 1.6, zone: 'accent', light: 'face' },
+    // (Digital Diorama revision 11: fine, dense barring, as on the bird, instead of a few broad bands)
+    marks: { belly: 'bars', back: 'streaks', wing: 'bars', tail: 'bars', freq: 3.0, barW: 0.15, zone: 'accent', light: 'face' },
     beak: { len: 0.32, w: 0.22, h: 0.3, style: 'hook', hook: 0.5, y: 0.25 }, crest: { h: 0.75, n: 2, style: 'tuft', thk: 0.16, curl: -0.3, pair: true }, feet: 'zygo', talons: 1.4, feathered: true, legLen: 0.12, fluff: 0.05,
-    wing: { span: 1.9, chord: 0.75, tip: 'round', fold: 0.25 }, tail: { len: 0.6, fan: 40, n: 10, lift: 35 }, pattern: { mask: 'face', throat: 'belly', barred: true },
-    palette: BP('#7a5e40', '#c9b08a', '#6a5034', '#4a3a28', '#7a5e40', '#d8b88a', '#3a2c1e', '#3a3632', '#c9b08a', '#f2a81a'),
+    wing: { span: 1.9, chord: 0.75, tip: 'round', fold: 0.25 }, tail: { len: 0.6, fan: 40, n: 10, lift: 35 }, pattern: { mask: 'face', throat: 'belly' },
+    palette: BP('#6e6252', '#bfae92', '#62584a', '#4a4034', '#6e6252', '#c8a878', '#3a2e22', '#3a3632', '#bfae92', '#f2a81a'),
     // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
     eye: 0.3, eyeYaw: 10, beak: { len: 0.2, w: 0.15, h: 0.2, style: 'hook', hook: 0.5, y: 0.2 },
     // (revision 10) the eyes looked out sideways from the middle of the skull: they sit forward in the flat facial disc
@@ -1664,7 +1676,7 @@ const SPECIES = {
   pelican: { label: 'Brown Pelican', sci: 'Pelecanus occidentalis', bodyForm: 'pelican', L: 0.55, pitch: 15, neckLen: 0.95, neckAng: 60, neckBase: 1.5, footFwd: -0.02,
     neckShape: [[0, 46], [0.35, 96], [0.7, 104], [1, 62]], headR: 0.16, headAng: 30, beak: { len: 4.2, w: 0.42, h: 0.3, style: 'flat', hook: 0.06, hookPow: 9, tipTaper: 0.55, tipLen: 0.1, pouch: 1.2 }, eye: 0.15,
     feet: 'webbed', legLen: 0.18, wing: { span: 2.4, chord: 0.62, tip: 'slotted', fold: 0.3 }, tail: { len: 0.4, fan: 30, n: 10 }, pattern: { headAll: true, neck: 'face' },
-    palette: BP('#6a6a6a', '#5a5a5c', '#7a766e', '#2a2826', '#f2eed8', '#5a3a2a', '#e8d870', '#a89a8a', '#3a3a3a'),
+    palette: BP('#8a8884', '#7a7874', '#9a958c', '#3a3836', '#f2eed8', '#5a3a2a', '#e8d870', '#a89a8a', '#3a3a3a'),
     // Digital Diorama revision 10: checked against the species photo (posture, bill and proportions)
     neckLen: 0.62, bodyH: 0.62, bodyW: 0.64, neckShape: [[0, 72], [0.4, 100], [0.78, 70], [1, 30]], headAng: 40, },
   toucan: { label: 'Toco Toucan', sci: 'Ramphastos toco', bodyForm: 'toucan', L: 0.3, pitch: 40, headR: 0.22, beak: { len: 3.8, w: 0.5, h: 1.25, style: 'big', curve: 0.1, decurve: 0.22, keel: 0.6, lowerDepth: 0.75, tip: 'face', tipFrom: 0.88, tipLower: false }, eye: 0.17, eyeRing: 0.5, feet: 'zygo', legLen: 0.2,
@@ -2089,11 +2101,79 @@ export const detach = ['crest', 'wings', 'wings-folded', 'tail', 'beak', 'eyes',
 export const night = { eyes: { color: '#ffd77a', intensity: 0.2, distance: 1, describe: 'Eyeshine (owls and nightjars)' } };
 export const ANIMATIONS = Object.entries(BIRD_CLIPS).map(([name, c]) => ({ name, label: c.label, loop: c.loop, duration: name === 'perch' ? 4.2 : name === 'glide' ? 3.5 : 0.6 }));
 
+/* ════════════════════════════════════════════════════════════════════════════
+ *  MEASURED REFERENCES (Digital Diorama revision 11) — every bird's proportions come from field-guide measurements
+ *  of an adult (cm): TL total length (bill tip to tail tip, the bird laid flat), W wing chord (wrist to the longest
+ *  primary), T tail, Ts tarsus, C exposed culmen (bill), Bd bill depth at its base, Hw head width across the eyes,
+ *  Nk the visible neck as it is carried (from the breast to the back of the skull). From these: the torso (tail base
+ *  to the base of the neck) is what is left of TL once tail, bill, head and neck are taken away; the head is sized
+ *  from its width (its length 1.15 widths unless `Hl` says); bill, legs, tail and folded wing follow directly; the
+ *  spread wing (shoulder to tip) is half the wingspan Sp less the body. The old hand-tuned presets made heads 1.5-2 ×
+ *  too large.
+ * ════════════════════════════════════════════════════════════════════════════ */
+const MEASURED = {
+  sparrow: { TL: 15.5, Sp: 23, W: 7.6, T: 5.8, Ts: 1.9, C: 1.15, Bd: 0.85, Hw: 1.65, Nk: 0.7 },
+  robin: { TL: 14, Sp: 21, W: 7.2, T: 5.9, Ts: 2.5, C: 1.1, Bd: 0.45, Hw: 1.55, Nk: 0.6 },
+  crow: { TL: 48, Sp: 98, W: 32, T: 18, Ts: 6, C: 5.2, Bd: 2.0, Hw: 4.2, Nk: 2.2 },
+  cardinal: { TL: 22, Sp: 28, W: 9.0, T: 10.2, Ts: 2.5, C: 1.7, Bd: 1.45, Hw: 2.1, Nk: 0.8 },
+  pigeon: { TL: 32, Sp: 66, W: 22, T: 11, Ts: 3.0, C: 1.8, Bd: 0.6, Hw: 2.7, Nk: 3.0 },
+  woodpecker: { TL: 23, Sp: 38, W: 13, T: 8.5, Ts: 2.4, C: 2.8, Bd: 0.9, Hw: 2.4, Nk: 1.2 },
+  kingfisher: { TL: 16, Sp: 25, W: 7.7, T: 3.5, Ts: 1.0, C: 3.8, Bd: 1.0, Hw: 2.1, Nk: 0.6 },
+  macaw: { TL: 84, Sp: 100, W: 39, T: 50, Ts: 3.2, C: 7.0, Bd: 6.5, Hw: 6.0, Nk: 2.5 },
+  owl: { TL: 55, Sp: 120, W: 36, T: 21, Ts: 6.5, C: 3.8, Bd: 2.6, Hw: 10, Hl: 0.95, Nk: 1.5 },
+  eagle: { TL: 82, Sp: 200, W: 58, T: 29, Ts: 9.5, C: 5.6, Bd: 4.0, Hw: 7.0, Nk: 6 },
+  falcon: { TL: 42, Sp: 105, W: 31, T: 15, Ts: 5.0, C: 2.3, Bd: 2.0, Hw: 4.8, Nk: 2.5 },
+  flamingo: { TL: 130, Sp: 150, W: 40, T: 14, Ts: 32, C: 12, Bd: 4.5, Hw: 4.5, Nk: 55 },
+  heron: { TL: 95, Sp: 175, W: 45, T: 18, Ts: 16, C: 12, Bd: 2.6, Hw: 4.4, Nk: 30 },
+  crane: { TL: 110, Sp: 190, W: 52, T: 20, Ts: 23, C: 11, Bd: 2.8, Hw: 5.2, Nk: 34 },
+  spoonbill: { TL: 80, Sp: 125, W: 36, T: 11, Ts: 12, C: 17, Bd: 2.4, Hw: 4.6, Nk: 18 },
+  stilt: { TL: 36, Sp: 70, W: 22, T: 8, Ts: 10.5, C: 6.2, Bd: 0.6, Hw: 2.2, Nk: 4.5 },
+  swan: { TL: 150, Sp: 220, W: 59, T: 23, Ts: 11, C: 10, Bd: 4.0, Hw: 7.0, Nk: 52 },
+  duck: { TL: 58, Sp: 90, W: 27, T: 9, Ts: 4.4, C: 5.5, Bd: 2.2, Hw: 4.6, Nk: 9 },
+  puffin: { TL: 30, Sp: 55, W: 16, T: 5, Ts: 2.6, C: 4.8, Bd: 3.8, Hw: 3.8, Nk: 2.0 },
+  penguin: { TL: 115, Sp: 60, W: 33, T: 7, Ts: 5, C: 11, Bd: 2.8, Hw: 9.5, Nk: 10 },
+  ostrich: { TL: 210, Sp: 200, W: 80, T: 45, Ts: 48, C: 13, Bd: 4.5, Hw: 9.5, Nk: 85 },
+  kiwi: { TL: 45, Sp: 8, W: 3, T: 0.5, Ts: 7.5, C: 13, Bd: 1.4, Hw: 4.6, Nk: 4 },
+  turkey: { TL: 110, Sp: 140, W: 50, T: 42, Ts: 17, C: 3.5, Bd: 2.0, Hw: 5.0, Nk: 18 },
+  rooster: { TL: 70, Sp: 80, W: 23, T: 30, Ts: 10, C: 3.0, Bd: 2.0, Hw: 4.2, Nk: 12 },
+  peacock: { TL: 215, Sp: 140, W: 46, T: 150, Ts: 13, C: 4.0, Bd: 1.8, Hw: 4.2, Nk: 20 },
+  hummingbird: { TL: 8.5, Sp: 10.5, W: 4.4, T: 2.8, Ts: 0.5, C: 1.8, Bd: 0.2, Hw: 1.05, Nk: 0.3 },
+  pelican: { TL: 125, Sp: 220, W: 52, T: 15, Ts: 7.5, C: 31, Bd: 4.0, Hw: 7.0, Nk: 25 },
+  toucan: { TL: 60, Sp: 75, W: 24, T: 17, Ts: 5.0, C: 19, Bd: 7.0, Hw: 5.5, Nk: 2.5 },
+  cockatoo: { TL: 48, Sp: 100, W: 32, T: 20, Ts: 2.8, C: 4.0, Bd: 3.8, Hw: 5.0, Nk: 2.0 },
+  hornbill: { TL: 105, Sp: 165, W: 48, T: 38, Ts: 6.0, C: 28, Bd: 6.0, Hw: 7.0, Nk: 8 },
+  albatross: { TL: 115, Sp: 310, W: 66, T: 20, Ts: 12, C: 16.5, Bd: 4.5, Hw: 7.5, Nk: 8 },
+  seagull: { TL: 60, Sp: 140, W: 42, T: 17, Ts: 6.5, C: 5.6, Bd: 2.0, Hw: 4.6, Nk: 6 },
+};
+/** The builder's proportions (multiples of the torso length L, head radius hr) from a measured reference. */
+function measuredSpec(key, sp) {
+  const M = MEASURED[key];
+  if (!M) return {};
+  const SKF = SKULL_FORMS[sp.skullForm] || SKULL_FORMS[sp.bodyForm] || SKULL_FORMS.songbird;
+  const Hl = (M.Hl ?? 1.15) * M.Hw;
+  const torso = Math.max(0.3 * M.TL, M.TL - M.T - M.C - Hl * 0.85 - (M.Nk ?? 0) * 0.85);
+  const L = torso / 100, hr = (M.Hw / 2) / 0.87 / 100;
+  const beak = sp.beak || BDEF.beak, bh0 = beak.h ?? 0.4;
+  const bh = Math.max(0.05, (M.Bd / 1.55) / (hr * 100));
+  return {
+    L, headR: hr / L, skullLen: (Hl / 100) / ((SKF.len ?? 1.5) * hr),
+    beak: { len: (M.C / 100) / hr, h: bh, w: (beak.w ?? 0.36) * (bh / bh0) },
+    legLen: (M.Ts / 100) / L,
+    tail: { len: (M.T / 100) / L },
+    wing: { span: (Math.max(M.W * 1.2, M.Sp / 2 - M.Hw * 0.9) / 100) / L, foldLength: (M.W * 1.02 / 100) / L },
+    neckLen: sp.neckShape || (M.Nk ?? 0) > 8 ? ((M.Nk ?? 0) / 100) / L : undefined,
+  };
+}
+
 function resolveSpec(p) {
   // Digital Diorama extension: `specOverride` merges anatomy/pattern/palette changes onto the preset
   // (one level deep), so related species can share one rig.
   const sp0 = SPECIES[p.species] || SPECIES[DEFAULT_SPECIES], ov = p.specOverride && typeof p.specOverride === 'object' ? p.specOverride : null;
-  const sp = ov ? { ...sp0, ...Object.fromEntries(Object.entries(ov).map(([k, v]) => [k, v && typeof v === 'object' && !Array.isArray(v) && sp0[k] && typeof sp0[k] === 'object' ? { ...sp0[k], ...v } : v])) } : sp0, S = {};
+  // (Digital Diorama revision 11: the measured proportions replace the preset's own, then any override applies)
+  const key = Object.keys(SPECIES).find(k => SPECIES[k] === sp0) || DEFAULT_SPECIES, mz = measuredSpec(key, sp0);
+  const merge1 = (a, b) => Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined).map(([k, v]) => [k, v && typeof v === 'object' && !Array.isArray(v) && a[k] && typeof a[k] === 'object' ? { ...a[k], ...v } : v]));
+  const spM = { ...sp0, ...merge1(sp0, mz) };
+  const sp = ov ? { ...spM, ...Object.fromEntries(Object.entries(ov).map(([k, v]) => [k, v && typeof v === 'object' && !Array.isArray(v) && spM[k] && typeof spM[k] === 'object' ? { ...spM[k], ...v } : v])) } : spM, S = {};
   for (const [k, v] of Object.entries({ ...BDEF, ...sp })) S[k] = v && typeof v === 'object' && !Array.isArray(v) ? { ...(BDEF[k] || {}), ...v } : v;
   if (p.bodyForm !== 'auto') S.bodyForm = p.bodyForm;
   S.palette = { ...BASE, ...sp.palette };
