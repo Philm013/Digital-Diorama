@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 
-/** Shape shared by every procedural asset module in References/. */
+/** Shape shared by every procedural asset module in src/assets/models/. */
 export interface ParamSpec {
   type: 'range' | 'choice' | 'toggle' | 'color' | 'text';
   default: unknown;
@@ -25,41 +25,32 @@ export interface AssetModule {
   [k: string]: unknown;
 }
 
-// Lazy loaders — Vite turns every reference module into its own chunk.
+// Lazy loaders — Vite turns every asset module into its own chunk.
 const LOADERS = import.meta.glob<AssetModule>([
-  '/References/water-world/assets/*.mjs',
-  '/References/Mammals/src/assets/animals/mammal-rig.mjs',
-  '/References/Birds/src/assets/bird-rig.mjs',
-  '/References/Animals/src/engine/animal.mjs',
-  '/References/Reptiles/src/herp-rig.mjs',
-  '/References/plants .mjs',
-  '/References/parametric-deciduous.mjs',
-  '/References/parametric-conifer.mjs',
-  '/References/Terra Former/src/assets/tree.mjs',
-  '/References/Terra Former/src/assets/field-rock.mjs',
-  '/References/Beach/src/assets/*.mjs',
-  '/References/Fish Tank/src/aquarium/coral-*.mjs',
-  '/References/Fish Tank/src/aquarium/fauna-*.mjs',
-  '/References/Fish Tank/src/aquarium/hardscape-*.mjs',
-  '/References/Fish Tank/src/aquarium/flora-*.mjs',
-  '/src/assets/flora/trees.ts',
-  '/src/assets/flora/herbs.ts',
+  '/src/assets/models/rigs/*-rig.mjs',
+  '/src/assets/models/wildform/wildform.mjs',
+  '/src/assets/models/water/*.mjs',
+  '/src/assets/models/beach/*.mjs',
+  '/src/assets/models/aquarium/*.mjs',
+  '/src/assets/models/plants/*.mjs',
+  '/src/assets/models/rocks/*.mjs',
+  '/src/assets/models/flora/trees.ts',
+  '/src/assets/models/flora/herbs.ts',
 ]);
 
+const M = '/src/assets/models';
 export const MODULE_PATHS = {
-  mammal: '/References/Mammals/src/assets/animals/mammal-rig.mjs',
-  bird: '/References/Birds/src/assets/bird-rig.mjs',
-  wildform: '/References/Animals/src/engine/animal.mjs',
-  plant: '/References/plants .mjs',
-  deciduous: '/References/parametric-deciduous.mjs',
-  conifer: '/References/parametric-conifer.mjs',
-  terraTree: '/References/Terra Former/src/assets/tree.mjs',
-  rock: '/References/Terra Former/src/assets/field-rock.mjs',
-  herp: '/References/Reptiles/src/herp-rig.mjs',
-  water: (id: string) => `/References/water-world/assets/${id}.mjs`,
-  beach: (id: string) => `/References/Beach/src/assets/${id}.mjs`,
-  aquarium: (id: string) => `/References/Fish Tank/src/aquarium/${id}.mjs`,
-  flora: (id: 'trees' | 'herbs') => `/src/assets/flora/${id}.ts`,
+  mammal: `${M}/rigs/mammal-rig.mjs`,
+  bird: `${M}/rigs/bird-rig.mjs`,
+  herp: `${M}/rigs/herp-rig.mjs`,
+  wildform: `${M}/wildform/wildform.mjs`,
+  plant: `${M}/plants/worldflora.mjs`,
+  deciduous: `${M}/plants/deciduous.mjs`,
+  rock: `${M}/rocks/field-rock.mjs`,
+  water: (id: string) => `${M}/water/${id}.mjs`,
+  beach: (id: string) => `${M}/beach/${id}.mjs`,
+  aquarium: (id: string) => `${M}/aquarium/${id}.mjs`,
+  flora: (id: 'trees' | 'herbs') => `${M}/flora/${id}.ts`,
 } as const;
 
 const cache = new Map<string, Promise<AssetModule>>();

@@ -8,7 +8,7 @@
  * current text, so they stay correct while the file is being edited.
  */
 import type { AssetDef } from '../assets/types';
-import { BUILTINS } from '../assets/builtin';
+import { BUILTINS } from '../assets/models/builtin';
 
 export interface Region {
   label: string;
@@ -25,6 +25,8 @@ export interface SourceFile {
 }
 
 const rel = (p: string) => p.replace(/^\//, '');
+/** files the page re-imports in place after a save (devServer.ts HOT_SWAPPABLE); others reload the page */
+const HOT = /^src\/assets\/models\/(.+\.mjs|builtin\/[^/]+\.ts)$/;
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
@@ -147,8 +149,8 @@ const WILD_PLAN_FN: Record<string, string> = {
   jellyfish: 'radialAnimal', combJelly: 'radialAnimal', anemone: 'radialAnimal', starfish: 'radialAnimal', urchin: 'radialAnimal',
   waterBear: 'lobopod', velvetWorm: 'lobopod', centipede: 'lobopod', coral: 'colony',
 };
-const WILD_CATALOG = 'References/Animals/src/data/catalog.ts';
-const WILD_ENGINE = 'References/Animals/src/engine/animal.mjs';
+const WILD_CATALOG = 'src/assets/models/wildform/species.ts';
+const WILD_ENGINE = 'src/assets/models/wildform/wildform.mjs';
 
 /** Source files and regions for one catalog asset. `extra` carries what only the loaded module knows. */
 export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): SourceFile[] {
@@ -157,7 +159,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
     const p = rel(path);
     const f = files.find((x) => x.path === p);
     if (f) f.regions.push(...regions);
-    else files.push({ path: p, title, regions, hot: /^References\/.+\.mjs$|^src\/assets\/builtin\//.test(p) });
+    else files.push({ path: p, title, regions, hot: HOT.test(p) });
   };
   const wildId = def.id.startsWith('wild/') ? def.id.slice(5) : null;
   const species = String(def.params.species ?? '');
@@ -295,8 +297,8 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
     }
     case 'wildform': {
       const plan = extra.wildPlan;
-      add(WILD_CATALOG, 'Animals catalog.ts', [region(`Species · ${wildId}`, call(`animal('${wildId}'`))]);
-      add(WILD_ENGINE, 'animal.mjs', [
+      add(WILD_CATALOG, 'wildform/species.ts', [region(`Species · ${wildId}`, call(`animal('${wildId}'`))]);
+      add(WILD_ENGINE, 'wildform.mjs', [
         ...(plan ? [region(`Body plan · ${plan}`, declaration(WILD_PLAN_FN[plan] ?? plan))] : []),
         region('Parameters (getSchema)', declaration('getSchema')),
         region('Rig (getRig)', declaration('getRig')),
@@ -307,9 +309,9 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
     case 'builtin': {
       const key = def.path.slice(8);
       const fn = BUILTINS[key]?.createAsset?.name;
-      const file = key === 'fish' ? 'src/assets/builtin/fish.ts' : ['seal', 'cetacean', 'man-o-war', 'sea-hare'].includes(key) ? 'src/assets/builtin/marine.ts' : 'src/assets/builtin/fungi.ts';
+      const file = key === 'fish' ? 'src/assets/models/builtin/fish.ts' : ['seal', 'cetacean', 'man-o-war', 'sea-hare'].includes(key) ? 'src/assets/models/builtin/marine.ts' : 'src/assets/models/builtin/fungi.ts';
       add(file, file.split('/').pop()!, fn ? [region(`Model · ${fn}`, declaration(fn))] : []);
-      add('src/assets/builtin/index.ts', 'builtin/index.ts', [region('Registry', declaration('BUILTINS'))]);
+      add('src/assets/models/builtin/index.ts', 'builtin/index.ts', [region('Registry', declaration('BUILTINS'))]);
       break;
     }
     case 'aquarium':

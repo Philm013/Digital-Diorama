@@ -6,7 +6,7 @@
  * flight clips; the baked walk keeps each stance foot planted (it moves back at the clip's ground speed and stays
  * on the ground); options, colourways and `specOverride` build. */
 import * as THREE from 'three';
-import { createAsset, createClips, setPose, species, POSES, COLORWAYS } from '../src/assets/bird-rig.mjs';
+import { createAsset, createClips, setPose, species, POSES, COLORWAYS } from '../src/assets/models/rigs/bird-rig.mjs';
 
 const v = new THREE.Vector3();
 function lowest(root) {

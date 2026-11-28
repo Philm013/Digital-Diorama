@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { ParamSpec } from '../modules';
+import type { ParamSpec } from '../../modules';
 import { Geo, V, blob, fbm3, lerp, loftZ, meshOf, mixc, rgb, sheet, sstep, vcMaterial, type RGB, type Station } from '../proc/kit';
 
 /*

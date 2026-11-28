@@ -5,8 +5,8 @@
  * workbench page read and write the source of the asset modules it is editing, and keeps the
  * page live while it does:
  *
- *   GET  /__wb/file?path=References/...   → the file's text
- *   PUT  /__wb/file?path=...  (body)      → writes it (only under References/ and src/assets/)
+ *   GET  /__wb/file?path=src/assets/...   → the file's text
+ *   PUT  /__wb/file?path=...  (body)      → writes it (only under src/assets/)
  *   GET  /__wb/head?path=...              → the file as committed (git HEAD), for reverting
  *   GET  /__wb/diff?path=a,b              → `git diff HEAD` of those files
  *   PUT  /__wb/shot?name=...  (PNG body)  → saves a capture to shots/workbench/<name>.png
@@ -17,8 +17,8 @@
  * pages; a cross-site page can't write either, since its PUT needs a CORS preflight that gets no CORS
  * headers here. Other devices on the network can still view the workbench.
  *
- * A save from the workbench to a module the page can hot-swap (a References *.mjs asset or a
- * built-in model in src/assets/builtin) skips Vite's usual full reload: the page gets a
+ * A save from the workbench to a module the page can hot-swap (a *.mjs asset module or a
+ * built-in model in src/assets/models/builtin) skips Vite's usual full reload: the page gets a
  * `wb:file` message instead, re-imports the module and rebuilds only the model on screen.
  * Edits made anywhere else (your editor) reload the page as usual; it restores its state.
  */
@@ -27,7 +27,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Plugin, ViteDevServer } from 'vite';
 
-const WRITABLE = [/^References\/.+\.(mjs|js|ts)$/, /^src\/assets\/.+\.(ts|json)$/];
+const WRITABLE = [/^src\/assets\/.+\.(mjs|ts|json)$/];
 const READABLE = [...WRITABLE, /^src\/.+\.(ts|tsx|json|css)$/, /^public\/species\/media\.json$/];
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
@@ -39,7 +39,7 @@ function fromThisMachine(req: import('node:http').IncomingMessage) {
   return loopback && LOCAL_HOST.test(req.headers.host ?? '') && (!origin || LOCAL_ORIGIN.test(origin));
 }
 /** modules the page re-imports in place (everything else needs a page reload) */
-export const HOT_SWAPPABLE = /^(References\/.+\.mjs|src\/assets\/builtin\/[^/]+\.ts)$/;
+export const HOT_SWAPPABLE = /^src\/assets\/models\/(.+\.mjs|builtin\/[^/]+\.ts)$/;
 
 function git(root: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {

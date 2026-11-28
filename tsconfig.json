@@ -14,8 +14,7 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@ref/*": ["References/*"]
+      "@/*": ["src/*"]
     },
     "strict": true,
     "noUnusedLocals": true,

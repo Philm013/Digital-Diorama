@@ -25,11 +25,11 @@ import * as THREE from 'three';
 import { CATALOG, CATALOG_BY_ID, UNTUNED_PARAMS } from '../assets/catalog';
 import { buildModel, clearModelCache, type BuiltModel } from '../assets/builder';
 import { replaceModule, type ParamSpec } from '../assets/modules';
-import { BUILTINS } from '../assets/builtin';
-import * as marineNs from '../assets/builtin/marine';
-import * as fungiNs from '../assets/builtin/fungi';
-import * as fishNs from '../assets/builtin/fish';
-import { ANIMALS as WILDFORM } from '@ref/Animals/src/data/catalog';
+import { BUILTINS } from '../assets/models/builtin';
+import * as marineNs from '../assets/models/builtin/marine';
+import * as fungiNs from '../assets/models/builtin/fungi';
+import * as fishNs from '../assets/models/builtin/fish';
+import { ANIMALS as WILDFORM } from '../assets/models/wildform/species';
 import type { AssetDef } from '../assets/types';
 import type { Quality } from '../engine/types';
 import { CodeEditor } from './editor';
@@ -603,12 +603,12 @@ async function revertFile() {
 }
 
 /* hot swap: re-import a saved asset module and rebuild */
-const builtinNs: Record<string, Record<string, unknown>> = { 'src/assets/builtin/marine.ts': { ...marineNs }, 'src/assets/builtin/fungi.ts': { ...fungiNs }, 'src/assets/builtin/fish.ts': { ...fishNs } };
+const builtinNs: Record<string, Record<string, unknown>> = { 'src/assets/models/builtin/marine.ts': { ...marineNs }, 'src/assets/models/builtin/fungi.ts': { ...fungiNs }, 'src/assets/models/builtin/fish.ts': { ...fishNs } };
 async function hotSwap(path: string) {
   const url = '/' + path.split('/').map(encodeURIComponent).join('/') + '?t=' + Date.now();
   try {
     const mod = await import(/* @vite-ignore */ url);
-    if (path.startsWith('References/')) replaceModule('/' + path, mod);
+    if (path.endsWith('.mjs')) replaceModule('/' + path, mod);
     else if (builtinNs[path]) {
       const old = builtinNs[path];
       for (const [key, b] of Object.entries(BUILTINS)) {

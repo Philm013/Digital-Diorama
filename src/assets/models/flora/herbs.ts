@@ -10,7 +10,7 @@
  * createAsset({ species, height, spread, density, bloom, season, detail, seed })
  */
 import * as THREE from 'three';
-import type { ParamSpec } from '../modules';
+import type { ParamSpec } from '../../modules';
 import { blob, bentPath, wobble, spline, fbm3, noise3, type RGB } from '../proc/kit';
 import { type Ctx, type Season, makeCtx, finish, defaults, pick, rnd, blossom, bromeliad, V, TAU, clamp, lerp, sstep, rgb, mixc, shade, jitter, sweep, leaf, LEAF, along, sideOf } from './common';
 

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { ParamSpec } from '../modules';
-import { Noise2D, rng } from '../../engine/util';
+import type { ParamSpec } from '../../modules';
+import { Noise2D, rng } from '../../../engine/util';
 
 /* Small procedural kit in the same shape as the reference modules:
    createAsset(params) → THREE.Group, plus a params schema for the inspector. */

@@ -1,5 +1,5 @@
 import type * as THREE from 'three';
-import type { ParamSpec } from '../modules';
+import type { ParamSpec } from '../../modules';
 import { FUNGI_BUILTINS } from './fungi';
 import { createSeal, SEAL_PARAMS, SEAL_RIG, createCetacean, CETACEAN_PARAMS, CETACEAN_RIG, createManOWar, MANOWAR_PARAMS, MANOWAR_RIG, createSeaHare, SEAHARE_PARAMS } from './marine';
 import { createFish, FISH_PARAMS, FISH_RIG } from './fish';

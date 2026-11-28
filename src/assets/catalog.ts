@@ -1,4 +1,4 @@
-import { ANIMALS as WILDFORM } from '@ref/Animals/src/data/catalog';
+import { ANIMALS as WILDFORM } from './models/wildform/species';
 import type { AssetDef, Locomotion, SpeciesInfo } from './types';
 import { MODULE_PATHS as P } from './modules';
 import { MAMMALS } from './data-mammals';
@@ -129,15 +129,15 @@ for (const [species, emoji, sci, fam, biomes, fact, tags, group] of PLANTS) {
 }
 
 /* ---------------- trees ---------------- */
-const TREE = (id: string, name: string, emoji: string, family: 'deciduous' | 'conifer' | 'terraTree', params: Record<string, unknown>, biomes: string, info: SpeciesInfo, heavy = false, group = 'Trees') =>
-  add({ id: `tree/${id}`, name, emoji, category: 'plants', group, family, path: family === 'deciduous' ? P.deciduous : family === 'conifer' ? P.conifer : P.terraTree, params: { mergeForProduction: true, ...params }, hidden: ['mergeForProduction', 'speciesProfile', 'species'], loco: 'sessile', biomes: biomes.split(' '), info: { kingdom: 'Plantae', phylum: 'Tracheophyta', diet: 'producer', ...info }, heavy });
+const TREE = (id: string, name: string, emoji: string, family: 'deciduous', params: Record<string, unknown>, biomes: string, info: SpeciesInfo, heavy = false, group = 'Trees') =>
+  add({ id: `tree/${id}`, name, emoji, category: 'plants', group, family, path: P.deciduous, params: { mergeForProduction: true, ...params }, hidden: ['mergeForProduction', 'speciesProfile', 'species'], loco: 'sessile', biomes: biomes.split(' '), info: { kingdom: 'Plantae', phylum: 'Tracheophyta', diet: 'producer', ...info }, heavy });
 const DECID = { leafDetailLevel: 'low', groundDebrisVisible: false, fallingLeavesVisible: false };
 TREE('oak', 'Oak tree', '🌳', 'deciduous', { ...DECID, speciesProfile: 'oak', treeHeight: 9, canopyWidth: 8.5, foliageDensity: 0.5 }, 'forest garden', { scientific: 'Quercus robur', class: 'Magnoliopsida', order: 'Fagales', family: 'Fagaceae', fact: 'A single old oak can support over 2,000 other species.', tags: ['leaves', 'seeds', 'bark'] }, true);
 TREE('maple', 'Maple tree', '🍁', 'deciduous', { ...DECID, speciesProfile: 'maple', treeHeight: 9, canopyWidth: 8, foliageDensity: 0.45 }, 'forest', { scientific: 'Acer saccharum', class: 'Magnoliopsida', order: 'Sapindales', family: 'Sapindaceae', fact: 'Maple seeds (samaras) spin like helicopter blades as they fall.', tags: ['leaves', 'seeds', 'bark'] }, true);
 TREE('aspen', 'Aspen tree', '🌳', 'deciduous', { ...DECID, speciesProfile: 'aspen', treeHeight: 10, canopyWidth: 4.5, foliageDensity: 0.45 }, 'taiga forest mountain', { scientific: 'Populus tremuloides', class: 'Magnoliopsida', order: 'Malpighiales', family: 'Salicaceae', fact: 'An aspen grove can be one giant organism joined by its roots.', tags: ['leaves', 'bark'] }, true);
 TREE('willow', 'Weeping willow', '🌳', 'deciduous', { ...DECID, speciesProfile: 'willow', treeHeight: 8, canopyWidth: 8, foliageDensity: 0.25 }, 'wetland', { scientific: 'Salix babylonica', class: 'Magnoliopsida', order: 'Malpighiales', family: 'Salicaceae', fact: 'Willow bark contains salicin — the natural origin of aspirin.', tags: ['leaves', 'bark'] }, true);
 TREE('broadleaf', 'Broadleaf tree', '🌳', 'deciduous', { ...DECID, speciesProfile: 'stylized', treeHeight: 8.5, canopyWidth: 7.5, foliageDensity: 0.6 }, 'forest garden wetland grassland', { scientific: 'Angiospermae', class: 'Magnoliopsida', fact: 'Broadleaf trees drop their leaves in autumn to save water through the winter.', tags: ['leaves', 'seeds', 'fruit'] });
-/* ---- our own high-detail flora (src/assets/flora): replaces the low-poly placeholders ---- */
+/* ---- our own high-detail flora (src/assets/models/flora): replaces the low-poly placeholders ---- */
 const FLORA_HIDDEN = ['species', 'detail', 'season', 'kinds'];
 const FL = (id: string, name: string, emoji: string, species: string, biomes: string, info: SpeciesInfo, o: { group?: string; params?: Record<string, unknown>; seasonal?: boolean; heavy?: boolean; module?: 'trees' | 'herbs'; water?: AssetDef['water'] } = {}) =>
   add({
@@ -173,7 +173,7 @@ FL('tree/banana', 'Banana plant', '🍌', 'banana', 'rainforest garden', { class
 FL('tree/tree-fern', 'Tree fern', '🌿', 'tree-fern', 'rainforest forest', { phylum: 'Tracheophyta (ferns)', class: 'Polypodiopsida', order: 'Cyatheales', family: 'Dicksoniaceae', scientific: 'Dicksonia antarctica', fact: 'Ferns were growing like this before the dinosaurs; new fronds unroll from tight “fiddleheads”.', tags: ['leaves'] }, { group: 'Ferns' });
 FL('tree/bamboo', 'Bamboo grove', '🎋', 'bamboo', 'forest rainforest mountain', { class: 'Liliopsida', order: 'Poales', family: 'Poaceae', scientific: 'Phyllostachys edulis', fact: 'Bamboo is a giant grass — some kinds grow almost a metre in a day. Giant pandas eat little else.', tags: ['leaves', 'grass'] }, { group: 'Grasses' });
 FL('tree/blueberry', 'Blueberry bush', '🫐', 'blueberry', 'forest taiga mountain tundra', { class: 'Magnoliopsida', order: 'Ericales', family: 'Ericaceae', scientific: 'Vaccinium angustifolium', fact: 'Bears, foxes and birds eat the berries and spread the seeds in their droppings; the leaves blaze red in autumn.', tags: ['fruit', 'leaves', 'nectar'] }, { seasonal: true, heavy: false, group: 'Shrubs' });
-/* ---- wildflowers, grasses, ferns, lichens & water plants (src/assets/flora/herbs.ts) ---- */
+/* ---- wildflowers, grasses, ferns, lichens & water plants (src/assets/models/flora/herbs.ts) ---- */
 const HB = (id: string, name: string, emoji: string, species: string, biomes: string, group: string, info: SpeciesInfo, o: { params?: Record<string, unknown>; water?: AssetDef['water']; category?: AssetDef['category'] } = {}) => {
   FL(`plant/${id}`, name, emoji, species, biomes, info, { group, module: 'herbs', params: o.params, seasonal: true, heavy: false, water: o.water });
   if (o.category) CATALOG_FIX.push([`plant/${id}`, o.category]);

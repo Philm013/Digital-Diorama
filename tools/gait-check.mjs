@@ -11,7 +11,7 @@
 // measures how far it strays from where the ground carries it (back at the clip's speed): along the walk (`slipZ`) and
 // sideways (`slipX`), the worst stance of the cycle, in cm; `tail` is how far the tail goes below the ground.
 import * as THREE from 'three';
-import { createAsset, createClips, species as SPECIES } from '../References/Mammals/src/assets/animals/mammal-rig.mjs';
+import { createAsset, createClips, species as SPECIES } from '../src/assets/models/rigs/mammal-rig.mjs';
 import fs from 'node:fs';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => { if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1]?.startsWith('--') ? true : all[i + 1] ?? true]); return acc; }, []));

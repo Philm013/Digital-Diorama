@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
-import { ANIMALS as WILDFORM } from '@ref/Animals/src/data/catalog';
+import { ANIMALS as WILDFORM } from './models/wildform/species';
 import { WILDFORM_SIZE_FIX } from './data-wildform';
 import type { AssetDef } from './types';
 import { loadModule, type AssetModule } from './modules';
-import { BUILTINS } from './builtin';
+import { BUILTINS } from './models/builtin';
 import type { Quality } from '../engine/types';
 
 export type RigRole = 'head' | 'tail' | 'wing' | 'leg' | 'jaw' | 'body' | 'other';

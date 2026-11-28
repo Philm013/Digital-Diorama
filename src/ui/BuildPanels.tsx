@@ -300,7 +300,7 @@ function ActorInspector({ id, onCollapse, compact }: { id: string; onCollapse?: 
             <div className="space-y-1 rounded-2xl bg-black/[0.03] p-3 text-xs text-ink/65">
               {a.model && <div>Displayed at <b>×{a.model.exhibitScale >= 1.05 ? a.model.exhibitScale.toFixed(a.model.exhibitScale < 10 ? 1 : 0) : '1'}</b> life size{a.model.exhibitScale >= 1.05 ? ' so you can see it' : ''}.</div>}
               {a.model && <div>{a.model.triangles.toLocaleString()} triangles · {a.model.skinned ? 'skinned rig with clips' : a.model.rig.length ? `${a.model.rig.length} animated joints` : 'static'}</div>}
-              <div className="truncate">Source: <code className="text-[10px]">{def.path.replace('/References/', '').replace('/src/assets/', 'app: ')}</code></div>
+              <div className="truncate">Source: <code className="text-[10px]">{def.path.replace('/src/assets/models/', '')}</code></div>
             </div>
           </div>
         )}

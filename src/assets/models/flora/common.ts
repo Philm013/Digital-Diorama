@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { ParamSpec } from '../modules';
+import type { ParamSpec } from '../../modules';
 import { Geo, V, TAU, clamp, lerp, sstep, mulberry, rgb, mixc, shade, jitter, fbm3, noise3, sweep, leaf, LEAF, along, bentPath, sideOf, vcMaterial, meshOf, type RGB, type RNG } from '../proc/kit';
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
