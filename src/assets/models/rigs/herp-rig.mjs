@@ -1,6 +1,6 @@
 /*
- * HERP RIG — procedural, skinned reptiles and amphibians for three.js
- * One rig for every reptile and amphibian (Digital Diorama revision 11). Each animal is laid out from a measured
+ * HERP RIG — procedural, skinned reptiles and amphibians for three.js, built on the sweep engine in kit.mjs
+ * One rig for every reptile and amphibian. Each animal is laid out from a measured
  * reference — proportions taken from photographs, skeletons and field-guide measurements, written as fractions of
  * its snout–vent, total or carapace length — built from swept surfaces with a painted skin (scales, scutes and
  * markings rasterised into one texture), skinned to one skeleton and animated by clips that plant its feet.

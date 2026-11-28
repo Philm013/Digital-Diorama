@@ -1,5 +1,5 @@
-/* Regression for the standalone bird rig (rewritten from field measurements in Digital Diorama revision 11).
- * Run: node tools/test-bird-rig.mjs
+/* Regression check for the bird rig (src/assets/models/rigs/bird-rig.mjs).
+ * Run: node tools/bird-check.mjs
  *
  * Every species builds in every pose with finite geometry; standing poses keep everything above the ground (only
  * toes, claws and a resting tail touch it); the production merge is a handful of meshes; flightless birds have no

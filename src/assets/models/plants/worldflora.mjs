@@ -15,10 +15,9 @@
  *   });
  *
  * PARAMETERS
- *   Botanical parameters retain their original names and defaults.
- *   potStyle defaults to none for backward compatibility.
- *   potScale and potHeight are proportional multipliers; potRimThickness is
- *   a fraction of opening radius. Container coordinates are rebuilt, not scaled.
+ *   potStyle defaults to none. potScale and potHeight are proportional
+ *   multipliers; potRimThickness is a fraction of opening radius. Container
+ *   coordinates are rebuilt, not scaled.
  *
  * SPECS
  *   Reference mature vegetative heights: Monstera 1.45 m, bird-of-paradise

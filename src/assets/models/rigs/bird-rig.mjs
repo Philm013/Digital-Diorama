@@ -1,5 +1,5 @@
 /*
- * BIRD RIG — procedural, skinned birds for three.js (Digital Diorama revision 11: rewritten from scratch)
+ * BIRD RIG — procedural, skinned birds for three.js, built on the sweep engine in kit.mjs
  * Every bird is laid out from field-guide measurements of an adult — total length, wingspan, wing chord, tail, tarsus,
  * bill length and depth, head width and the neck as carried — and its family's measured outline. Body, neck and head
  * are one continuous skin; the bill grows from the face; the folded wing lies on the flank as a feathered blade whose
@@ -30,7 +30,7 @@
  * OPTIONS  species, size, leg / neck / bill / tail length, head size, wingspan, colourway, painted plumage, feather
  *          grain, seed, detail, rig mode, pose, shading, hide parts; specOverride deep-merges changes onto the species
  *          preset (measurements M, palette, plume, bill, eye, wing, tail, extras).
- * TEST     node tools/test-bird-rig.mjs — every species in every pose above the ground, clips, planted walk feet.
+ * TEST     node tools/bird-check.mjs — every species in every pose above the ground, clips, planted walk feet.
  * LICENSE  CC0 1.0 Universal — this module and all generated geometry.
  */
 import * as THREE from 'three';
@@ -1078,11 +1078,12 @@ const RIGS = new WeakMap();
 
 export function createAsset(input = {}) {
   const p = normalize(input);
-  // Digital Diorama extension: `specOverride` deep-merges measurement, anatomy and colour changes onto the preset
-  // (e.g. { M: [...], palette: { head: '#...' }, plume: { ... } }), so related species can share one rig
+  // `specOverride` deep-merges measurement, anatomy and colour changes onto the preset (e.g. { M: [...], palette: {
+  // head: '#...' }, plume: { ... } }), so related species can share one rig
   const base0 = SPECIES[p.species] || SPECIES[DEFAULT_SPECIES];
   const base = p.specOverride && typeof p.specOverride === 'object' ? mergeDeep(base0, p.specOverride) : base0;
-  // (an override from the old bird rig, e.g. `eye: 0.34`, can't replace a part's settings with a bare number)
+  // (an override that gives a part's settings as a bare number, e.g. `eye: 0.34`, keeps the preset's; so does a
+  // malformed M)
   for (const k of ['eye', 'bill', 'wing', 'tail', 'extras', 'plume', 'palette']) if (base[k] !== undefined && (typeof base[k] !== 'object' || base[k] === null || Array.isArray(base[k]))) base[k] = base0[k];
   if (!Array.isArray(base.M) || base.M.length !== 9 || !base.M.every(v => Number.isFinite(v) && v >= 0)) base.M = base0.M;
   const S = specFor(base, p);

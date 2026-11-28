@@ -7,10 +7,7 @@ import { buildModel } from '../assets/builder';
  * Rendered one at a time in the background with a private renderer, then kept
  * in memory and in IndexedDB so they appear instantly next time.
  */
-// (v9, Digital Diorama revision 8: the elephant, birds' feet, the harp seal and the frilled lizard changed shape)
-// (v10, Digital Diorama revision 9: every mammal's head, several bodies and horns, the seal, dolphin and whales changed shape)
-// (v11, revision 10: every mammal laid out from a measured reference; birds' postures and the owl's face; turtle shells)
-// (v12 and v13, revision 11: reptiles and amphibians on the herp rig, the mouse and hedgehog; the bird rig rewritten)
+// Bump VERSION whenever models change shape: thumbnails are cached per device (IndexedDB) under it.
 const VERSION = 'v13';
 const SIZE = 168;
 const mem = new Map<string, string>();

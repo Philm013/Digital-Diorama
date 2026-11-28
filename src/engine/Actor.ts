@@ -57,7 +57,7 @@ export class Actor {
   velocity = new THREE.Vector3();
   private lastPos = new THREE.Vector3();
   speedSmoothed = 0;
-  /** a quicker speed estimate, for gait playback rates (Digital Diorama revision 7) */
+  /** a quicker speed estimate, for gait playback rates */
   private speedFast = 0;
   private relFast = 0;
   /** true while a script is steering this actor (ambient life pauses) */
@@ -66,7 +66,7 @@ export class Actor {
   ambient: AmbientState = 'idle';
   private ambientTimer = 1 + Math.random() * 3;
   private ambientTarget = new THREE.Vector3();
-  /** ambient walking speed, eased in and out (Digital Diorama revision 7) */
+  /** ambient walking speed, eased in and out */
   private moveV = 0;
   private home = new THREE.Vector3();
   private circlePhase = Math.random() * Math.PI * 2;
@@ -173,8 +173,8 @@ export class Actor {
     a.clampWhenFinished = once;
     a.play();
     if (this.current && fade > 0) {
-      // (Digital Diorama revision 8: a gait fading out into a standing clip holds its pose; still playing, its planted
-      // feet kept walking back under an animal that had stopped)
+      // (a gait fading out into a standing clip holds its pose, so its planted feet don't keep walking back under a
+      // stopped animal)
       if (this.gaitMeta(this.currentName) && !this.gaitMeta(name)) this.current.timeScale = 0;
       this.current.crossFadeTo(a, fade, false);
     }
@@ -340,8 +340,8 @@ export class Actor {
     _v.y = 0;
     const sp = dt > 0 ? _v.length() / dt : 0;
     this.speedSmoothed += (sp - this.speedSmoothed) * Math.min(1, dt * 6);
-    // Digital Diorama revision 7: the playback rate follows a quicker estimate of the speed (about 50 ms behind) than the
-    // gait choice does; following the slow one (about 170 ms), planted feet slid as an animal set off or stopped
+    // The playback rate follows a quicker estimate of the speed (about 50 ms behind) than the gait choice does (about
+    // 170 ms), so planted feet don't slide as an animal sets off or stops.
     this.speedFast += (sp - this.speedFast) * Math.min(1, dt * 20);
     this.lastPos.copy(this.root.position);
     const scale = this.root.scale.x * m.exhibitScale;
@@ -396,9 +396,8 @@ export class Actor {
         if (has('glide') && rel > 3 && Math.sin(performance.now() / 2300 + this.circlePhase) > 0.35) this.play('glide', 0.4);
         else this.play('flap', 0.25, clamp(0.8 + rel * 0.05, 0.8, 1.6));
       } else {
-        // Digital Diorama revision 8: a bird's walk plants its feet and carries its stride, so it plays at the rate the
-        // feet need, starting and stopping (like the mammals) at a share of its own pace. It used to play at
-        // clamp(rel × 1.2, 0.6, 2.2) whatever the bird's size, and the feet slid about 1.8 hip heights a step.
+        // A bird's walk plants its feet and carries its stride, so it plays at the rate the feet need, starting and
+        // stopping (like the mammals) at a share of its own pace.
         const walk = this.gaitMeta('walk'), cur = this.currentName;
         const start = walk ? (walk.speed ?? 1) * (cur === 'walk' ? 0.08 : 0.12) : 0.12;
         if (rel > start) {
@@ -408,8 +407,8 @@ export class Actor {
       }
       return;
     }
-    // Digital Diorama revision 11: a swimmer in the water swims (the herp rig's swim clip: tail sculling, legs folded
-    // or flippers beating), at the rate its stroke carries it; on land it walks
+    // A swimmer in the water swims (the herp rig's swim clip: tail sculling, legs folded or flippers beating), at the
+    // rate its stroke carries it; on land it walks.
     const swim = this.wet ? this.gaitMeta('swim') : null;
     if (swim) {
       if (rel > (swim.speed ?? 0.5) * 0.06) this.playGait('swim', this.relFast, 0.35);
@@ -431,8 +430,8 @@ export class Actor {
   }
 
   /**
-   * play a gait clip at the rate that carries its planted feet back at ground speed `rel`, so they don't slide
-   * (Digital Diorama revision 7: down to a tenth of the clip's own speed; held at 0.3, a slow walk's feet slid 10-15 cm a step)
+   * play a gait clip at the rate that carries its planted feet back at ground speed `rel`, so they don't slide (down to a
+   * tenth of the clip's own speed, so a slow walk keeps its feet planted too)
    */
   private playGait(name: string, rel: number, fade = 0.15) {
     const m = this.gaitMeta(name), a = this.actions.get(name);
@@ -450,8 +449,7 @@ export class Actor {
     if (!walk) return false;
     const cur = this.currentName, moving = cur === 'walk' || cur === 'trot' || cur === 'gallop';
     const vWalk = walk.speed ?? Math.sqrt(0.2 * 9.81 * walk.hipH);
-    // (Digital Diorama revision 7: an animal moving at more than a tenth of its walking pace walks, slowly, rather than
-    // gliding in its idle; it used to stand still below about a fifth)
+    // (an animal moving at more than a tenth of its walking pace walks, slowly, rather than gliding in its idle)
     if (rel < vWalk * (moving ? 0.08 : 0.12)) {
       if (moving || !cur) this.play(this.idleClip(), 0.35);
       return true;
@@ -466,9 +464,8 @@ export class Actor {
 
   private animateRig(dt: number, t: number, rel: number) {
     const moving = rel > 0.08, stroke = this.model!.legStroke;
-    // Digital Diorama revision 8: pivot legs step at the cadence whose back-swing keeps pace with the ground (half a
-    // cycle per stroke, within 2-30 rad/s); at 6 + 4·rel whatever their length, a gecko's feet skidded about 15 cm a
-    // step and a Komodo dragon's back-swung twice as fast as it walked. Hoppers keep the old beat.
+    // Pivot legs step at the cadence whose back-swing keeps pace with the ground (half a cycle per stroke, within
+    // 2-30 rad/s), so short legs don't skid; hoppers keep a fixed beat.
     const cadence = stroke && this.def.loco !== 'hop' ? clamp((Math.PI * rel) / stroke, 2, 30) : 6 + rel * 4;
     this.gaitPhase += dt * (moving ? cadence : 0);
     const flying = this.airborne || (this.isFlyer && moving);
@@ -618,8 +615,8 @@ export class Actor {
     const dx = this.ambientTarget.x - p.x, dz = this.ambientTarget.z - p.z;
     const d = Math.hypot(dx, dz);
     let spd = (this.def.speed ?? 1) * Math.max(0.5, Math.sqrt(sc)) * 0.55;
-    // Digital Diorama revision 8: a bird on the ground walks no faster than its legs carry it (1.3 times its walk's own
-    // pace); a flying bird used to cross the ground at its flying speed, three to eight times that, its feet sliding
+    // A bird on the ground walks no faster than its legs carry it (1.3 times its walk's own pace), however fast it
+    // flies, so its feet don't slide.
     if (this.def.family === 'bird') { const w = this.gaitMeta('walk'); if (w?.speed) spd = Math.min(spd, w.speed * sc * 1.3); }
     if (d < 0.08 || this.ambientTimer <= 0) {
       this.ambient = 'idle';
@@ -632,8 +629,8 @@ export class Actor {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     this.root.rotation.y += clamp(diff, -dt * 2.5, dt * 2.5);
-    // Digital Diorama revision 7: walkers ease into their pace and slow down as they arrive (at full speed from the first
-    // frame, their planted feet slid while the walk faded in); the gait's playback follows the actual speed
+    // Walkers ease into their pace and slow down as they arrive, so planted feet don't slide while the walk fades in;
+    // the gait's playback follows the actual speed.
     const wantV = Math.abs(diff) < 0.9 ? spd * clamp(d / (spd * 0.5), 0.25, 1) : 0;
     this.moveV += (wantV - this.moveV) * Math.min(1, dt * 3);
     if (this.moveV > 1e-4) {

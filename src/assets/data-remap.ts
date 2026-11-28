@@ -4,12 +4,10 @@ import { MODULE_PATHS as P } from './modules';
 /**
  * Better models for some Wildform species.
  *
- * Wildform's generic body plans are fine for invertebrates, but a few vertebrates came out
- * wrong in the asset review (tools/review-assets.mjs): parrot beaks on songbirds, dog-shaped
- * rabbits and camels, a harp seal with a shark's dorsal fin. Those species are rebuilt on the
- * rigged mammal / bird / amphibian modules (with clips and gaits) or on our own procedural
- * models, using colours and anatomy taken from field guides. Asset ids stay the same, so
- * saved dioramas keep working.
+ * Wildform's generic body plans suit invertebrates, but not every vertebrate: songbirds, rabbits, camels and seals need
+ * anatomy the plans can't draw. Those species are built on the rigged mammal, bird and herp modules (with clips and
+ * gaits) or on the app's own models, with colours and anatomy taken from field guides. Asset ids stay the Wildform ones,
+ * so saved dioramas keep working.
  */
 const MAMMAL_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'hide', 'specOverride', 'coat', 'coatGrain', 'shading'];
 const BIRD_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'specOverride', 'coat', 'coatGrain', 'shading'];
@@ -22,7 +20,7 @@ const bird = (species: string, extra: Record<string, unknown>): Partial<AssetDef
   family: 'bird', path: P.bird, yaw: 0, hidden: BIRD_HIDDEN,
   params: { species, rigMode: 'skinned', mergeForProduction: true, ...extra },
 });
-// (Digital Diorama revision 11: reptiles and amphibians on the skinned herp rig, with clips)
+// (reptiles and amphibians on the skinned herp rig, with clips)
 const HERP_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'coat', 'coatGrain', 'shading'];
 const herp = (species: string, extra: Record<string, unknown> = {}): Partial<AssetDef> => ({
   family: 'reptile', path: P.herp, yaw: 0, hidden: HERP_HIDDEN,
@@ -40,7 +38,7 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
     specOverride: {
       // larger, open rosettes than a leopard's
       tail: { style: 'bushy', thk: 0.1, bush: 0.6, curl: 40 }, ear: { len: 0.17 }, pawW: 1.25, cheek: 1.25, spotFreq: 7.5,
-      // a short face under a high, domed forehead (Digital Diorama revision 9)
+      // a short face under a high, domed forehead
       snout: 0.27, snoutW: 0.56, snoutD: 0.62, stop: 0.75, dome: 1.22, eye: 0.06,
       palette: { body: '#cdc9be', belly: '#efece5', pattern: '#4b4c50', marking: '#77777a', eye: '#a3b4a2', nose: '#a08c88' },
     },
@@ -50,7 +48,7 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
     size: 1.3,
     specOverride: {
       flankStripe: false, rumpPatch: true, countershade: 0.55,
-      // a buck's horns: upright over the eyes, a forward prong half way up, tips hooked back (Digital Diorama revision 9)
+      // a buck's horns: upright over the eyes, a forward prong half way up, tips hooked back
       horns: { style: 'pronghorn', len: 0.75, thk: 0.09, s: 0.2, a: 0.35 },
       palette: { body: '#c08547', belly: '#f6f1e7', marking: '#2a1f17', horn: '#1c1916', nose: '#1c1714' },
     },
@@ -59,7 +57,7 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   'bactrian-camel': mammal('camel', {
     size: 1.0, legLen: 0.9,
     specOverride: {
-      // (Digital Diorama revision 10: broad, rounded humps; narrow ones stood up as tents)
+      // (broad, rounded humps)
       humps: [{ u: 0.36, h: 0.18, w: 0.3 }, { u: 0.74, h: 0.17, w: 0.3 }], wool: 0.035,
       palette: { body: '#99714c', belly: '#ae8862', mane: '#5e4128', hoof: '#4a3a2c', nose: '#3a2d24' },
     },
@@ -75,16 +73,16 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   }),
   // winter-white coat, small rounded ears, short muzzle and legs, thick tail
   'arctic-fox': mammal('fox', {
-    // (Digital Diorama revision 9: compact and short-legged under a deep winter coat, with a short muzzle and a round face)
+    // (compact and short-legged under a deep winter coat, with a short muzzle and a round face)
     size: 0.95, earSize: 0.5, muzzleLen: 0.68, legLen: 0.78, bodyLen: 0.85, tailLen: 0.95,
     specOverride: { snoutW: 0.44, headD: 0.28, dome: 1.22, cheekLow: 1.2, depth: 0.5, points: 0, tailTip: 0,
-      // (Digital Diorama revision 10: on the measured canid body, a deeper, broader body and thicker legs under the winter coat)
+      // (on the measured canid body: a deeper, broader body and thicker legs under the winter coat)
       refDepth: 1.18, refW: 1.25, foreBulkR: 1.15, hindBulkR: 1.1, palette: { body: '#f3f1ec', belly: '#fbfaf7', marking: '#e7e4dd', eye: '#ae8a3c', nose: '#1c1a19' } },
   }),
   // tiny sand-coloured desert fox with enormous ears and a black tail tip
   'fennec-fox': mammal('fox', {
     size: 0.52, earSize: 1.8, muzzleLen: 0.78, legLen: 0.86, bodyLen: 0.88,
-    // (the huge ears spread outward in a V: Digital Diorama revision 7)
+    // (the huge ears spread outward in a V)
     specOverride: { dome: 1.25, headD: 0.27, cheekLow: 1.15, snoutW: 0.42, points: 0, earZone: 'body', earTip: 0, tailTip: 0.12, tailTipZone: 'marking', ear: { spread: 34, cup: 0.6 }, palette: { body: '#e2c79c', belly: '#f7efe2', marking: '#3a2c20', eye: '#2a1d14', nose: '#1d1715' } },
   }),
   'eastern-gray-squirrel': mammal('squirrel', {
@@ -134,7 +132,7 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
   'humpback-whale': builtin('cetacean', { kind: 'humpback' }),
   'portuguese-man-o-war': { ...builtin('man-o-war'), water: 'surface' },
   'sea-hare': builtin('sea-hare'),
-  // fish the generic plans drew as faceted blobs (src/assets/models/builtin/fish.ts)
+  // fish built by the app's own fish model (src/assets/models/builtin/fish.ts)
   'great-white-shark': builtin('fish', { kind: 'shark' }),
   'manta-ray': builtin('fish', { kind: 'manta' }),
   'yellow-tang': builtin('fish', { kind: 'tang' }),

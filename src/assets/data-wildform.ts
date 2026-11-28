@@ -160,8 +160,8 @@ export const WILDFORM_STATUS: Record<string, string> = {
 /**
  * Size corrections for Wildform models: a factor on the built model so it matches the real adult. Its builders
  * read `length` as a body unit, and some plans come out much longer than the animal (the lizard plan adds a
- * tail about as long as `length` again, so the "3.4 m" alligator was built 8.3 m long). Measured in the animal
- * workbench; the comment gives the built size and the real one it now matches.
+ * tail about as long as `length` again, so a 3.4 m alligator plan builds 8.3 m long). Measured in the animal
+ * workbench; each comment gives the size the plan builds and the real size the factor brings it to.
  */
 export const WILDFORM_SIZE_FIX: Record<string, number> = {
   'american-alligator': 0.41, // 8.3 m → 3.4 m total

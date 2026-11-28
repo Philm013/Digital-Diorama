@@ -100,7 +100,7 @@ function zonesFor(name, overrides = {}, config = ASSET) {
 function prep(geo, hex, keepColors = false) {
   if (geo.index) { const original = geo; geo = geo.toNonIndexed(); original.dispose(); }
   geo.deleteAttribute('uv'); geo.deleteAttribute('normal');
-  // Digital Diorama revision: parts flagged `vc` bring their own painted vertex colours
+  // parts flagged `vc` bring their own painted vertex colours
   if (keepColors && geo.attributes.color) return geo;
   const c = new THREE.Color(hex), n = geo.attributes.position.count, col = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
@@ -854,9 +854,8 @@ function arthropod(parts, glass, p, C, config) {
     return;
   }
   if (bee && config.id === 'bumblebee') {
-    // Rounder and furrier than a honeybee. (Digital Diorama revision: Bombus terrestris is black with one yellow
-    // band at the front of the abdomen, a yellow collar on the thorax and a white tail; it was drawn as a yellow
-    // abdomen ringed in black.)
+    // Rounder and furrier than a honeybee. Bombus terrestris is black with one yellow band at the front of the
+    // abdomen, a yellow collar on the thorax and a white tail.
     ellipsoid(parts, -0.16 * u, y + 0.08 * v, 0, 0.30 * u, 0.22 * mass * v, 0.21 * mass * v, C.dark, 'furry-abdomen', p.seg);
     const ring = (bx, r, t, c, n) => { const g = new THREE.TorusGeometry(r, t, 7, 22); g.rotateY(Math.PI / 2); g.translate(bx * u, y + 0.08 * v, 0); parts.push({ g, c, n }); };
     ring(-0.02, 0.168 * mass * v, 0.05 * v, C.skin, 'abdomen-band');
@@ -976,13 +975,13 @@ function arthropod(parts, glass, p, C, config) {
         sweep(parts, [[lx, y - 0.02 * v, s * 0.09 * v], [lx - 0.05 * v, y * 0.55, s * 0.19 * v], [lx - 0.02 * v, 0.014 * v, s * 0.25 * v]], [0.020 * v, 0.013 * v, 0.004 * v], i % 2 ? C.accent : C.skin, `walking-leg-${s}-${i + 1}`, { steps: 8, radial: 5 });
         continue;
       }
-      sweep(parts, [[x, y, s * (crab ? 0.26 : 0.11) * mass * v], [x + drift * 0.7, y + (spider ? 0.13 : 0.035) * v, s * reach * 0.61], [x + drift, 0.11 * v, s * reach], [x + drift * 1.25, 0.016 * v, s * reach * 1.12]], [0.042 * v, 0.033 * v, 0.021 * v, 0.002 * v], lady ? C.dark : i % 2 ? C.accent : C.skin, `walking-leg-${s}-${i + 1}`, { steps: 10, radial: 6 }); // Digital Diorama revision: a ladybird's legs are black
+      sweep(parts, [[x, y, s * (crab ? 0.26 : 0.11) * mass * v], [x + drift * 0.7, y + (spider ? 0.13 : 0.035) * v, s * reach * 0.61], [x + drift, 0.11 * v, s * reach], [x + drift * 1.25, 0.016 * v, s * reach * 1.12]], [0.042 * v, 0.033 * v, 0.021 * v, 0.002 * v], lady ? C.dark : i % 2 ? C.accent : C.skin, `walking-leg-${s}-${i + 1}`, { steps: 10, radial: 6 }); // a ladybird's legs are black
     }
     if ((crab && !horseshoe) || scorpion || lobster) {
       const z = s * (lobster ? 0.22 : 0.48) * v;
       if (lobster) {
-        // Digital Diorama revision: an American lobster's claws are massive (a heavy crusher and a slimmer
-        // cutter, each about a third of the body long); they were small pincers
+        // An American lobster's claws are massive: a heavy crusher and a slimmer cutter, each about a third of the
+        // body long.
         const k = s > 0 ? 1.15 : 0.9;
         sweep(parts, [[0.15 * u, y - 0.02 * v, s * 0.15 * v], [0.30 * u, y + 0.04 * v, s * 0.28 * v], [0.45 * u, y + 0.08 * v, s * 0.22 * v]], [0.04 * v, 0.055 * v, 0.07 * v], C.accent, 'cheliped-arm-' + s, { steps: 8, radial: 7 });
         ellipsoid(parts, 0.45 * u + 0.13 * v, y + 0.09 * v, s * 0.22 * v, 0.2 * v * k, 0.085 * v * k, 0.12 * v * k, C.skin, 'claw-palm-' + s, 12);
@@ -1164,9 +1163,8 @@ function sponge(parts, glass, p, C, config) {
     for (let i = 0; i < density; i++) for (const sign of [-1, 1]) { const points = []; for (let j = 0; j <= 24; j++) { const t = j / 24, a = (i / density + sign * t * 0.5) * Math.PI * 2, r = radiusAt(t); points.push([Math.cos(a) * r, (0.04 + t * 0.94) * u, Math.sin(a) * r]); } sweep(parts, points, [0.006 * u, 0.006 * u], i % 2 ? C.skin : C.underside, `silica-strut-${i}-${sign}`, { steps: 24, radial: 5 }); }
     for (let j = 0; j <= 10; j++) { const t = j / 10, geo = new THREE.TorusGeometry(radiusAt(t), 0.007 * u, 5, density * 2); geo.rotateX(Math.PI / 2); geo.translate(0, (0.04 + t * 0.94) * u, 0); parts.push({ g: geo, c: C.skin, n: 'lattice-ring-' + j }); }
   } else {
-    // Digital Diorama revision: a thick-walled vase whose outer wall is folded into deep vertical ridges with a
-    // knobbly surface, open only at the top (the osculum). It was flat quads with some left out as "pores",
-    // which read as a wooden barrel with windows.
+    // A thick-walled vase whose outer wall is folded into deep vertical ridges with a knobbly surface, open only at
+    // the top (the osculum).
     const N = 72, R = 22, ridges = 14, wall = 0.055 * u, top = 0.925 * u;
     const lathe = (fn, name, color, flip = false) => {
       const vertices = [], indices = [];
@@ -1265,8 +1263,7 @@ function colony(parts, glass, p, C, config) {
   if (b === 'coral') {
     const branch = (start, end, radius, depth, index) => {
       const mid = new THREE.Vector3(...start).lerp(new THREE.Vector3(...end), 0.5); mid.x += radius * 0.3;
-      // Digital Diorama revision: staghorn branches stay thick and nearly cylindrical, one tan-brown with pale
-      // growing tips (they tapered to hair-thin twigs in two alternating colours)
+      // Staghorn branches stay thick and nearly cylindrical, tan-brown with pale growing tips.
       sweep(parts, [start, mid.toArray(), end], [radius, radius * 0.95, radius * 0.85], C.skin, 'branch-' + index, { steps: 8, radial: Math.max(6, Math.round(p.seg * 0.6)) });
       if (depth <= 0) { ellipsoid(parts, ...end, radius * 0.86, radius * 1.1, radius * 0.86, C.underside, 'growing-tip-' + index, 8); return; }
       const n = depth >= 2 ? 3 : 2;
@@ -1309,9 +1306,8 @@ function bivalve(parts, glass, p, C, config) {
 }
 
 /**
- * Giant clam (Digital Diorama revision). Tridacna sits hinge-down in the reef with its two heavy valves gaping
- * upward; their rims are thrown into 4-6 big wavy folds with scalloped ribs, and the gape is filled by the
- * fleshy mantle, mottled teal, blue and gold. (It was drawn as a lamp shell: a flat lid on a stalk.)
+ * Giant clam: Tridacna sits hinge-down in the reef with its two heavy valves gaping upward; their rims are thrown into
+ * 4-6 big wavy folds with scalloped ribs, and the gape is filled by the fleshy mantle, mottled teal, blue and gold.
  */
 function giantClam(parts, p, C) {
   const u = p.bodyLength, mass = p.bodyMass, gape = 0.42 + 0.3 * p.valveOpening;
@@ -1420,9 +1416,7 @@ function snake(parts, glass, p, C, config) {
   const curve = new THREE.CatmullRomCurve3(pts.map(v => new THREE.Vector3(...v)), false, 'catmullrom', 0.45);
   const radii = [girth * 0.16, girth * 0.62, girth * 0.98, girth, girth * 0.95, girth * 0.66, girth * 0.30];
   sweep(parts, pts, radii, C.skin, 'body', { curve, steps: 72, radial: seg });
-  // Long lateral stripes are the classic garter-snake marking. (Digital Diorama revision: they sat inside the
-  // body, centred at 0.79 of its radius with a 0.16 tube, so none showed; now they lie on the surface, following
-  // the body's taper.)
+  // Long lateral stripes are the classic garter-snake marking; they lie on the body's surface, following its taper.
   const bodyR = (t) => { const f = Math.min(1, Math.max(0, t)) * (radii.length - 1), i = Math.min(radii.length - 2, Math.floor(f)); return radii[i] + (radii[i + 1] - radii[i]) * (f - i); };
   for (const lane of [-1, 0, 1]) {
     const stripe = [], rs = [];

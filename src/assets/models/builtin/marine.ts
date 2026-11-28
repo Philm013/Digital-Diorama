@@ -25,11 +25,10 @@ export const SEAL_PARAMS: Record<string, ParamSpec> = {
   seed: { type: 'range', default: 3, min: 1, max: 999, step: 1, label: 'Seed' },
 };
 /*
- * Digital Diorama revision 9: the seal was an egg twice as wide as a real one (0.9 m across a 1.75 m body) with its
- * face on the end of it. A harp seal is a spindle about a quarter as wide as it is long, widest at the chest, lying on
- * its belly with the neck and the small, round, dog-like head lifted; big dark eyes, a short broad muzzle with
- * whiskers, no ear flaps. Fore flippers short, clawed and held against the chest; the hind flippers trail as a pair of
- * fans whose outer toes are longest.
+ * A harp seal is a spindle about a quarter as wide as it is long, widest at the chest, lying on its belly with the neck
+ * and the small, round, dog-like head lifted; big dark eyes, a short broad muzzle with whiskers, no ear flaps. Fore
+ * flippers short, clawed and held against the chest; the hind flippers trail as a pair of fans whose outer toes are
+ * longest.
  */
 export function createSeal(params: Record<string, unknown> = {}) {
   const P = p0(SEAL_PARAMS, params);
@@ -106,11 +105,10 @@ export const SEAL_RIG = {
 
 /* =============================== whales & dolphins =============================== */
 /*
- * Digital Diorama revision 9: bodies from real proportions. The dolphin was a football 0.78 m deep on a 2.6 m body (a
- * real one is about 0.47 m) with no forehead; the humpback a fat cigar with a pointed nose. Now: tail stocks that are
- * tall and narrow (keeled) behind a spindle body; the dolphin's rounded melon dropping at a crease to its short beak;
- * the humpback's broad, flat-topped, knobbly rostrum, deep pleated throat and long white flippers; falcate dorsal fins
- * and swept, notched flukes. Stations: t from the fluke insertion (0) to the snout (1); y, w, h as fractions of L.
+ * Bodies from real proportions: tail stocks that are tall and narrow (keeled) behind a spindle body; the dolphin's
+ * rounded melon dropping at a crease to its short beak (a 2.6 m dolphin is about 0.47 m deep); the humpback's broad,
+ * flat-topped, knobbly rostrum, deep pleated throat and long white flippers; falcate dorsal fins and swept, notched
+ * flukes. Stations: t from the fluke insertion (0) to the snout (1); y, w, h as fractions of L.
  */
 type CetKind = 'dolphin' | 'orca' | 'humpback';
 const CETACEANS: Record<CetKind, { L: number; back: string; flank: string; belly: string; fin: number; finAt: number; finChord: number; finSweep: number; flipper: number; flipperAt: number; flukes: number; eyeT: number }> = {

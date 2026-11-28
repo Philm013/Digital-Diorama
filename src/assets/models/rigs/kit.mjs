@@ -83,9 +83,8 @@ export function fbm(x, y, z, s = 0, oct = 3) {
   return r / n;
 }
 /**
- * Cellular (Worley) noise: [nearest, second nearest] feature distances. (Digital Diorama revision 8: the home cell is
- * searched first and a neighbouring cell is skipped when even its nearest corner is no closer than the second-nearest
- * point found so far; the same result, about twice as fast.)
+ * Cellular (Worley) noise: [nearest, second nearest] feature distances. The home cell is searched first, and a
+ * neighbouring cell is skipped when even its nearest corner is no closer than the second-nearest point found so far.
  */
 const WORLEY_ORDER = [0, -1, 1];
 export function worley(x, y, z, s = 0) {
@@ -202,8 +201,8 @@ export function loft(o) {
     const s = u * len, sig = Math.max(len * 0.004, bendK * sizeAt(u)), acc = V3();
     for (let i = 0; i <= NF; i++) { const d = (fs[i] - s) / sig; if (d * d < 9) acc.addScaledVector(ft[i], Math.exp(-d * d)); }
     const t = acc.lengthSq() < 1e-12 ? raw : acc.normalize();
-    // Digital Diorama revision 10: `level(u)` (0..1) stands a section upright, its tangent turned level along the
-    // path's heading: a body measured as vertical slices keeps them so where the path rises into a steep neck
+    // `level(u)` (0..1) stands a section upright, its tangent turned level along the path's heading: a body measured
+    // as vertical slices keeps them so where the path rises into a steep neck
     const lv = o.level ? o.level(u) : 0;
     if (lv > 0) { const hz = V3(t.x, 0, t.z); if (hz.lengthSq() > 1e-12) t.lerp(hz.normalize(), lv).normalize(); }
     return t;
@@ -233,8 +232,8 @@ export function loft(o) {
       const a = (j / R) * TAU;
       let [x, y] = sePoint(a, w, ht, hb, nt, nb);
       if (bump) { const f = 1 + bump(u, a, x, y); x *= f; y *= f; }
-      // Digital Diorama extension: `sect` reshapes a section in its own plane (the torso's keeled chest,
-      // hanging belly and flat croup), returning the new [side, up] offsets
+      // `sect` reshapes a section in its own plane (the torso's keeled chest, hanging belly and flat croup),
+      // returning the new [side, up] offsets
       if (o.sect) [x, y] = o.sect(u, a, x, y, ht, hb);
       row.push(C[k].clone().addScaledVector(Sides[k], x + ox).addScaledVector(Ups[k], y + oy));
     }
@@ -301,7 +300,7 @@ export function emit(part, g, zone, skin) {
   const sf = typeof skin === 'function' ? skin : () => skin;
   const rows = g.rows, us = g.us, R = g.R, nr = rows.length;
   const Wt = rows.map((row, k) => row.map((P, j) => sf(us[k], (j / R) * TAU, P)));
-  // Digital Diorama revision: a painted loft becomes a coat-atlas patch (see COAT ATLAS)
+  // a painted loft becomes a coat-atlas patch (see COAT ATLAS)
   const pt = part.coat && typeof zone === 'function' ? loftPatch(g, zf) : null, T = pt && pt.t, L0 = pt ? pt.lead : 0;
   // (herp rig: a loft may carry its own scale pattern for the atlas, `g.scales`; null = smooth skin)
   if (pt && g.scales !== undefined) pt.scales = g.scales;
@@ -374,7 +373,7 @@ export function sheet(part, o) {
       Wt[i].push(sf(i / nu, j / nv, P[i][j]));
     }
   }
-  // Digital Diorama revision: a painted membrane becomes two coat-atlas patches, one per face
+  // a painted membrane becomes two coat-atlas patches, one per face
   const pF = part.coat && typeof o.zone === 'function' ? sheetPatch(F, zf, 1) : null, pB = pF && sheetPatch(B, zf, -1);
   if (pF && o.scales !== undefined) { pF.scales = o.scales; pB.scales = o.scales; }
   for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
@@ -505,9 +504,9 @@ export function bakeClip(info, name, duration, frames, sample, loop = true, refi
   const times = [], samples = [];
   let us = Array.from({ length: frames }, (_, i) => i / (frames - 1)), ss = us.map(u => sample(loop ? u % 1 : u) || {});
   if (loop) ss[frames - 1] = ss[0];
-  // Digital Diorama revision 8: a key half way between two keys wherever the joints turn so fast between them (a leg near
-  // full stretch at the end of a gallop's stance swung its thigh 22° in one key) that interpolating their rotations moves
-  // a planted foot off its place (a giraffe's sank 2 cm); up to three times, so a fast stretch gets up to seven keys more
+  // A key half way between two keys wherever the joints turn so fast between them (a leg near full stretch at the end
+  // of a gallop's stance can swing its thigh 22° in one key) that interpolating their rotations would move a planted
+  // foot off its place; up to three times, so a fast stretch gets up to seven more keys.
   if (refine) {
     // intervals to check: every one at first, then only the halves of those just split
     let todo = us.slice(0, -1).map((_, i) => i);
@@ -566,14 +565,12 @@ export function applySample(rig, sample) {
 
 /* ── shared materials (vertex colours, flat shading, double sided membranes) ── */
 /* ════════════════════════════════════════════════════════════════════════════
- *  COAT ATLAS  (Digital Diorama revision — shared verbatim by the mammal and bird rigs)
- *  Painters used to be sampled once per quad, so stripes, spots, masks and patch
- *  edges followed the mesh grid in staircases. Every painted loft and membrane now
- *  records its grid as a patch; finish() paints each patch into one texture per
- *  asset at an even texel size (adaptive sampling, softened edges and a faint coat
- *  grain on fur and feathers) and the triangles carry UVs into it. Parts with one
- *  constant colour keep plain vertex colours. Normals are smoothed across faces
- *  (keeping creases sharper than COAT_CREASE degrees).
+ *  COAT ATLAS
+ *  Every painted loft and membrane records its grid as a patch; finish() paints each patch into one texture per asset
+ *  at an even texel size (adaptive sampling, softened edges and a faint coat grain on fur and feathers) and the
+ *  triangles carry UVs into it, so stripes, spots, masks and patch edges are smooth curves rather than following the
+ *  mesh grid. Parts with one constant colour keep plain vertex colours. Normals are smoothed across faces (keeping
+ *  creases sharper than COAT_CREASE degrees).
  * ════════════════════════════════════════════════════════════════════════════ */
 export const COAT_RES = { draft: 300, standard: 420, high: 560 }; // texels across the model's bounding diagonal
 const COAT_PAD = 2, COAT_BLOCK = 4, COAT_CREASE = 62, COAT_MAX = 2048;
@@ -673,9 +670,9 @@ function paintAtlas(parts, cfg, hexOf) {
 
 /** Rasterises one patch's painter into its tile (lattice-sampled; uniform blocks skip the painter). */
 /**
- * Digital Diorama revision 8: a periodic 2D net of creases (the cell edges of a jittered grid, Worley f2 - f1), exact and
- * built once. paintPatch draws it over a patch's texels for creased skin (`cfg.crease`: elephants): a patch's texels are
- * laid out at an even spacing over the surface, so the net needs no 3D noise per texel, only one read.
+ * A periodic 2D net of creases (the cell edges of a jittered grid, Worley f2 - f1), exact and built once. paintPatch
+ * draws it over a patch's texels for creased skin (`cfg.crease`: elephants): a patch's texels are laid out at an even
+ * spacing over the surface, so the net needs no 3D noise per texel, only one read.
  */
 const CREASE_TILE = 128, CREASE_CELLS = 10;
 let CREASE2 = null;
@@ -695,11 +692,11 @@ function creaseTile() {
 }
 
 /**
- * Digital Diorama revision 10 (herp rig): scales. A periodic tile of a staggered lattice of rounded scales (rows offset by
- * half a scale, a little jittered), storing for each texel its distance to the nearest scale's edge (f2 - f1) and to its
- * centre (f1). paintPatch darkens the seams between scales and lightens their crowns. `kind`: 'granular' (round beads:
- * geckos, chameleons, Gila-like lizards), 'keeled' (scales longer than wide, rows along the body: snakes, iguanas, most
- * lizards), 'plates' (large squarish shields: crocodilian backs, tortoise legs, snake bellies).
+ * Scales: a periodic tile of a staggered lattice of rounded scales (rows offset by half a scale, a little jittered),
+ * storing for each texel its distance to the nearest scale's edge (f2 - f1) and to its centre (f1). paintPatch darkens
+ * the seams between scales and lightens their crowns. `kind`: 'granular' (round beads: geckos, chameleons, Gila-like
+ * lizards), 'keeled' (scales longer than wide, rows along the body: snakes, iguanas, most lizards), 'plates' (large
+ * squarish shields: crocodilian backs, tortoise legs, snake bellies).
  */
 const SCALE_TILE = 128;
 const SCALE_TILES = new Map();
@@ -817,9 +814,8 @@ function smoothNormals(geo, deg = COAT_CREASE) {
   const pos = geo.attributes.position.array, n = pos.length / 3;
   geo.computeBoundingBox();
   const bb = geo.boundingBox, eps = Math.max(1e-9, bb.max.distanceTo(bb.min) * 2e-6);
-  // (Digital Diorama revision 8: vertices are grouped by their quantised position through an integer hash with chains,
-  // not string keys; the same groups, about three times faster. fn: each face's normal, un: its unit normal, both
-  // stored in the slots of the face's first vertex)
+  // (vertices are grouped by their quantised position through an integer hash with chains; fn: each face's normal,
+  // un: its unit normal, both stored in the slots of the face's first vertex)
   const fn = new Float32Array(n), un = new Float32Array(n), q = new Int32Array(n * 3), hs = new Int32Array(n), next = new Int32Array(n), head = new Map();
   for (let f = 0; f < n; f += 3) {
     const ax = pos[f * 3], ay = pos[f * 3 + 1], az = pos[f * 3 + 2];
@@ -850,10 +846,10 @@ function smoothNormals(geo, deg = COAT_CREASE) {
 }
 
 /**
- * Digital Diorama revision 5: blends normals across the seams where limbs leave the body. Body and legs are
- * separate surfaces, so even where they meet smoothly their normals jump and the join shades as a hard crease.
- * Each vertex of either surface that lies within `radius` of the other bends its normal toward the nearest
- * vertex of the other one (half way at contact, none at the radius), so the shading runs on across the join.
+ * Blends normals across the seams where limbs leave the body. Body and legs are separate surfaces, so even where they
+ * meet smoothly their normals jump and the join would shade as a hard crease. Each vertex of either surface that lies
+ * within `radius` of the other bends its normal toward the nearest vertex of the other one (half way at contact, none
+ * at the radius), so the shading runs on across the join.
  */
 function blendSeamNormals(geoA, geoB, radius) {
   const pa = geoA.attributes.position.array, pb = geoB.attributes.position.array, na = geoA.attributes.normal.array, nb = geoB.attributes.normal.array;
@@ -927,7 +923,7 @@ export function finish(build, opt) {
     if (!colorCache.has(z)) { const al = opt.alias || {}; const h = zones[z] ?? zones[al[z]] ?? zones[al[al[z]]] ?? zones[Object.keys(zones)[0]]; colorCache.set(z, new THREE.Color(h)); }
     return colorCache.get(z);
   };
-  // Digital Diorama revision: painted patches go into one coat texture (see COAT ATLAS)
+  // painted patches go into one coat texture (see COAT ATLAS)
   const hexOfZone = (z) => { const al = opt.alias || {}; return zones[z] ?? zones[al[z]] ?? zones[al[al[z]]] ?? zones[Object.keys(zones)[0]]; };
   const coat = opt.coat ? paintAtlas(build.parts.filter(p => p.count > 0 && !p.glass), opt.coat, hexOfZone) : null;
   const smooth = !!(opt.coat && opt.coat.smooth !== false);
@@ -983,8 +979,8 @@ export function finish(build, opt) {
   if (smooth && opt.seamRadius) {
     const body = live.find(p => p.name === 'body' && !p.glass);
     if (body) for (const p of live) if (/^leg-/.test(p.name) && !p.glass) blendSeamNormals(geoOf.get(body), geoOf.get(p), opt.seamRadius);
-    // (Digital Diorama revision 8: other parts that meet along a shared row, such as the elephant's face and trunk;
-    // revision 9: the skull where it meets the neck, so the join behind the ears shades as one surface)
+    // (other parts that meet along a shared row: the elephant's face and trunk, the skull where it meets the neck, so
+    // the join behind the ears shades as one surface)
     for (const [a, b] of opt.seams || []) { const A = live.find(p => p.name === a && !p.glass), Bp = live.find(p => p.name === b && !p.glass); if (A && Bp) blendSeamNormals(geoOf.get(A), geoOf.get(Bp), opt.seamRadius * 0.5); }
   }
   for (const glass of [false, true]) {

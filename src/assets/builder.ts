@@ -40,7 +40,7 @@ export interface BuiltModel {
   exhibitScale: number;
   /**
    * pivot-legged walkers: the mean distance a foot sweeps along the ground between its leg's two extreme angles (model
-   * units), so the gait can step at the cadence that keeps pace with the ground (Digital Diorama revision 8)
+   * units), so the gait can step at the cadence that keeps pace with the ground
    */
   legStroke?: number;
   skinned: boolean;
@@ -247,8 +247,8 @@ export async function buildModel(def: AssetDef, userParams: Record<string, unkno
 }
 
 /**
- * Digital Diorama revision 8: how far a pivot leg's foot (the lowest vertex under the pivot) travels along the ground
- * between the leg's min and max angles, averaged over the legs, in model units (undefined without leg pivots).
+ * How far a pivot leg's foot (the lowest vertex under the pivot) travels along the ground between the leg's min and max
+ * angles, averaged over the legs, in model units (undefined without leg pivots).
  */
 function legStrokeOf(object: THREE.Object3D, rig: RigNode[], ex: number) {
   const legs = rig.filter((r) => r.role === 'leg' && !r.scale);

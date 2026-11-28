@@ -43,7 +43,6 @@ export const HERP_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail',
 for (const r of REPTILES) {
   add({
     id: `reptile/${r.id}`, name: r.name, emoji: r.emoji, category: 'animals', group: r.info.class === 'Amphibia' ? 'Amphibians' : 'Reptiles', family: 'reptile',
-    // (Digital Diorama revision 11: every reptile and amphibian on the skinned herp rig, with clips)
     path: P.herp, params: { species: r.id, rigMode: 'skinned', mergeForProduction: true }, hidden: HERP_HIDDEN, loco: r.loco, biomes: r.biomes, info: r.info,
     speed: r.loco === 'hop' ? 0.6 : r.loco === 'slither' ? 0.5 : 0.45, water: r.loco === 'swim' ? 'column' : undefined,
   });
@@ -137,7 +136,7 @@ TREE('maple', 'Maple tree', '🍁', { ...DECID, speciesProfile: 'maple', treeHei
 TREE('aspen', 'Aspen tree', '🌳', { ...DECID, speciesProfile: 'aspen', treeHeight: 10, canopyWidth: 4.5, foliageDensity: 0.45 }, 'taiga forest mountain', { scientific: 'Populus tremuloides', class: 'Magnoliopsida', order: 'Malpighiales', family: 'Salicaceae', fact: 'An aspen grove can be one giant organism joined by its roots.', tags: ['leaves', 'bark'] }, true);
 TREE('willow', 'Weeping willow', '🌳', { ...DECID, speciesProfile: 'willow', treeHeight: 8, canopyWidth: 8, foliageDensity: 0.25 }, 'wetland', { scientific: 'Salix babylonica', class: 'Magnoliopsida', order: 'Malpighiales', family: 'Salicaceae', fact: 'Willow bark contains salicin — the natural origin of aspirin.', tags: ['leaves', 'bark'] }, true);
 TREE('broadleaf', 'Broadleaf tree', '🌳', { ...DECID, speciesProfile: 'stylized', treeHeight: 8.5, canopyWidth: 7.5, foliageDensity: 0.6 }, 'forest garden wetland grassland', { scientific: 'Angiospermae', class: 'Magnoliopsida', fact: 'Broadleaf trees drop their leaves in autumn to save water through the winter.', tags: ['leaves', 'seeds', 'fruit'] });
-/* ---- our own high-detail flora (src/assets/models/flora): replaces the low-poly placeholders ---- */
+/* ---- the app's own high-detail flora (src/assets/models/flora) ---- */
 const FLORA_HIDDEN = ['species', 'detail', 'season', 'kinds'];
 const FL = (id: string, name: string, emoji: string, species: string, biomes: string, info: SpeciesInfo, o: { group?: string; params?: Record<string, unknown>; seasonal?: boolean; heavy?: boolean; module?: 'trees' | 'herbs'; water?: AssetDef['water'] } = {}) =>
   add({

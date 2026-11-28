@@ -195,9 +195,8 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         const ref = at && [...text.slice(at[0], at[1]).matchAll(/\bref:\s*REF\.(\w+)/g)].pop()?.[1];
         return ref ? objectEntry('const REF = {', ref)(text) : null;
       };
-      // (Digital Diorama revision 8: the elephant has its own builder and clips; every mammal shares the limb-root blend,
-      // the feet's line keeping, the girdle-drop smoothing and the gait tables. Revision 10: the others are laid out from
-      // measured reference tables)
+      // (the elephant has its own builder and clips; every other mammal is laid out from a measured reference table;
+      // all share the limb-root blend, the feet's line keeping, the girdle-drop smoothing and the gait tables)
       const measured = species === 'elephant' ? [] : [
         region('Reference table (measured layout)', refTable),
         region('Measured layout (refLayout)', declaration('refLayout')),
@@ -252,7 +251,6 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
       break;
     }
     case 'bird':
-      // (Digital Diorama revision 11: the bird rig rewritten from field measurements)
       add(def.path, 'bird-rig.mjs', [
         region(`Species preset · ${species}`, objectEntry('const SPECIES = {', species)),
         region('Families (torso, skull, legs)', declaration('FAMILIES')),
@@ -275,7 +273,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
       if (!wildId) add('src/assets/data-birds.ts', 'data-birds.ts', [region(`Row · ${species}`, row(species))]);
       break;
     case 'reptile': {
-      // (Digital Diorama revision 11: reptiles and amphibians on the herp rig: preset, its measured table, its body plan)
+      // (reptiles and amphibians on the herp rig: preset, its measured table, its body plan)
       if (def.path.endsWith('herp-rig.mjs')) {
         const preset = objectEntry('const SPECIES = {', species);
         const fromPreset = (re: RegExp, wrap: (m: string) => string): Region['find'] => (text) => {
