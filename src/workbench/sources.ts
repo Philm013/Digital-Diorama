@@ -237,19 +237,25 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
       break;
     }
     case 'bird':
+      // (Digital Diorama revision 11: the bird rig rewritten from field measurements)
       add(def.path, 'bird-rig.mjs', [
         region(`Species preset · ${species}`, objectEntry('const SPECIES = {', species)),
-        region('Defaults (BDEF)', declaration('BDEF')),
-        region('Plumage painter', declaration('birdPaint')),
-        region('Body silhouettes', declaration('BODY_FORMS')),
-        region('Skull profiles', declaration('SKULL_FORMS')),
-        region('Builder', declaration('birdBuild')),
+        region('Families (torso, skull, legs)', declaration('FAMILIES')),
+        region('Bill shapes', declaration('BILLS')),
+        region('Plumage painter', declaration('makeBirdPainter')),
+        region('Builder (posture, body, eyes)', declaration('birdBuild')),
+        region('Bill', declaration('billBuild')),
+        region('Crests, tufts, combs, wattles', declaration('birdExtras')),
+        region('Tail', declaration('tailBuild')),
+        region('Folded wings', declaration('foldedWings')),
+        region('Spread wings', declaration('spreadWings')),
+        region('Legs and feet', declaration('legsBuild')),
         region('Clips', declaration('BIRD_CLIPS')),
-        region('Walk styles', declaration('WALK_STYLE')),
-        region('Walk (planted feet)', declaration('birdWalk')),
-        region('Walk set-up', declaration('birdGaitSetup')),
-        region('Leg reach (IK)', declaration('legReach')),
-        region('Proportion sliders (resolveSpec)', declaration('resolveSpec')),
+        region('Clip poses', declaration('birdSample')),
+        region('Walk set-up', declaration('birdMotion')),
+        region('Leg solver (IK)', declaration('birdLeg')),
+        region('Spec from measurements (specFor)', declaration('specFor')),
+        region('Mesh output (finish)', declaration('finish')),
       ]);
       if (!wildId) add('src/assets/data-birds.ts', 'data-birds.ts', [region(`Row · ${species}`, row(species))]);
       break;
