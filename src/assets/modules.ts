@@ -25,11 +25,12 @@ export interface AssetModule {
   [k: string]: unknown;
 }
 
-// Lazy loaders — Vite turns every asset module into its own chunk.
+// Lazy loaders — Vite turns every asset module into its own chunk (a family's shared kit.mjs is not a module of its own).
 const LOADERS = import.meta.glob<AssetModule>([
   '/src/assets/models/rigs/*-rig.mjs',
   '/src/assets/models/wildform/wildform.mjs',
   '/src/assets/models/water/*.mjs',
+  '!/src/assets/models/water/kit.mjs',
   '/src/assets/models/beach/*.mjs',
   '/src/assets/models/aquarium/*.mjs',
   '/src/assets/models/plants/*.mjs',

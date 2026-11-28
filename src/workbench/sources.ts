@@ -25,8 +25,25 @@ export interface SourceFile {
 }
 
 const rel = (p: string) => p.replace(/^\//, '');
-/** files the page re-imports in place after a save (devServer.ts HOT_SWAPPABLE); others reload the page */
-const HOT = /^src\/assets\/models\/(.+\.mjs|builtin\/[^/]+\.ts)$/;
+/**
+ * Files the page re-imports in place after a save (devServer.ts HOT_SWAPPABLE); others reload the page. A family's
+ * kit.mjs is imported by every module of the family, so saving one reloads the page instead.
+ */
+const isHot = (p: string) => /^src\/assets\/models\/(.+\.mjs|builtin\/[^/]+\.ts)$/.test(p) && !p.endsWith('/kit.mjs');
+const RIG_KIT = 'src/assets/models/rigs/kit.mjs';
+const WATER_KIT = 'src/assets/models/water/kit.mjs';
+/** the sweep engine the mammal, bird and herp rigs are built on */
+const rigKit = (extra: Region[] = []): [string, string, Region[]] => [RIG_KIT, 'rigs/kit.mjs', [
+  ...extra,
+  region('Loft (sections along a path)', declaration('loft')),
+  region('Membranes (sheet)', declaration('sheet')),
+  region('Coat atlas (paintAtlas)', declaration('paintAtlas')),
+  region('Patch painter (paintPatch)', declaration('paintPatch')),
+  region('Skeleton (Rig)', declaration('Rig')),
+  region('Clip baking (bakeClip)', declaration('bakeClip')),
+  region('Mesh output (finish)', declaration('finish')),
+  region('Zones and params (bindModule)', declaration('bindModule')),
+]];
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
@@ -159,7 +176,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
     const p = rel(path);
     const f = files.find((x) => x.path === p);
     if (f) f.regions.push(...regions);
-    else files.push({ path: p, title, regions, hot: HOT.test(p) });
+    else files.push({ path: p, title, regions, hot: isHot(p) });
   };
   const wildId = def.id.startsWith('wild/') ? def.id.slice(5) : null;
   const species = String(def.params.species ?? '');
@@ -200,7 +217,6 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         region('Elephant tusks', declaration('eleTusks')),
         region('Elephant tail', declaration('eleTail')),
         region('Elephant skin painter', declaration('elePainter')),
-        region('Skin creases (tile)', declaration('creaseTile')),
         region('Elephant clips', declaration('eleSample')),
         region('Lying down', declaration('eleLieDown')),
         region('Elephant clip set-up', declaration('eleMotionSetup')),
@@ -230,10 +246,9 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         region('Leg solver (IK)', declaration('solveLeg')),
         region('Feet on their line (keepOnLine)', declaration('keepOnLine')),
         region('Girdle drop (dropCurve)', declaration('dropCurve')),
-        region('Clip baking', declaration('bakeClip')),
         region('Proportion sliders (specFor)', declaration('specFor')),
-        region('Mesh output (finish)', declaration('finish')),
       ]);
+      add(...rigKit(species === 'elephant' ? [region('Skin creases (creaseTile)', declaration('creaseTile'))] : []));
       if (!wildId) add('src/assets/data-mammals.ts', 'data-mammals.ts', [region(`Row · ${species}`, row(species))]);
       if (!wildId) add('src/assets/catalog.ts', 'catalog.ts', [region('Mammal catalog tweaks', declaration('MAMMAL_EXTRA'))]);
       break;
@@ -257,8 +272,8 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         region('Walk set-up', declaration('birdMotion')),
         region('Leg solver (IK)', declaration('birdLeg')),
         region('Spec from measurements (specFor)', declaration('specFor')),
-        region('Mesh output (finish)', declaration('finish')),
       ]);
+      add(...rigKit());
       if (!wildId) add('src/assets/data-birds.ts', 'data-birds.ts', [region(`Row · ${species}`, row(species))]);
       break;
     case 'reptile': {
@@ -282,6 +297,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
           region('Frog clips', declaration('frogSample')),
           region('Parameters', declaration('params')),
         ]);
+        add(...rigKit([region('Scales (scaleTile)', declaration('scaleTile'))]));
         if (!wildId) add('src/assets/data-reptiles.ts', 'data-reptiles.ts', [region(`Row · ${def.id.slice(8)}`, row(def.id.slice(8)))]);
         break;
       }
@@ -319,6 +335,15 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
         ...(species ? [region(`Species · ${species}`, branch(`P.species === '${species}'`))] : []),
         region('Parameters', declaration('params')),
         region('Build (createAsset)', declaration('createAsset')),
+      ]);
+      break;
+    case 'water':
+      add(def.path, def.path.split('/').pop()!, [region('Parameters', declaration('params')), region('Build (createAsset)', declaration('createAsset'))]);
+      add(WATER_KIT, 'water/kit.mjs', [
+        region('Zones, params and assembly (bindModule)', declaration('bindModule')),
+        region('Water material', declaration('makeWaterMaterial')),
+        region('Material buckets (assemble)', declaration('assemble')),
+        region('Diorama cut-away (dioramaSkirt)', declaration('dioramaSkirt')),
       ]);
       break;
     default:

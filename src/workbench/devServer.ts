@@ -38,8 +38,8 @@ function fromThisMachine(req: import('node:http').IncomingMessage) {
   const origin = req.headers.origin;
   return loopback && LOCAL_HOST.test(req.headers.host ?? '') && (!origin || LOCAL_ORIGIN.test(origin));
 }
-/** modules the page re-imports in place (everything else needs a page reload) */
-export const HOT_SWAPPABLE = /^src\/assets\/models\/(.+\.mjs|builtin\/[^/]+\.ts)$/;
+/** modules the page re-imports in place (everything else, a family's shared kit.mjs included, needs a page reload) */
+export const HOT_SWAPPABLE = /^src\/assets\/models\/(?!(?:.+\/)?kit\.mjs$)(.+\.mjs|builtin\/[^/]+\.ts)$/;
 
 function git(root: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
