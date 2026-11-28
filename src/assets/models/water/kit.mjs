@@ -79,10 +79,6 @@ function finish(list, material = MAT, name = 'solid', merge = true) {
   }
 }
 
-function box(w, h, d, x = 0, y = 0, z = 0) {
-  return new THREE.BoxGeometry(w, h, d).translate(x, y, z);
-}
-
 export function addCylinder(parts, rTop, rBot, h, segs, x, y, z, rx = 0, ry = 0, rz = 0, hex = '#888888') {
   const geo = new THREE.CylinderGeometry(rTop, rBot, h, segs);
   if (rx) geo.rotateX(rx);
@@ -107,16 +103,6 @@ export function addWire(parts, p1, p2, hex, r = 0.01, radialSegments = 5) {
   );
   geo.applyMatrix4(new THREE.Matrix4().compose(mid, q, new THREE.Vector3(1, 1, 1)));
   parts.push({ g: geo, c: hex });
-}
-
-/** Extrude a THREE.Shape (mouldings, arches, hulls, profiles) and optionally place it with a matrix. */
-function addExtrusion(parts, shape, depth, hex, { bevel = 0, steps = 1, curveSegments = 10, matrix = null, n } = {}) {
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth, steps, curveSegments, bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2
-  });
-  if (matrix) geo.applyMatrix4(matrix);
-  parts.push({ g: geo, c: hex, n });
-  return geo;
 }
 
 /** Exact-vertex quad panel (optionally thickened along its normal). Neighbours handed identical corners share bit-identical edges. */
@@ -1089,27 +1075,6 @@ export function wakeParts(list, o) {
     for (let i = 0; i <= 10; i++) { const z = zb * 0.95 - (i / 10) * L * 0.85; cp.push([sg * (o.sideAt(z) + 0.06), y, z]); }
     list.push({ g: waterify(waterRibbon(cp, 0.08 + 0.14 * k, 2), (x, yy, z, s) => ({ s, speed: sp, foam: 0.25 + 0.5 * k * Math.max(0, 1 - s / (L * 0.85)), ocean: 1, mode: 3 })), c: null, n: 'bow-wave' });
   }
-}
-
-/**
- * Cambered triangular sail: luff A → Bh (head), foot A → Cl (clew); belly = depth × chord toward unit vector nrm.
- * Carries aSway (leech flutters most) for the sway material.
- */
-function sailGeo(A, Bh, Cl, depth, nrm, nU = 7, nV = 9, phase = 0) {
-  const P = (u, v) => {
-    const Lp = [lerp(A[0], Bh[0], v), lerp(A[1], Bh[1], v), lerp(A[2], Bh[2], v)], Rp = [lerp(Cl[0], Bh[0], v), lerp(Cl[1], Bh[1], v), lerp(Cl[2], Bh[2], v)];
-    const ch = Math.hypot(Rp[0] - Lp[0], Rp[1] - Lp[1], Rp[2] - Lp[2]), b = depth * ch * 4 * u * (1 - u) * (1.15 - 0.3 * u);
-    return [lerp(Lp[0], Rp[0], u) + nrm[0] * b, lerp(Lp[1], Rp[1], u) + nrm[1] * b, lerp(Lp[2], Rp[2], u) + nrm[2] * b];
-  };
-  const pos = [], sw = [];
-  for (let j = 0; j < nV; j++) for (let i = 0; i < nU; i++) {
-    const u0 = i / nU, u1 = (i + 1) / nU, v0 = j / nV, v1 = (j + 1) / nV;
-    for (const [u, v] of [[u0, v0], [u1, v0], [u1, v1], [u0, v0], [u1, v1], [u0, v1]]) { const q = P(u, v); pos.push(q[0], q[1], q[2]); sw.push(u * (0.4 + 0.6 * (1 - v)), phase + v * 2.2); }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('aSway', new THREE.Float32BufferAttribute(sw, 2));
-  return g;
 }
 
 /** Standard swell set (wave height H m) for floating-asset water patches. */

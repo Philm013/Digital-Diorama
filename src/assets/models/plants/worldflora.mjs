@@ -396,18 +396,11 @@ function finish(list,material,name='solid',merge=true){
   }
   return group;
 }
-function box(w,h,d,x=0,y=0,z=0){return new THREE.BoxGeometry(w,h,d).translate(x,y,z);}
-function addCylinder(parts,rt,rb,h,seg,x,y,z,rx=0,ry=0,rz=0,hex=0x888888){
-  const g=new THREE.CylinderGeometry(rt,rb,h,seg);g.rotateX(rx).rotateY(ry).rotateZ(rz).translate(x,y,z);parts.push({g,c:hex});
-}
 function addWire(parts,a,b,hex,radius=0.01,sides=5){
   const A=V(...a),B=V(...b),D=B.clone().sub(A);if(D.lengthSq()<1e-16)return;
   const g=new THREE.CylinderGeometry(radius,radius,D.length(),sides);
   g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(UP,D.normalize()));
   g.translate(...A.lerp(B,0.5).toArray());parts.push({g,c:hex});
-}
-function addExtrusion(parts,shape,depth,hex,matrix=new THREE.Matrix4()){
-  const g=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:false,curveSegments:10,steps:1});g.applyMatrix4(matrix);parts.push({g,c:hex});
 }
 function geometryOf(vertices,indices){
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));g.setIndex(indices);return g;

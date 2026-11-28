@@ -32,8 +32,6 @@ export const fract = (x) => x - Math.floor(x);
 export const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const vec = (p) => (p && p.isVector3 ? p.clone() : new THREE.Vector3(p[0], p[1], p[2]));
 const asFn = (f, d = 0) => (typeof f === 'function' ? f : f === undefined || f === null ? () => d : () => f);
-const ang = (deg) => deg * DEG;
-const dirYZ = (deg) => V3(0, Math.sin(deg * DEG), Math.cos(deg * DEG));
 
 /** Monotone cubic (Fritsch–Carlson) profile through [[t, value], ...]: smooth bulges, never overshoots. */
 export function prof(keys) {
@@ -409,8 +407,6 @@ export function basisFrom(fwd, upHint = [0, 1, 0]) {
   const s = new THREE.Vector3().crossVectors(u, f).normalize();
   return { f, u, s };
 }
-/** Rotates vector v about axis by angle (radians), returning a new vector. */
-const rot = (v, axis, a) => vec(v).applyAxisAngle(vec(axis).normalize(), a);
 
 /** Point on a loft surface whose direction from c best matches dir (coarse search + refinement). */
 export function surfaceToward(g, c, dir, s0, s1) {
@@ -1056,10 +1052,8 @@ const SCHEMES = {
 export const COLORWAY_KEYS = Object.keys(SCHEMES);
 export const DETAIL = { draft: 0.6, standard: 1, high: 1.55 };
 
-/* ── small vector helpers ── */
-const X = (v) => V3(v[0], v[1], v[2]);
+/* ── posing helpers (bird and herp rigs): easing, two-bone IK, frames and quaternions ── */
 export const smooth01 = (t) => t * t * (3 - 2 * t);
-const along = (a, b, t) => a.clone().lerp(b, t);
 
 /**
  * A two-bone limb solved in model space: shoulder S, target T for the end of the second bone, lengths la and lb, and a pole

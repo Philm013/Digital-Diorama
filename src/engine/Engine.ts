@@ -332,7 +332,6 @@ export class Engine {
   /** seasonal colour overrides for trees — applied at build time, never saved into the document */
   seasonParams(def: AssetDef, season = this.env.season): Record<string, unknown> {
     if (def.family === 'deciduous') return { leafHueAndSeason: { spring: 'freshSpring', summer: 'deepSummer', autumn: 'peakAutumn', winter: 'moonlit' }[season] };
-    if (def.family === 'terraTree' && ['broadleaf', 'shrub', 'acacia'].includes(String(def.params.species))) return season === 'autumn' ? { colorway: 'autumn' } : season === 'winter' ? { colorway: 'dusk' } : {};
     if (def.family === 'water' && def.id.startsWith('grove/') && season === 'autumn') return { colorway: 'autumn' };
     if (def.family === 'flora' && def.seasonal) return { season };
     return {};
@@ -571,7 +570,7 @@ export class Engine {
     if (!this.terrain) { this.groundcover.clear(); return; }
     const run = () => {
       if (!this.terrain) return;
-      const blockers = [...this.actors.values()].filter((a) => a.def.category !== 'animals' && a.def.family !== 'terraTree' && (a.def.family === 'water' || a.def.family === 'rock' || a.def.family === 'builtin'));
+      const blockers = [...this.actors.values()].filter((a) => a.def.category !== 'animals' && (a.def.family === 'water' || a.def.family === 'rock' || a.def.family === 'builtin'));
       const snowy = this.env.season === 'winter' || this.env.weather === 'snow';
       this.groundcover.build(this.terrain, this.env.grass * (snowy ? 0.3 : 1), this.quality, snowy ? 'winter' : this.env.season, this.terrain.seed, (x, z) => blockers.some((a) => Math.hypot(a.root.position.x - x, a.root.position.z - z) < a.radius * 0.8));
     };

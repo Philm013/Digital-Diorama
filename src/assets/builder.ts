@@ -115,7 +115,6 @@ function qualityParams(def: AssetDef, q: Quality): Record<string, unknown> {
   switch (def.family) {
     case 'mammal': case 'bird': return { detail: q === 'high' ? 'standard' : 'draft' };
     case 'wildform': return { detailLevel: q === 'high' ? 'Studio' : 'Draft', mergeForProduction: false };
-    case 'conifer': return {};
     case 'deciduous': return { leafDetailLevel: 'low', foliageDensity: q === 'low' ? 0.3 : undefined };
     case 'flora': return { detail: q };
     case 'water': return q === 'low' ? { resolution: 'low' } : {};

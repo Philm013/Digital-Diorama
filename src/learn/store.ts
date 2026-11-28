@@ -42,7 +42,6 @@ function set(patch: Partial<LearnState>) {
   for (const fn of subs) fn();
 }
 
-export const getLearn = (): Readonly<LearnState> => state;
 export const subscribeLearn = (fn: () => void) => { subs.add(fn); return () => { subs.delete(fn); }; };
 const learnVersion = () => version;
 /** re-render when lessons start, move on or finish */
@@ -50,8 +49,6 @@ export function useLearn() {
   useSyncExternalStore(subscribeLearn, learnVersion);
   return state;
 }
-
-export const lessonDone = (id: string) => state.done.includes(id);
 
 /** begin a lesson (or carry on with it from a step); it runs in the studio, now or when a diorama opens */
 export function startLesson(id: string, step = 0) {

@@ -67,10 +67,8 @@ export function loadModule(path: string): Promise<AssetModule> {
   }
   return p;
 }
-export function loadedModule(path: string) { return resolved.get(path); }
 /** Dev tools (the animal workbench) swap in a freshly imported copy after its source is edited. */
 export function replaceModule(path: string, mod: AssetModule) {
   cache.set(path, Promise.resolve(mod));
   resolved.set(path, mod);
 }
-export function hasModule(path: string) { return path in LOADERS; }

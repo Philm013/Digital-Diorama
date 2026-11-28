@@ -19,7 +19,6 @@ export function audio(): AudioContext | null {
   return ctx;
 }
 export function setVolume(v: number) { volume = Math.max(0, Math.min(1, v)); if (master) master.gain.value = volume; }
-export function getVolume() { return volume; }
 
 function noise(c: AudioContext) {
   if (!noiseBuf) {
@@ -92,7 +91,6 @@ const S: Record<string, Synth> = {
   grunt: (c, t) => { const lp = filtered(c, 'lowpass', 700, 1); for (let i = 0; i < 3; i++) { const g = env(c, t + i * 0.2, 0.01, 0.5, 0.14); g.connect(lp); osc(c, 'sawtooth', 120, t + i * 0.2, 0.14, 90, g); } return 0.6; },
   yay: (c, t) => { [523, 659, 784, 1046].forEach((f, i) => { const g = env(c, t + i * 0.09, 0.005, 0.18, 0.2); g.connect(master!); osc(c, 'square', f, t + i * 0.09, 0.2, f, g); }); return 0.5; },
 };
-export const SOUND_NAMES = Object.keys(S);
 
 /** Play a sound now; resolves with its duration in seconds. */
 export function playSound(name: string): number {

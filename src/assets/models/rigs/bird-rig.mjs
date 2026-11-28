@@ -52,7 +52,6 @@ const ZONE_ROLES = { body: 'body', belly: 'body', wing: 'body', flight: 'body', 
 // colour zones and parameter checks, bound to this rig's own zones and params
 const { zonesFor, colorwaysFor, normalize, withZones } = bindModule({ BASE, ZONE_ROLES, params: () => params });
 const ZONE_LABELS = { body: 'Back / mantle', belly: 'Belly / underparts', wing: 'Wing coverts', flight: 'Flight & tail feathers', head: 'Head / crown', face: 'Face / throat / mask', accent: 'Accent (crest, comb, breast, patches)', beak: 'Bill / claws', jaw: 'Lower mandible', leg: 'Legs / feet', eye: 'Iris', pupil: 'Pupil' };
-const pal = (o) => ({ ...BASE, jaw: o.beak ?? BASE.jaw, ...o });
 
 /**
  * Forward kinematics of a sample: world rotation and world head position of every bone (rest bones carry identity rotation,

@@ -1,11 +1,7 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { workbenchPlugin } from './src/workbench/devServer';
-
-const root = path.dirname(fileURLToPath(import.meta.url));
 
 // The procedural asset modules in src/assets/models are imported lazily, one chunk per
 // module. Every module imports `three`, so it is de-duplicated to the single copy installed here.
@@ -13,12 +9,7 @@ export default defineConfig({
   base: './',
   // workbenchPlugin: dev-only file access for the animal workbench (workbench.html)
   plugins: [react(), tailwindcss(), workbenchPlugin()],
-  resolve: {
-    alias: {
-      '@': path.resolve(root, 'src'),
-    },
-    dedupe: ['three'],
-  },
+  resolve: { dedupe: ['three'] },
   // Only scan the app's own pages (the app and its dev tools).
   optimizeDeps: { entries: ['index.html', 'workbench.html', 'review.html'], include: ['three', 'blockly'] },
   server: { host: true },

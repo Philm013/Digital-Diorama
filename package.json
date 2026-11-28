@@ -2,7 +2,7 @@
   "name": "digital-diorama",
   "private": true,
   "version": "1.0.0",
-  "description": "An immersive, codeable 3D habitat diorama studio for classrooms — built on the procedural three.js assets in References/.",
+  "description": "An immersive, codeable 3D habitat diorama studio for classrooms, built on procedural three.js models.",
   "type": "module",
   "scripts": {
     "dev": "vite",

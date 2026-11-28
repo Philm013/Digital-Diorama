@@ -504,14 +504,14 @@ export class EndlessWorld {
     for (const a of e.actorList) {
       const d = a.def;
       if (a.isClone || d.water || !['plants', 'fungi', 'land'].includes(d.category)) continue;
-      if (!['flora', 'conifer', 'deciduous', 'terraTree', 'rock', 'plant'].includes(d.family)) continue;
+      if (!['flora', 'deciduous', 'rock', 'plant'].includes(d.family)) continue;
       const c = counts.get(d.id) ?? { def: d, n: 0 };
       c.n++;
       counts.set(d.id, c);
     }
     // too few to make a landscape: borrow plants of the habitat
     if ([...counts.values()].filter((c) => c.def.category === 'plants').length < 3) {
-      const pool = CATALOG.filter((d) => d.category === 'plants' && ['flora', 'conifer', 'deciduous', 'terraTree'].includes(d.family) && !d.water && d.biomes.includes(this.biome));
+      const pool = CATALOG.filter((d) => d.category === 'plants' && ['flora', 'deciduous'].includes(d.family) && !d.water && d.biomes.includes(this.biome));
       const R = rng(this.terrain.seed * 13 + 1);
       for (let k = 0; k < 5 && pool.length; k++) {
         const d = pool.splice(Math.floor(R() * pool.length), 1)[0];

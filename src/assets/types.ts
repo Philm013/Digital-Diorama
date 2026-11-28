@@ -1,4 +1,4 @@
-export type Family = 'mammal' | 'bird' | 'wildform' | 'reptile' | 'plant' | 'deciduous' | 'conifer' | 'terraTree' | 'rock' | 'water' | 'beach' | 'aquarium' | 'builtin' | 'flora';
+export type Family = 'mammal' | 'bird' | 'wildform' | 'reptile' | 'plant' | 'deciduous' | 'rock' | 'water' | 'beach' | 'aquarium' | 'builtin' | 'flora';
 export type Locomotion = 'walk' | 'fly' | 'swim' | 'slither' | 'hop' | 'crawl' | 'sessile' | 'scenery';
 export type Category = 'animals' | 'plants' | 'fungi' | 'habitats' | 'water' | 'land' | 'sky' | 'human' | 'finds';
 export type Diet = 'herbivore' | 'carnivore' | 'omnivore' | 'insectivore' | 'piscivore' | 'filter feeder' | 'detritivore' | 'decomposer' | 'producer' | 'nectarivore' | 'frugivore' | 'scavenger' | 'parasite' | 'carnivorous plant' | 'none';
@@ -59,5 +59,3 @@ export interface AssetDef {
   mass?: number;
 }
 
-export const BIOME_IDS = ['forest', 'taiga', 'grassland', 'savanna', 'rainforest', 'desert', 'tundra', 'wetland', 'mountain', 'reef', 'kelp', 'shore', 'garden'] as const;
-export type BiomeId = typeof BIOME_IDS[number];

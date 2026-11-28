@@ -178,7 +178,6 @@ export const SOURCES: Record<'plankton' | 'algae' | 'detritus' | 'aphids', Sourc
   algae: { id: 'src:algae', food: 'algae', name: 'Algae', emoji: '🟢', blurb: 'Green films and seaweeds growing on rocks and plants under water.' },
   detritus: { id: 'src:detritus', food: 'detritus', name: 'Dead matter', emoji: '🍂', blurb: 'Fallen leaves, droppings and the remains of everything that dies. Decomposers turn it back into nutrients that plants take up.' },
 };
-const SOURCE_BY_ID: Record<string, Source> = Object.fromEntries(Object.values(SOURCES).map((s) => [s.id, s]));
 export const isSourceId = (id: string) => id.startsWith('src:');
 
 /* ======================================================================== */
@@ -399,8 +398,3 @@ export function foodSuggestions(hungry: AssetDef, biome: string, present: AssetD
     .map((x) => x.d);
 }
 
-/** the name of a node for sentences */
-export function nodeName(web: FoodWeb, id: string) {
-  const n = web.byId.get(id) ?? (SOURCE_BY_ID[id] ? { name: SOURCE_BY_ID[id].name } : null);
-  return n?.name ?? id;
-}

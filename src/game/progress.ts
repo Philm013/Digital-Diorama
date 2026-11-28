@@ -140,7 +140,6 @@ export const BADGES: BadgeDef[] = [
   { id: 'world-traveller', emoji: '🧭', name: 'World Traveller', how: 'Build dioramas in 5 different biomes', color: '#0b8a8a' },
 ];
 export const BADGE_BY_ID = Object.fromEntries(BADGES.map((b) => [b.id, b]));
-export function hasBadge(id: string) { return profile.badges.includes(id); }
 export function awardBadge(id: string) {
   if (profile.badges.includes(id) || !BADGE_BY_ID[id]) return false;
   profile = { ...profile, badges: [...profile.badges, id] };

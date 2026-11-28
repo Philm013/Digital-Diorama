@@ -129,24 +129,6 @@ function finish(list, material = MAT, name = 'solid', merge = true) {
   return g;
 }
 
-function box(w, h, d, x = 0, y = 0, z = 0) { return new THREE.BoxGeometry(w, h, d).translate(x, y, z); }
-
-function addCylinder(parts, rTop, rBot, h, segs, x, y, z, rx = 0, ry = 0, rz = 0, hex = '#888888') {
-  const geo = new THREE.CylinderGeometry(rTop, rBot, h, segs);
-  if (rx) geo.rotateX(rx); if (ry) geo.rotateY(ry); if (rz) geo.rotateZ(rz);
-  geo.translate(x, y, z); parts.push({ g: geo, c: hex });
-}
-
-function addWire(parts, p1, p2, hex, r = 0.01, radialSegments = 5) {
-  const v1 = new THREE.Vector3(...p1), v2 = new THREE.Vector3(...p2);
-  const dist = v1.distanceTo(v2); if (dist < 1e-5) return;
-  const geo = new THREE.CylinderGeometry(r, r, dist, radialSegments);
-  const mid = v1.clone().lerp(v2, 0.5);
-  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), v2.clone().sub(v1).normalize());
-  geo.applyMatrix4(new THREE.Matrix4().compose(mid, q, new THREE.Vector3(1, 1, 1)));
-  parts.push({ g: geo, c: hex });
-}
-
 function rng(seed) {
   let a = seed >>> 0;
   return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };

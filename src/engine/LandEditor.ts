@@ -413,7 +413,7 @@ export class LandEditor {
     const e = this.e, t = e.terrain!;
     const style = this.styleFor(this.area.style, this.area.kind);
     const biome = STYLE_BIOME[style.id] ?? 'grassland';
-    const ok = (d: AssetDef) => d.category === 'plants' && ['flora', 'conifer', 'deciduous', 'terraTree'].includes(d.family) && d.biomes.includes(biome) && !d.water;
+    const ok = (d: AssetDef) => d.category === 'plants' && ['flora', 'deciduous'].includes(d.family) && d.biomes.includes(biome) && !d.water;
     let pool = CATALOG.filter(ok);
     if (!pool.length) pool = CATALOG.filter((d) => d.category === 'plants' && d.family === 'flora' && !d.water);
     const trees = pool.filter((d) => d.group === 'Trees' || d.group === 'Groves'), small = pool.filter((d) => !trees.includes(d));

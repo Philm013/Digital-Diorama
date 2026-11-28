@@ -39,7 +39,6 @@ export function getSchema(cfg: { species?: string } = {}) {
   const sp = S[String(cfg.species)] ?? S['norway-spruce'];
   return { ...params, species: { ...params.species, options: Object.keys(S) }, height: { ...params.height, default: sp.height[1], min: sp.height[0], max: sp.height[2] } };
 }
-export const SPECIES_LIST = () => Object.fromEntries(Object.entries(S).map(([k, v]) => [k, v.label]));
 
 export function createAsset(p: Record<string, unknown> = {}): THREE.Group {
   if (p.kinds) return createGrove(p);

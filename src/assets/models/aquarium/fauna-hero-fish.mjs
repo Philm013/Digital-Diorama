@@ -353,14 +353,6 @@ function finish(list, material = MAT, name = 'solid', merge = true) {
   return g;
 }
 
-function box(w, h, d, x = 0, y = 0, z = 0) { return new THREE.BoxGeometry(w, h, d).translate(x, y, z); }
-
-function addCylinder(parts, rTop, rBot, h, segs, x, y, z, rx = 0, ry = 0, rz = 0, hex = '#888888') {
-  const geo = new THREE.CylinderGeometry(rTop, rBot, h, segs);
-  if (rx) geo.rotateX(rx); if (ry) geo.rotateY(ry); if (rz) geo.rotateZ(rz);
-  geo.translate(x, y, z); parts.push({ g: geo, c: hex });
-}
-
 function addWire(parts, p1, p2, hex, r = 0.01, radialSegments = 5) {
   const v1 = new THREE.Vector3(...p1), v2 = new THREE.Vector3(...p2);
   const dist = v1.distanceTo(v2); if (dist < 1e-5) return;

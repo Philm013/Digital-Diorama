@@ -139,7 +139,6 @@ function finish(list, material = MAT, name = 'solid', merge = true) {
   });
   return group;
 }
-function box(w, h, d, x = 0, y = 0, z = 0) { return new THREE.BoxGeometry(w, h, d).translate(x, y, z); }
 function addCylinder(parts, rTop, rBot, h, segs, x, y, z, rx = 0, ry = 0, rz = 0, hex = 0x888888, n = 'cylinder') {
   const geo = new THREE.CylinderGeometry(rTop, rBot, h, segs); geo.rotateX(rx); geo.rotateY(ry); geo.rotateZ(rz); geo.translate(x, y, z); parts.push({ g: geo, c: hex, n });
 }

@@ -7,9 +7,6 @@
  */
 import { getProfile, type Profile } from './progress';
 
-/** stars a diorama needs to count as a completed expedition (10 of its quests) */
-export const COMPLETE_STARS = 2;
-
 export type FeatureId =
   | 'code' | 'sculpt' | 'weather' | 'seasons' | 'tour' | 'area' | 'roam'
   | 'size-large' | 'size-huge' | 'size-custom' | 'lib-all' | 'tiles' | 'xr'
@@ -77,10 +74,6 @@ export function areaKindUnlocked(id: string, p: Readonly<Profile> = getProfile()
 }
 /** completed expeditions still needed to reach a stage */
 export function needFor(stage: number, p: Readonly<Profile> = getProfile()) { return Math.max(0, stage - stageOf(p)); }
-export function needText(stage: number, p: Readonly<Profile> = getProfile()) {
-  const n = needFor(stage, p);
-  return n === 1 ? 'Complete 1 more expedition to unlock' : `Complete ${n} more expeditions to unlock`;
-}
 /** the next stage to reach, or null at the end of the path */
 export function nextStage(p: Readonly<Profile> = getProfile()) { const s = stageOf(p); return s >= LAST_STAGE ? null : STAGES[s + 1]; }
 
@@ -93,5 +86,3 @@ export function sizeUnlocked(id: string, p: Readonly<Profile> = getProfile()) {
 export function showLocked(what: FeatureId | { habitat: string }) {
   document.dispatchEvent(new CustomEvent('dd-locked', { detail: what }));
 }
-/** run `fn` when a feature is unlocked, otherwise explain how to unlock it */
-export function gate(f: FeatureId, fn: () => void) { if (isUnlocked(f)) fn(); else showLocked(f); }

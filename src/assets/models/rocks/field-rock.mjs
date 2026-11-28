@@ -74,7 +74,6 @@ function prep(geometry, hex) {
 }
 
 const MAT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.98, metalness: 0, side: THREE.DoubleSide });
-const GLASS_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false });
 
 function finish(list, material = MAT, name = 'solid', merge = true) {
   if (!list.length) return null;
@@ -97,24 +96,6 @@ function finish(list, material = MAT, name = 'solid', merge = true) {
     (part.zone === 'chips' ? chips : group).add(mesh);
   });
   return group;
-}
-
-function box(w, h, d, x = 0, y = 0, z = 0) { return new THREE.BoxGeometry(w, h, d).translate(x, y, z); }
-function addCylinder(parts, rTop, rBot, h, segs, x, y, z, rx = 0, ry = 0, rz = 0, hex = '#888888') {
-  const geo = new THREE.CylinderGeometry(rTop, rBot, h, segs);
-  geo.rotateX(rx); geo.rotateY(ry); geo.rotateZ(rz); geo.translate(x, y, z);
-  parts.push({ g: geo, c: hex });
-}
-function addWire(parts, p1, p2, hex, r = 0.01, radialSegments = 5) {
-  const a = new THREE.Vector3(...p1), b = new THREE.Vector3(...p2), dist = a.distanceTo(b);
-  if (dist < 1e-5) return;
-  const geo = new THREE.CylinderGeometry(r, r, dist, radialSegments);
-  geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()));
-  geo.translate(...a.lerp(b, 0.5).toArray());
-  parts.push({ g: geo, c: hex });
-}
-function addExtrusion(parts, shape, depth, hex) {
-  parts.push({ g: new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, steps: 1, curveSegments: 8 }), c: hex });
 }
 
 export function createAsset(userParams = {}) {

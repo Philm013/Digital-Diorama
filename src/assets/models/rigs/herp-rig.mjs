@@ -4,7 +4,6 @@
  * reference — proportions taken from photographs, skeletons and field-guide measurements, written as fractions of
  * its snout–vent, total or carapace length — built from swept surfaces with a painted skin (scales, scutes and
  * markings rasterised into one texture), skinned to one skeleton and animated by clips that plant its feet.
- * (It replaces the per-species modules in References/Reptiles/src/models, which stay for the Reptiles reference app.)
  *
  * QUICK START
  *   import { createAsset, createClips } from './herp-rig.mjs';
@@ -1956,8 +1955,6 @@ function motionInfo(S, p, L, rig) {
 }
 
 /* ── pose helpers ── */
-const yawQ = (deg) => new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), deg * DEG);
-
 /** Solves a limb in sample s so its end joint (wrist / ankle) reaches T, the hand or foot taking world rotation qEnd. */
 function solveLimb(info, s, lm, T, qEnd) {
   let fk = fkOf(info, s);

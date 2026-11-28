@@ -453,4 +453,3 @@ function BaseTileSection() {
 }
 
 export { getDef };
-export function IconSpacer() { return <IconBtn label="" className="invisible" />; }

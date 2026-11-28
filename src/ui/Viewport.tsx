@@ -429,10 +429,6 @@ function BuildViewTools() {
   );
 }
 
-export function startWalk(engine: import('../engine/Engine').Engine, eye = 1.6) {
-  engine.walk?.enter(eye);
-}
-
 /** while roaming: which way (and how far) your diorama is */
 function Compass() {
   const { engine } = useStudio();

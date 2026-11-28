@@ -68,11 +68,6 @@ export class Noise2D {
   }
 }
 
-export function hexToColor(hex: string | number) { return new THREE.Color(hex as THREE.ColorRepresentation); }
-export function mixColor(a: THREE.Color, b: THREE.Color, t: number, out = new THREE.Color()) {
-  return out.copy(a).lerp(b, t);
-}
-
 /** Dispose every geometry and (non-shared) material below an object. */
 export function disposeObject(obj: THREE.Object3D, disposeMaterials = true) {
   obj.traverse((o) => {
@@ -104,9 +99,3 @@ export function countTriangles(obj: THREE.Object3D) {
 export const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-export function isTouchDevice() {
-  return typeof window !== 'undefined' && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
-}
-export function isSmallScreen() {
-  return typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) < 700;
-}
