@@ -39,10 +39,12 @@ for (const b of BIRDS) {
   });
 }
 /* ---------------- reptiles & amphibians ---------------- */
+export const HERP_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'coat', 'coatGrain', 'shading'];
 for (const r of REPTILES) {
   add({
     id: `reptile/${r.id}`, name: r.name, emoji: r.emoji, category: 'animals', group: r.info.class === 'Amphibia' ? 'Amphibians' : 'Reptiles', family: 'reptile',
-    path: P.reptile(r.id), params: { mergeForProduction: true }, hidden: ['mergeForProduction'], loco: r.loco, biomes: r.biomes, info: r.info,
+    // (Digital Diorama revision 11: every reptile and amphibian on the skinned herp rig, with clips)
+    path: P.herp, params: { species: r.id, rigMode: 'skinned', mergeForProduction: true }, hidden: HERP_HIDDEN, loco: r.loco, biomes: r.biomes, info: r.info,
     speed: r.loco === 'hop' ? 0.6 : r.loco === 'slither' ? 0.5 : 0.45, water: r.loco === 'swim' ? 'column' : undefined,
   });
 }

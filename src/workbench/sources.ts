@@ -253,7 +253,30 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
       ]);
       if (!wildId) add('src/assets/data-birds.ts', 'data-birds.ts', [region(`Row · ${species}`, row(species))]);
       break;
-    case 'reptile':
+    case 'reptile': {
+      // (Digital Diorama revision 11: reptiles and amphibians on the herp rig: preset, its measured table, its body plan)
+      if (def.path.endsWith('herp-rig.mjs')) {
+        const preset = objectEntry('const SPECIES = {', species);
+        const fromPreset = (re: RegExp, wrap: (m: string) => string): Region['find'] => (text) => {
+          const at = preset(text), m = at && re.exec(text.slice(at[0], at[1]))?.[1];
+          return m ? declaration(wrap(m))(text) : null;
+        };
+        add(def.path, 'herp-rig.mjs', [
+          region(`Species preset · ${species}`, preset),
+          region('Measured table', fromPreset(/\bT:\s*(T_\w+)/, (m) => m)),
+          region('Body plan', fromPreset(/\bplan:\s*'(\w+)'/, (m) => `${m}Build`)),
+          region('Head', declaration('buildHead')),
+          region('Limbs', declaration('buildLimb')),
+          region('Painter', declaration('makePainter')),
+          region('Gaits (planted feet)', declaration('gaitSample')),
+          region('Snake clips', declaration('snakeSample')),
+          region('Turtle clips', declaration('cheloSample')),
+          region('Frog clips', declaration('frogSample')),
+          region('Parameters', declaration('params')),
+        ]);
+        if (!wildId) add('src/assets/data-reptiles.ts', 'data-reptiles.ts', [region(`Row · ${def.id.slice(8)}`, row(def.id.slice(8)))]);
+        break;
+      }
       add(def.path, def.path.split('/').pop()!, [
         region('Colours', declaration('BASE')),
         region('Colourways', declaration('COLORWAYS')),
@@ -263,6 +286,7 @@ export function sourcesFor(def: AssetDef, extra: { wildPlan?: string } = {}): So
       ]);
       if (!wildId) add('src/assets/data-reptiles.ts', 'data-reptiles.ts', [region(`Row · ${def.id.slice(8)}`, row(def.id.slice(8)))]);
       break;
+    }
     case 'wildform': {
       const plan = extra.wildPlan;
       add(WILD_CATALOG, 'Animals catalog.ts', [region(`Species · ${wildId}`, call(`animal('${wildId}'`))]);

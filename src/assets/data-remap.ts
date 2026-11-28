@@ -22,6 +22,12 @@ const bird = (species: string, extra: Record<string, unknown>): Partial<AssetDef
   family: 'bird', path: P.bird, yaw: 0, hidden: BIRD_HIDDEN,
   params: { species, rigMode: 'skinned', mergeForProduction: true, ...extra },
 });
+// (Digital Diorama revision 11: reptiles and amphibians on the skinned herp rig, with clips)
+const HERP_HIDDEN = ['species', 'rigMode', 'pose', 'posePhase', 'detail', 'mergeForProduction', 'coat', 'coatGrain', 'shading'];
+const herp = (species: string, extra: Record<string, unknown> = {}): Partial<AssetDef> => ({
+  family: 'reptile', path: P.herp, yaw: 0, hidden: HERP_HIDDEN,
+  params: { species, rigMode: 'skinned', mergeForProduction: true, ...extra },
+});
 const builtin = (kind: string, extra: Record<string, unknown> = {}): Partial<AssetDef> => ({
   family: 'builtin', path: `builtin:${kind}`, yaw: 0, hidden: [], params: extra,
 });
@@ -152,12 +158,15 @@ export const WILDFORM_REMAP: Record<string, Partial<AssetDef>> = {
       palette: { body: '#c79a58', belly: '#f5f0e7', wing: '#cfa263', flight: '#dccaa6', head: '#c79a58', face: '#f8f5ee', accent: '#8a6440', beak: '#dccdb6', jaw: '#dccdb6', leg: '#cfbba3', eye: '#120c08' },
     },
   }),
-  /* ---------- amphibians ---------- */
-  // a squat warty toad (shares the cane toad's anatomy, with Bufo bufo's earthy colours)
-  'common-toad': {
-    family: 'reptile', path: P.reptile('cane-toad'), yaw: 0, hidden: ['mergeForProduction'],
-    params: { mergeForProduction: true, length: 0.1, warts: 70, parotoid: 0.85, skin: '#86694a', wart: '#73573a', belly: '#d8ccb1' },
-  },
+  /* ---------- reptiles & amphibians (the herp rig: measured body plans, skinned, with gaits) ---------- */
+  'sand-lizard': herp('sand-lizard'),
+  'green-anole': herp('green-anole'),
+  'american-alligator': herp('american-alligator'),
+  'eastern-box-turtle': herp('eastern-box-turtle'),
+  'common-garter-snake': herp('common-garter-snake'),
+  'alpine-newt': herp('alpine-newt'),
+  'common-toad': herp('common-toad'),
+  'glass-frog': herp('glass-frog'),
   /* ---------- marine (our own procedural models) ---------- */
   'harp-seal': builtin('seal'),
   'bottlenose-dolphin': builtin('cetacean', { kind: 'dolphin' }),
